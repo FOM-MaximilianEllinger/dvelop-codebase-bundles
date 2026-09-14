@@ -4796,69 +4796,6 @@ if (typeof this !== 'undefined' && this.Sweetalert2){this.swal = this.sweetAlert
 
 /***/ },
 
-/***/ "../../helper/dforms/createForm.ts"
-/*!*****************************************!*\
-  !*** ../../helper/dforms/createForm.ts ***!
-  \*****************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.createForm = createForm;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-/**
- * Legt ein neues, noch leeres Formular in Process Studio an (dieselbe Aktion, die
- * der Formular-Editor beim Klick auf "Neues Formular" ausführt). Das Ergebnis hat
- * noch keine formioFormDefinition (definition ist ein leerer String) – dafür
- * anschließend patchForm aus helper/dforms/patchForm.ts verwenden.
- *
- * @param baseUri - Die Basis-URI der d.velop-API.
- * @param token - Das Autorisierungs-Token für den Zugriff auf die API.
- * @param formId - Die vom Aufrufer vergebene GUID des neuen Formulars.
- * @param name - Der Name des neuen Formulars.
- * @param author - Identity-ID des Erstellers/letzten Bearbeiters (optional).
- * @returns Ein Promise, das zu einer `ApiResponse` mit dem angelegten Formular auflöst.
- */
-async function createForm(baseUri, token, formId, name, author = "") {
-    const url = `${baseUri}/processstudio/components/form`;
-    const headers = {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-    };
-    const now = new Date().toISOString();
-    const body = {
-        form: {
-            id: formId,
-            name,
-            author,
-            lastEditor: author,
-            creationDate: now,
-            lastModificationDate: now,
-            definition: "",
-            tags: null,
-            automationIds: null,
-            readOnly: false,
-            versionId: null,
-            _links: {
-                edit: { href: `/dforms/ui/forms/${formId}/edit` },
-                self: { href: `/dforms/api/forms/${formId}` },
-                view: { href: `/dforms/ui/forms/${formId}/view` },
-            },
-        },
-    };
-    const options = {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
-}
-
-
-/***/ },
-
 /***/ "../../helper/dforms/getForm.ts"
 /*!**************************************!*\
   !*** ../../helper/dforms/getForm.ts ***!
@@ -5031,6 +4968,97 @@ async function performHttpRequest(url, options) {
 
 /***/ },
 
+/***/ "../../helper/processstudio/createForm.ts"
+/*!************************************************!*\
+  !*** ../../helper/processstudio/createForm.ts ***!
+  \************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.createForm = createForm;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Legt ein neues, noch leeres Formular in Process Studio an (dieselbe Aktion, die
+ * der Formular-Editor beim Klick auf "Neues Formular" ausführt). Das Ergebnis hat
+ * noch keine formioFormDefinition (definition ist ein leerer String) – dafür
+ * anschließend patchForm aus helper/dforms/patchForm.ts verwenden.
+ *
+ * @param baseUri - Die Basis-URI der d.velop-API.
+ * @param token - Das Autorisierungs-Token für den Zugriff auf die API.
+ * @param formId - Die vom Aufrufer vergebene GUID des neuen Formulars.
+ * @param name - Der Name des neuen Formulars.
+ * @param author - Identity-ID des Erstellers/letzten Bearbeiters (optional).
+ * @returns Ein Promise, das zu einer `ApiResponse` mit dem angelegten Formular auflöst.
+ */
+async function createForm(baseUri, token, formId, name, author = "") {
+    const url = `${baseUri}/processstudio/components/form`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const now = new Date().toISOString();
+    const body = {
+        form: {
+            id: formId,
+            name,
+            author,
+            lastEditor: author,
+            creationDate: now,
+            lastModificationDate: now,
+            definition: "",
+            tags: null,
+            automationIds: null,
+            readOnly: false,
+            versionId: null,
+            _links: {
+                edit: { href: `/dforms/ui/forms/${formId}/edit` },
+                self: { href: `/dforms/api/forms/${formId}` },
+                view: { href: `/dforms/ui/forms/${formId}/view` },
+            },
+        },
+    };
+    const options = {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/processstudio/getAllForms.ts"
+/*!*************************************************!*\
+  !*** ../../helper/processstudio/getAllForms.ts ***!
+  \*************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getAllForms = getAllForms;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+async function getAllForms(baseUri, token) {
+    const url = `${baseUri}/processstudio/components/form`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "GET",
+        headers,
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
 /***/ "../../helper/utils/logger.ts"
 /*!************************************!*\
   !*** ../../helper/utils/logger.ts ***!
@@ -5164,7 +5192,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const getForm_1 = __webpack_require__(/*! ../../../helper/dforms/getForm */ "../../helper/dforms/getForm.ts");
-const createForm_1 = __webpack_require__(/*! ../../../helper/dforms/createForm */ "../../helper/dforms/createForm.ts");
+const createForm_1 = __webpack_require__(/*! ../../../helper/processstudio/createForm */ "../../helper/processstudio/createForm.ts");
+const getAllForms_1 = __webpack_require__(/*! ../../../helper/processstudio/getAllForms */ "../../helper/processstudio/getAllForms.ts");
 const patchForm_1 = __webpack_require__(/*! ../../../helper/dforms/patchForm */ "../../helper/dforms/patchForm.ts");
 const logger_1 = __webpack_require__(/*! ../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 const targetForms_1 = __webpack_require__(/*! ./config/targetForms */ "./src/config/targetForms.ts");
@@ -5243,21 +5272,26 @@ function getOrCreateMountElement(form) {
  * Holt zuerst den aktuellen Bundle-Inhalt (customJs) des Ziel-Projekts direkt aus dem
  * öffentlichen Artefakt-Repo (kein Auth nötig, dasselbe Repo, in das
  * .github/workflows/publish-bundles.yml bei jedem Push auf main veröffentlicht).
- * Prüft dann per GET, ob das dforms-Formular schon existiert:
+ * Prüft dann anhand der vollständigen Formular-Liste (GET
+ * /processstudio/components/form), ob ein Formular mit target.formId schon
+ * existiert, statt per GET auf die einzelne Form-ID zu gehen und einen möglichen
+ * 404 ("tag:dforms:form_not_found") abzufangen:
  *  - existiert es: vorhandenes Formio-Schema/CSS bleibt (Editor bleibt führend),
  *    nur customJs wird auf den frisch geladenen Bundle-Inhalt aktualisiert.
- *  - existiert es nicht ("tag:dforms:form_not_found"): wird per createForm (POST
- *    /processstudio/components/form) neu angelegt und mit einem minimalen
- *    Bootstrap-Schema plus dem Bundle-Inhalt befüllt.
+ *  - existiert es nicht: wird per createForm (POST /processstudio/components/form)
+ *    neu angelegt und mit einem minimalen Bootstrap-Schema plus dem Bundle-Inhalt
+ *    befüllt.
  * So erledigt ein Klick auf createOrUpdate wirklich beides: anlegen ODER
  * aktualisieren, immer mit dem aktuellsten Stand aus GitHub main.
  */
 async function ensureTargetFormUpToDate(target) {
     const baseUri = window.location.origin;
     const customJsContent = await loadLatestBundle(target.bundlePath);
-    try {
-        const existing = await (0, getForm_1.getForm)(baseUri, NO_TOKEN, target.formId);
+    const allForms = await (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN);
+    const targetExists = allForms.body.some((f) => f.id === target.formId);
+    if (targetExists) {
         logger.debug(`Formular "${target.name}" existiert bereits, aktualisiere customJs.`);
+        const existing = await (0, getForm_1.getForm)(baseUri, NO_TOKEN, target.formId);
         const definition = {
             formioFormDefinition: existing.body.definition.formioFormDefinition,
             customCss: existing.body.definition.customCss,
@@ -5267,24 +5301,18 @@ async function ensureTargetFormUpToDate(target) {
         await (0, patchForm_1.patchForm)(baseUri, NO_TOKEN, target.formId, target.name, definition);
         return definition;
     }
-    catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (!message.includes("form_not_found")) {
-            throw error;
-        }
-        logger.debug(`Formular "${target.name}" existiert noch nicht, lege es neu an.`);
-        await (0, createForm_1.createForm)(baseUri, NO_TOKEN, target.formId, target.name);
-        const definition = {
-            // Bootstrap-Schema: Feld-Layout muss danach ggf. im Process Studio
-            // Formular-Editor gestaltet werden, hier zählt nur das customJs.
-            formioFormDefinition: { display: "form", components: [] },
-            customCss: "",
-            dvfDefVersion: "1.0",
-            customJs: customJsContent,
-        };
-        await (0, patchForm_1.patchForm)(baseUri, NO_TOKEN, target.formId, target.name, definition);
-        return definition;
-    }
+    logger.debug(`Formular "${target.name}" existiert noch nicht, lege es neu an.`);
+    await (0, createForm_1.createForm)(baseUri, NO_TOKEN, target.formId, target.name);
+    const definition = {
+        // Bootstrap-Schema: Feld-Layout muss danach ggf. im Process Studio
+        // Formular-Editor gestaltet werden, hier zählt nur das customJs.
+        formioFormDefinition: { display: "form", components: [] },
+        customCss: "",
+        dvfDefVersion: "1.0",
+        customJs: customJsContent,
+    };
+    await (0, patchForm_1.patchForm)(baseUri, NO_TOKEN, target.formId, target.name, definition);
+    return definition;
 }
 async function loadLatestBundle(bundlePath) {
     const url = `${publicBundleRepo_1.PUBLIC_BUNDLE_REPO_BASE_URL}/${bundlePath}`;
