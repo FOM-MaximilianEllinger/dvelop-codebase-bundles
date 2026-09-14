@@ -233,18 +233,13 @@ async function getAllProcesses(baseUri, token) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.Source = exports.Type = void 0;
+exports.Type = void 0;
 exports.getProcessVersions = getProcessVersions;
 const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
 var Type;
 (function (Type) {
     Type["ApplicationHALJSON"] = "application/hal+json";
 })(Type || (exports.Type = Type = {}));
-var Source;
-(function (Source) {
-    Source["Inbound"] = "inbound";
-    Source["Processadministration"] = "processadministration";
-})(Source || (exports.Source = Source = {}));
 async function getProcessVersions(baseUri, token, processKey) {
     const url = `${baseUri}/process/processes/${encodeURIComponent(processKey)}/versions`;
     const headers = {
@@ -430,9 +425,9 @@ function processOptions(processes) {
 }
 function versionOptions(versions) {
     return versions
-        .filter((v) => v.version !== undefined)
-        .sort((a, b) => b.version - a.version)
-        .map((v) => ({ label: String(v.version), value: String(v.version) }));
+        .filter((v) => v.number !== undefined)
+        .sort((a, b) => b.number - a.number)
+        .map((v) => ({ label: String(v.number), value: String(v.number) }));
 }
 // Setzt den Inhalt einer Content-Komponente (type: "htmlelement") und stößt ein
 // Redraw an, analog zu setTitle in projects/GeneralCostAccountingWorkflow/src/form.ts.
