@@ -1,0 +1,38 @@
+{
+  "display": "form",
+  "components": [
+    {
+      "type": "select",
+      "key": "aktion",
+      "label": "Aktion",
+      "dataSrc": "values",
+      "data": {
+        "values": []
+      },
+      "widget": "html5",
+      "input": true
+    },
+    {
+      "type": "select",
+      "key": "prozess",
+      "label": "Prozess",
+      "dataSrc": "values",
+      "data": {
+        "values": []
+      },
+      "widget": "html5",
+      "input": true
+    },
+    {
+      "type": "select",
+      "key": "version",
+      "label": "Version",
+      "dataSrc": "values",
+      "data": {
+        "values": []
+      },
+      "widget": "html5",
+      "input": true
+    }
+  ]
+}

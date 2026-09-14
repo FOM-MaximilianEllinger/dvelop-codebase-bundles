@@ -241,31 +241,66 @@ var exports = __webpack_exports__;
   \***********************/
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.APICredentials = void 0;
 const logger_1 = __webpack_require__(/*! ../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 const getAllJobs_1 = __webpack_require__(/*! ../../../helper/process/getAllJobs */ "../../helper/process/getAllJobs.ts");
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
-class APICredentials {
-    constructor(name, baseUri, apiKey) {
-        this.name = name;
-        this.baseUri = baseUri;
-        this.apiKey = apiKey;
+// "Aktion" ist unabhängig von Server-Daten, deshalb statisch.
+const AKTIONEN = [
+    { label: "Erneut versuchen", value: getAllJobs_1.JobType.Retry },
+    { label: "Abbrechen", value: getAllJobs_1.JobType.Cancel },
+    { label: "Löschen", value: getAllJobs_1.JobType.Deletion },
+    { label: "Migrieren", value: getAllJobs_1.JobType.Migration },
+];
+// Setzt die Optionen einer Select-Komponente und stößt ein Redraw an, analog zu
+// populateAvailableForms in projects/Toolbox/src/form.ts.
+function setSelectValues(form, key, values) {
+    const component = form.getComponent(key);
+    if (!component) {
+        logger.warn(`Komponente "${key}" nicht im Formular gefunden.`);
+        return;
     }
+    component.component.data = { values };
+    component.redraw();
 }
-exports.APICredentials = APICredentials;
-(async function () {
-    async function onFormLoad() {
-        try {
-            let jobs = await (0, getAllJobs_1.getJobs)(window.location.origin, "");
-            logger.info(`Jobs: ${JSON.stringify(jobs)}`);
-        }
-        catch (error) {
-            logger.error(`Error: ${error}`);
-            return null;
-        }
+async function loadJobs() {
+    // Kein API-Key nötig: läuft über die aktuelle Browser-Session (Session-Cookie),
+    // genau wie die dforms-Aufrufe der Toolbox.
+    const response = await (0, getAllJobs_1.getJobs)(window.location.origin, "");
+    return response.body._embedded?.jobs ?? [];
+}
+function distinctProcessOptions(jobs) {
+    const keys = Array.from(new Set(jobs.map((j) => j.processKey).filter((k) => !!k)));
+    return keys.map((k) => ({ label: k, value: k }));
+}
+// "Version" hängt vom gewählten Prozess ab (kaskadierende Selectbox). Ohne
+// gewählten Prozess werden alle vorkommenden Versionen angezeigt.
+function versionOptionsForProcess(jobs, processKey) {
+    const versions = Array.from(new Set(jobs
+        .filter((j) => !processKey || j.processKey === processKey)
+        .map((j) => j.processVersion)
+        .filter((v) => v !== undefined))).sort((a, b) => b - a);
+    return versions.map((v) => ({ label: String(v), value: String(v) }));
+}
+window.formInit = async function (form, data) {
+    logger.debug("RemoveUnusedWorkflows-Formular initialisiert.");
+    setSelectValues(form, "aktion", AKTIONEN);
+    let jobs = [];
+    try {
+        jobs = await loadJobs();
     }
-    window.onFormLoad = onFormLoad;
-})();
+    catch (error) {
+        logger.error(`Fehler beim Laden der Jobs: ${error}`);
+    }
+    setSelectValues(form, "prozess", distinctProcessOptions(jobs));
+    setSelectValues(form, "version", versionOptionsForProcess(jobs, data?.prozess));
+    // Kaskade: sobald sich "prozess" ändert, "version" auf die dazu passenden
+    // Versionen neu befüllen.
+    form.on("change", (event) => {
+        if (event?.changed?.component?.key === "prozess") {
+            setSelectValues(form, "version", versionOptionsForProcess(jobs, event.data?.prozess));
+        }
+    });
+};
 
 })();
 
