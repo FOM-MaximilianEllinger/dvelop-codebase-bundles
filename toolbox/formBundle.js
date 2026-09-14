@@ -5322,6 +5322,15 @@ const getScriptVersion_1 = __webpack_require__(/*! ../../../helper/scripting/get
 const patchScript_1 = __webpack_require__(/*! ../../../helper/scripting/patchScript */ "../../helper/scripting/patchScript.ts");
 const sweetalert2_1 = __importDefault(__webpack_require__(/*! sweetalert2 */ "./node_modules/sweetalert2/dist/sweetalert2.all.js"));
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
+function getErrorMessage(error) {
+    return error instanceof Error ? error.message : String(error);
+}
+async function showSuccessAlert(title, text) {
+    await sweetalert2_1.default.fire({ icon: "success", title, text, confirmButtonText: "OK" });
+}
+async function showErrorAlert(title, error) {
+    await sweetalert2_1.default.fire({ icon: "error", title, text: getErrorMessage(error), confirmButtonText: "OK" });
+}
 const TOOLBOX_FORM_ID = "1216ed4f-1d27-491b-b974-150d847f0c2d";
 const TOOLBOX_FORM_NAME = "Toolbox";
 // Pfad des eigenen Bundles im öffentlichen Artefakt-Repo (wird von
@@ -5416,20 +5425,10 @@ async function updateApiKey(form, instance, data) {
     try {
         const credentials = new APICredentials(result.value);
         await writeApiKeyToConfigScript(credentials);
-        await sweetalert2_1.default.fire({
-            icon: "success",
-            title: "Gespeichert",
-            text: `API-Key wurde im Skript "${TOOLBOX_CONFIG_SCRIPT_NAME}" hinterlegt.`,
-            confirmButtonText: "OK",
-        });
+        await showSuccessAlert("Gespeichert", `API-Key wurde im Skript "${TOOLBOX_CONFIG_SCRIPT_NAME}" hinterlegt.`);
     }
     catch (error) {
-        await sweetalert2_1.default.fire({
-            icon: "error",
-            title: "Fehler",
-            text: `API-Key konnte nicht gespeichert werden: ${error}`,
-            confirmButtonText: "OK",
-        });
+        await showErrorAlert("API-Key konnte nicht gespeichert werden", error);
     }
 }
 window.updateApiKey = updateApiKey;
@@ -5550,10 +5549,12 @@ async function createOrUpdate(form, instance, data) {
     const target = targetForms_1.targetForms.find((t) => t.id === targetId);
     if (!target) {
         logger.error(`Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
+        await showErrorAlert("Formular konnte nicht geladen werden", `Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
         return;
     }
     if (!data.apiKey) {
         logger.error('Feld "apiKey" ist leer. Bitte API-Key im Formular eintragen.');
+        await showErrorAlert("API-Key fehlt", 'Feld "apiKey" ist leer. Bitte API-Key im Formular eintragen.');
         return;
     }
     try {
@@ -5574,9 +5575,11 @@ async function createOrUpdate(form, instance, data) {
             await activeForm.setForm(definition.formioFormDefinition);
         }
         runContentCustomJs(definition.customJs, activeForm);
+        await showSuccessAlert("Erfolgreich geladen", `Formular "${target.name}" wurde angelegt/aktualisiert und geladen.`);
     }
     catch (error) {
         logger.error(`Fehler beim Laden von Formular "${target.name}": ${error}`);
+        await showErrorAlert(`Fehler beim Laden von Formular "${target.name}"`, error);
     }
 }
 window.createOrUpdate = createOrUpdate;
@@ -5590,10 +5593,12 @@ window.createOrUpdate = createOrUpdate;
 async function updateForm(form, instance, data) {
     if (!data.apiKey) {
         logger.error('Feld "apiKey" ist leer. Bitte API-Key im Formular eintragen.');
+        await showErrorAlert("API-Key fehlt", 'Feld "apiKey" ist leer. Bitte API-Key im Formular eintragen.');
         return;
     }
     if (TOOLBOX_FORM_ID === "TODO-GUID") {
         logger.error("TOOLBOX_FORM_ID ist noch nicht gesetzt (siehe Kommentar am Anfang von form.ts).");
+        await showErrorAlert("Toolbox nicht konfiguriert", "TOOLBOX_FORM_ID ist noch nicht gesetzt (siehe Kommentar am Anfang von form.ts).");
         return;
     }
     try {
@@ -5609,9 +5614,11 @@ async function updateForm(form, instance, data) {
         };
         await (0, patchForm_1.patchForm)(credentials.baseUri, credentials.apiKey, TOOLBOX_FORM_ID, TOOLBOX_FORM_NAME, definition);
         logger.info("Toolbox-Formular aktualisiert. Bitte Seite neu laden, damit die neue Version greift.");
+        await showSuccessAlert("Toolbox aktualisiert", "Bitte Seite neu laden, damit die neue Version greift.");
     }
     catch (error) {
         logger.error(`Fehler beim Aktualisieren des Toolbox-Formulars: ${error}`);
+        await showErrorAlert("Fehler beim Aktualisieren des Toolbox-Formulars", error);
     }
 }
 window.updateForm = updateForm;
