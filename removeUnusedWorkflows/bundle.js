@@ -390,10 +390,14 @@ function loadSweetAlert() {
     });
 }
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
+// Eigene Aktion (kein JobType): bricht alle Versionen eines Prozesses ab,
+// unabhängig von der gewählten "Version".
+const CANCEL_ALL_ACTION = "CANCEL_ALL";
 // "Aktion" ist unabhängig von Server-Daten, deshalb statisch.
 const AKTIONEN = [
     { label: "Erneut versuchen", value: getAllJobs_1.JobType.Retry },
     { label: "Abbrechen", value: getAllJobs_1.JobType.Cancel },
+    { label: "Alle abbrechen", value: CANCEL_ALL_ACTION },
     { label: "Löschen", value: getAllJobs_1.JobType.Deletion },
     { label: "Migrieren", value: getAllJobs_1.JobType.Migration },
 ];
@@ -440,52 +444,138 @@ function setContent(form, key, html) {
     component.component.content = html;
     component.redraw();
 }
-// Lädt die Anzahl laufender Instanzen für Prozess+Version und zeigt sie im
-// Info-Feld an. Die Sichtbarkeit von Info-Feld und Button regelt form.json
-// selbst über customConditional (Aktion "Abbrechen" + Prozess + Version gesetzt).
-async function refreshInstanceInfo(form, processKey, version) {
-    if (!processKey || !version) {
+// Setzt das Label einer Komponente (z.B. Button-Text) und stößt ein Redraw an.
+function setLabel(form, key, label) {
+    const component = form.getComponent(key);
+    if (!component) {
+        logger.warn(`Komponente "${key}" nicht im Formular gefunden.`);
         return;
     }
-    setContent(form, "instanzenInfo", "<p>Anzahl laufender Instanzen wird geladen…</p>");
-    try {
-        const response = await (0, getActiveInstanceCount_1.getActiveInstanceCount)(window.location.origin, "", processKey, version);
-        const count = response.body.count ?? 0;
-        setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${count}</strong> Instanz(en) von "${processKey}" (Version ${version}).</p>`);
+    component.component.label = label;
+    component.redraw();
+}
+// Ermittelt für alle Versionen eines Prozesses jeweils die Anzahl aktiver
+// Instanzen. Einzelne fehlgeschlagene Abfragen zählen als 0, damit eine
+// Version mit Fehler nicht die gesamte Summe verhindert.
+async function getActiveInstanceCountPerVersion(processKey) {
+    const versions = await loadVersions(processKey);
+    const versionNumbers = versions
+        .filter((v) => v.number !== undefined)
+        .map((v) => v.number);
+    return Promise.all(versionNumbers.map(async (version) => {
+        try {
+            const response = await (0, getActiveInstanceCount_1.getActiveInstanceCount)(window.location.origin, "", processKey, version);
+            return { version, count: response.body.count ?? 0 };
+        }
+        catch (error) {
+            logger.error(`Fehler beim Laden der aktiven Instanzenanzahl für "${processKey}" Version ${version}: ${error}`);
+            return { version, count: 0 };
+        }
+    }));
+}
+// Lädt die Anzahl laufender Instanzen und zeigt sie im Info-Feld an. Je nach
+// gewählter Aktion entweder für die gewählte Version oder summiert über alle
+// Versionen des Prozesses ("Alle abbrechen"). Die Sichtbarkeit von Info-Feld
+// und Button regelt form.json selbst über customConditional.
+async function refreshInstanceInfo(form, aktion, processKey, version) {
+    if (!processKey) {
+        return;
     }
-    catch (error) {
-        logger.error(`Fehler beim Laden der aktiven Instanzenanzahl für "${processKey}" Version ${version}: ${error}`);
-        setContent(form, "instanzenInfo", "<p>Fehler beim Laden der Instanzenanzahl.</p>");
+    if (aktion === CANCEL_ALL_ACTION) {
+        setLabel(form, "instanzenAbbrechen", "Alle Instanzen abbrechen");
+        setContent(form, "instanzenInfo", "<p>Anzahl laufender Instanzen wird geladen…</p>");
+        try {
+            const counts = await getActiveInstanceCountPerVersion(processKey);
+            const total = counts.reduce((sum, c) => sum + c.count, 0);
+            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${total}</strong> Instanz(en) über <strong>${counts.length}</strong> Version(en) von "${processKey}".</p>`);
+        }
+        catch (error) {
+            logger.error(`Fehler beim Laden der aktiven Instanzenanzahl (alle Versionen) für "${processKey}": ${error}`);
+            setContent(form, "instanzenInfo", "<p>Fehler beim Laden der Instanzenanzahl.</p>");
+        }
+        return;
+    }
+    if (aktion === getAllJobs_1.JobType.Cancel && version) {
+        setLabel(form, "instanzenAbbrechen", "Instanzen abbrechen");
+        setContent(form, "instanzenInfo", "<p>Anzahl laufender Instanzen wird geladen…</p>");
+        try {
+            const response = await (0, getActiveInstanceCount_1.getActiveInstanceCount)(window.location.origin, "", processKey, version);
+            const count = response.body.count ?? 0;
+            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${count}</strong> Instanz(en) von "${processKey}" (Version ${version}).</p>`);
+        }
+        catch (error) {
+            logger.error(`Fehler beim Laden der aktiven Instanzenanzahl für "${processKey}" Version ${version}: ${error}`);
+            setContent(form, "instanzenInfo", "<p>Fehler beim Laden der Instanzenanzahl.</p>");
+        }
     }
 }
-// Fragt per SweetAlert2 den Abbruchgrund ab und bricht danach alle Instanzen
-// der gewählten Prozessversion ab.
-async function cancelInstances(form, processKey, version) {
-    if (!processKey || !version) {
+// Fragt per SweetAlert2 den Abbruchgrund ab und bricht danach die Instanzen
+// ab: bei Aktion "Abbrechen" nur die gewählte Version, bei "Alle abbrechen"
+// alle Versionen des gewählten Prozesses.
+async function cancelInstances(form, aktion, processKey, version) {
+    if (!processKey) {
         return;
     }
-    await loadSweetAlert();
-    const { value: cancelReason, isConfirmed } = await Swal.fire({
-        title: "Instanzen abbrechen",
-        input: "text",
-        inputLabel: `Grund für den Abbruch von "${processKey}" (Version ${version})`,
-        inputPlaceholder: "Abbruchgrund…",
-        showCancelButton: true,
-        confirmButtonText: "Abbrechen",
-        cancelButtonText: "Zurück",
-        inputValidator: (value) => (!value ? "Bitte einen Grund angeben." : undefined),
-    });
-    if (!isConfirmed || !cancelReason) {
+    if (aktion === CANCEL_ALL_ACTION) {
+        await loadSweetAlert();
+        const { value: cancelReason, isConfirmed } = await Swal.fire({
+            title: "Alle Instanzen abbrechen",
+            input: "text",
+            inputLabel: `Grund für den Abbruch aller Versionen von "${processKey}"`,
+            inputPlaceholder: "Abbruchgrund…",
+            showCancelButton: true,
+            confirmButtonText: "Alle abbrechen",
+            cancelButtonText: "Zurück",
+            inputValidator: (value) => (!value ? "Bitte einen Grund angeben." : undefined),
+        });
+        if (!isConfirmed || !cancelReason) {
+            return;
+        }
+        try {
+            const versions = await loadVersions(processKey);
+            const versionNumbers = versions
+                .filter((v) => v.number !== undefined)
+                .map((v) => v.number);
+            for (const versionNumber of versionNumbers) {
+                await (0, cancelProcessInstances_1.cancelProcessInstances)(window.location.origin, "", processKey, versionNumber, cancelReason);
+            }
+            await Swal.fire({
+                icon: "success",
+                title: "Abgebrochen",
+                text: `Instanzen aller ${versionNumbers.length} Version(en) von "${processKey}" wurden abgebrochen.`,
+            });
+            await refreshInstanceInfo(form, aktion, processKey, version);
+        }
+        catch (error) {
+            logger.error(`Fehler beim Abbrechen aller Instanzen von "${processKey}": ${error}`);
+            await Swal.fire({ icon: "error", title: "Fehler beim Abbrechen", text: String(error) });
+        }
         return;
     }
-    try {
-        await (0, cancelProcessInstances_1.cancelProcessInstances)(window.location.origin, "", processKey, version, cancelReason);
-        await Swal.fire({ icon: "success", title: "Abgebrochen", text: "Die Instanzen wurden abgebrochen." });
-        await refreshInstanceInfo(form, processKey, version);
-    }
-    catch (error) {
-        logger.error(`Fehler beim Abbrechen der Instanzen von "${processKey}" Version ${version}: ${error}`);
-        await Swal.fire({ icon: "error", title: "Fehler beim Abbrechen", text: String(error) });
+    if (aktion === getAllJobs_1.JobType.Cancel && version) {
+        await loadSweetAlert();
+        const { value: cancelReason, isConfirmed } = await Swal.fire({
+            title: "Instanzen abbrechen",
+            input: "text",
+            inputLabel: `Grund für den Abbruch von "${processKey}" (Version ${version})`,
+            inputPlaceholder: "Abbruchgrund…",
+            showCancelButton: true,
+            confirmButtonText: "Abbrechen",
+            cancelButtonText: "Zurück",
+            inputValidator: (value) => (!value ? "Bitte einen Grund angeben." : undefined),
+        });
+        if (!isConfirmed || !cancelReason) {
+            return;
+        }
+        try {
+            await (0, cancelProcessInstances_1.cancelProcessInstances)(window.location.origin, "", processKey, version, cancelReason);
+            await Swal.fire({ icon: "success", title: "Abgebrochen", text: "Die Instanzen wurden abgebrochen." });
+            await refreshInstanceInfo(form, aktion, processKey, version);
+        }
+        catch (error) {
+            logger.error(`Fehler beim Abbrechen der Instanzen von "${processKey}" Version ${version}: ${error}`);
+            await Swal.fire({ icon: "error", title: "Fehler beim Abbrechen", text: String(error) });
+        }
     }
 }
 window.formInit = async function (form, data) {
@@ -516,9 +606,9 @@ window.formInit = async function (form, data) {
         }
     };
     await loadVersionsForProcess(data?.prozess);
-    await refreshInstanceInfo(form, data?.prozess, data?.version);
+    await refreshInstanceInfo(form, data?.aktion, data?.prozess, data?.version);
     // Kaskade: sobald sich "prozess" ändert, "version" für den neuen Prozess
-    // neu befüllen. Ändert sich "prozess" oder "version", wird die
+    // neu befüllen. Ändert sich "aktion", "prozess" oder "version", wird die
     // Instanzen-Info (Anzahl laufender Instanzen) neu geladen.
     form.on("change", (event) => {
         const changedKey = event?.changed?.component?.key;
@@ -526,13 +616,13 @@ window.formInit = async function (form, data) {
             loadVersionsForProcess(event.data?.prozess);
         }
         if (changedKey === "prozess" || changedKey === "version" || changedKey === "aktion") {
-            refreshInstanceInfo(form, event.data?.prozess, event.data?.version);
+            refreshInstanceInfo(form, event.data?.aktion, event.data?.prozess, event.data?.version);
         }
     });
     // Klick auf den "Instanzen abbrechen"-Button (form.json: action "event",
     // event "cancelInstances").
     form.on("cancelInstances", () => {
-        cancelInstances(form, form.data?.prozess, form.data?.version);
+        cancelInstances(form, form.data?.aktion, form.data?.prozess, form.data?.version);
     });
 };
 
