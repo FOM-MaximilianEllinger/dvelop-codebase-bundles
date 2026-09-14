@@ -88,6 +88,62 @@ async function performHttpRequest(url, options) {
 
 /***/ }),
 
+/***/ "../../helper/process/cancelProcessInstances.ts":
+/*!******************************************************!*\
+  !*** ../../helper/process/cancelProcessInstances.ts ***!
+  \******************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.cancelProcessInstances = cancelProcessInstances;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+async function cancelProcessInstances(baseUri, token, processKey, version, cancelReason) {
+    const url = `${baseUri}/process/processes/${encodeURIComponent(processKey)}/versions/${encodeURIComponent(String(version))}/cancel`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const body = { cancelReason };
+    const options = {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ }),
+
+/***/ "../../helper/process/getActiveInstanceCount.ts":
+/*!******************************************************!*\
+  !*** ../../helper/process/getActiveInstanceCount.ts ***!
+  \******************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getActiveInstanceCount = getActiveInstanceCount;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+async function getActiveInstanceCount(baseUri, token, processKey, version) {
+    const url = `${baseUri}/process/processes/${encodeURIComponent(processKey)}/versions/${encodeURIComponent(String(version))}/activeInstanceCount`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "GET",
+        headers
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ }),
+
 /***/ "../../helper/process/getAllJobs.ts":
 /*!******************************************!*\
   !*** ../../helper/process/getAllJobs.ts ***!
@@ -319,6 +375,25 @@ const logger_1 = __webpack_require__(/*! ../../../helper/utils/logger */ "../../
 const getAllJobs_1 = __webpack_require__(/*! ../../../helper/process/getAllJobs */ "../../helper/process/getAllJobs.ts");
 const getAllProcesses_1 = __webpack_require__(/*! ../../../helper/process/getAllProcesses */ "../../helper/process/getAllProcesses.ts");
 const getProcessVersions_1 = __webpack_require__(/*! ../../../helper/process/getProcessVersions */ "../../helper/process/getProcessVersions.ts");
+const getActiveInstanceCount_1 = __webpack_require__(/*! ../../../helper/process/getActiveInstanceCount */ "../../helper/process/getActiveInstanceCount.ts");
+const cancelProcessInstances_1 = __webpack_require__(/*! ../../../helper/process/cancelProcessInstances */ "../../helper/process/cancelProcessInstances.ts");
+// Lädt SweetAlert2 bei Bedarf nach, analog zu deleteBadgesFromDocumentReaderForm/src/form.ts.
+function loadSweetAlert() {
+    return new Promise((resolve) => {
+        if (typeof Swal !== "undefined") {
+            resolve();
+            return;
+        }
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css";
+        document.head.appendChild(link);
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js";
+        script.onload = () => resolve();
+        document.head.appendChild(script);
+    });
+}
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
 // "Aktion" ist unabhängig von Server-Daten, deshalb statisch.
 const AKTIONEN = [
@@ -359,6 +434,65 @@ function versionOptions(versions) {
         .sort((a, b) => b.version - a.version)
         .map((v) => ({ label: String(v.version), value: String(v.version) }));
 }
+// Setzt den Inhalt einer Content-Komponente (type: "htmlelement") und stößt ein
+// Redraw an, analog zu setTitle in projects/GeneralCostAccountingWorkflow/src/form.ts.
+function setContent(form, key, html) {
+    const component = form.getComponent(key);
+    if (!component) {
+        logger.warn(`Komponente "${key}" nicht im Formular gefunden.`);
+        return;
+    }
+    component.component.content = html;
+    component.redraw();
+}
+// Lädt die Anzahl laufender Instanzen für Prozess+Version und zeigt sie im
+// Info-Feld an. Die Sichtbarkeit von Info-Feld und Button regelt form.json
+// selbst über customConditional (Aktion "Abbrechen" + Prozess + Version gesetzt).
+async function refreshInstanceInfo(form, processKey, version) {
+    if (!processKey || !version) {
+        return;
+    }
+    setContent(form, "instanzenInfo", "<p>Anzahl laufender Instanzen wird geladen…</p>");
+    try {
+        const response = await (0, getActiveInstanceCount_1.getActiveInstanceCount)(window.location.origin, "", processKey, version);
+        const count = response.body.count ?? 0;
+        setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${count}</strong> Instanz(en) von "${processKey}" (Version ${version}).</p>`);
+    }
+    catch (error) {
+        logger.error(`Fehler beim Laden der aktiven Instanzenanzahl für "${processKey}" Version ${version}: ${error}`);
+        setContent(form, "instanzenInfo", "<p>Fehler beim Laden der Instanzenanzahl.</p>");
+    }
+}
+// Fragt per SweetAlert2 den Abbruchgrund ab und bricht danach alle Instanzen
+// der gewählten Prozessversion ab.
+async function cancelInstances(form, processKey, version) {
+    if (!processKey || !version) {
+        return;
+    }
+    await loadSweetAlert();
+    const { value: cancelReason, isConfirmed } = await Swal.fire({
+        title: "Instanzen abbrechen",
+        input: "text",
+        inputLabel: `Grund für den Abbruch von "${processKey}" (Version ${version})`,
+        inputPlaceholder: "Abbruchgrund…",
+        showCancelButton: true,
+        confirmButtonText: "Abbrechen",
+        cancelButtonText: "Zurück",
+        inputValidator: (value) => (!value ? "Bitte einen Grund angeben." : undefined),
+    });
+    if (!isConfirmed || !cancelReason) {
+        return;
+    }
+    try {
+        await (0, cancelProcessInstances_1.cancelProcessInstances)(window.location.origin, "", processKey, version, cancelReason);
+        await Swal.fire({ icon: "success", title: "Abgebrochen", text: "Die Instanzen wurden abgebrochen." });
+        await refreshInstanceInfo(form, processKey, version);
+    }
+    catch (error) {
+        logger.error(`Fehler beim Abbrechen der Instanzen von "${processKey}" Version ${version}: ${error}`);
+        await Swal.fire({ icon: "error", title: "Fehler beim Abbrechen", text: String(error) });
+    }
+}
 window.formInit = async function (form, data) {
     logger.debug("RemoveUnusedWorkflows-Formular initialisiert.");
     setSelectValues(form, "aktion", AKTIONEN);
@@ -387,12 +521,23 @@ window.formInit = async function (form, data) {
         }
     };
     await loadVersionsForProcess(data?.prozess);
+    await refreshInstanceInfo(form, data?.prozess, data?.version);
     // Kaskade: sobald sich "prozess" ändert, "version" für den neuen Prozess
-    // neu befüllen.
+    // neu befüllen. Ändert sich "prozess" oder "version", wird die
+    // Instanzen-Info (Anzahl laufender Instanzen) neu geladen.
     form.on("change", (event) => {
-        if (event?.changed?.component?.key === "prozess") {
+        const changedKey = event?.changed?.component?.key;
+        if (changedKey === "prozess") {
             loadVersionsForProcess(event.data?.prozess);
         }
+        if (changedKey === "prozess" || changedKey === "version" || changedKey === "aktion") {
+            refreshInstanceInfo(form, event.data?.prozess, event.data?.version);
+        }
+    });
+    // Klick auf den "Instanzen abbrechen"-Button (form.json: action "event",
+    // event "cancelInstances").
+    form.on("cancelInstances", () => {
+        cancelInstances(form, form.data?.prozess, form.data?.version);
     });
 };
 

@@ -396,6 +396,45 @@
             },
             "id": "version01",
             "defaultValue": ""
+        },
+        {
+            "label": "Instanzen-Info",
+            "customClass": "",
+            "tag": "div",
+            "attrs": [],
+            "content": "<p>Anzahl laufender Instanzen wird geladen…</p>",
+            "refreshOnChange": false,
+            "key": "instanzenInfo",
+            "type": "htmlelement",
+            "input": false,
+            "tableView": false,
+            "hidden": true,
+            "conditional": {
+                "show": null,
+                "when": null,
+                "eq": ""
+            },
+            "customConditional": "show = !!(data.aktion === 'CANCEL' && data.prozess && data.version);",
+            "id": "instanzenInfo01"
+        },
+        {
+            "label": "Instanzen abbrechen",
+            "action": "event",
+            "showValidations": false,
+            "theme": "danger",
+            "event": "cancelInstances",
+            "key": "instanzenAbbrechen",
+            "type": "button",
+            "input": true,
+            "tableView": false,
+            "hidden": true,
+            "conditional": {
+                "show": null,
+                "when": null,
+                "eq": ""
+            },
+            "customConditional": "show = !!(data.aktion === 'CANCEL' && data.prozess && data.version);",
+            "id": "instanzenAbbrechen01"
         }
     ]
 }
