@@ -5364,9 +5364,9 @@ window.createOrUpdate = createOrUpdate;
 /**
  * Aktualisiert das Toolbox-Formular selbst: lädt sein eigenes Bundle aus dem
  * öffentlichen Artefakt-Repo und patcht es als customJs auf TOOLBOX_FORM_ID.
- * Wirkt erst nach einem Neuladen der Seite, da das gerade laufende Skript im
- * Browser-Speicher davon unberührt bleibt – patcht nur den in dforms hinterlegten
- * Stand für den nächsten Aufruf.
+ * Das gerade laufende Skript im Browser-Speicher bleibt davon unberührt – deshalb
+ * lädt diese Funktion die Seite nach erfolgreichem Patch automatisch neu, damit die
+ * neue Version tatsächlich greift.
  */
 async function updateForm(form, instance, data) {
     if (TOOLBOX_FORM_ID === "TODO-GUID") {
@@ -5385,8 +5385,9 @@ async function updateForm(form, instance, data) {
             customJs: customJsContent,
         };
         await (0, patchForm_1.patchForm)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID, TOOLBOX_FORM_NAME, definition);
-        logger.info("Toolbox-Formular aktualisiert. Bitte Seite neu laden, damit die neue Version greift.");
-        await showSuccessAlert("Toolbox aktualisiert", "Bitte Seite neu laden, damit die neue Version greift.");
+        logger.info("Toolbox-Formular aktualisiert. Seite wird neu geladen, damit die neue Version greift.");
+        await showSuccessAlert("Toolbox aktualisiert", "Die Seite wird jetzt neu geladen, damit die neue Version greift.");
+        window.location.reload();
     }
     catch (error) {
         logger.error(`Fehler beim Aktualisieren des Toolbox-Formulars: ${error}`);
