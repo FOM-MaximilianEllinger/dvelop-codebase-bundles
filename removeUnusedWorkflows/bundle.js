@@ -132,6 +132,80 @@ async function getJobs(baseUri, token) {
 
 /***/ }),
 
+/***/ "../../helper/process/getAllProcesses.ts":
+/*!***********************************************!*\
+  !*** ../../helper/process/getAllProcesses.ts ***!
+  \***********************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Source = exports.Type = void 0;
+exports.getAllProcesses = getAllProcesses;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+var Type;
+(function (Type) {
+    Type["ApplicationHALJSON"] = "application/hal+json";
+})(Type || (exports.Type = Type = {}));
+var Source;
+(function (Source) {
+    Source["Inbound"] = "inbound";
+    Source["Processadministration"] = "processadministration";
+})(Source || (exports.Source = Source = {}));
+async function getAllProcesses(baseUri, token) {
+    const url = `${baseUri}/process/processes`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "GET",
+        headers
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ }),
+
+/***/ "../../helper/process/getProcessVersions.ts":
+/*!**************************************************!*\
+  !*** ../../helper/process/getProcessVersions.ts ***!
+  \**************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Source = exports.Type = void 0;
+exports.getProcessVersions = getProcessVersions;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+var Type;
+(function (Type) {
+    Type["ApplicationHALJSON"] = "application/hal+json";
+})(Type || (exports.Type = Type = {}));
+var Source;
+(function (Source) {
+    Source["Inbound"] = "inbound";
+    Source["Processadministration"] = "processadministration";
+})(Source || (exports.Source = Source = {}));
+async function getProcessVersions(baseUri, token, processKey) {
+    const url = `${baseUri}/process/processes/${encodeURIComponent(processKey)}/versions`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "GET",
+        headers
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ }),
+
 /***/ "../../helper/utils/logger.ts":
 /*!************************************!*\
   !*** ../../helper/utils/logger.ts ***!
@@ -243,6 +317,8 @@ var exports = __webpack_exports__;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const logger_1 = __webpack_require__(/*! ../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 const getAllJobs_1 = __webpack_require__(/*! ../../../helper/process/getAllJobs */ "../../helper/process/getAllJobs.ts");
+const getAllProcesses_1 = __webpack_require__(/*! ../../../helper/process/getAllProcesses */ "../../helper/process/getAllProcesses.ts");
+const getProcessVersions_1 = __webpack_require__(/*! ../../../helper/process/getProcessVersions */ "../../helper/process/getProcessVersions.ts");
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
 // "Aktion" ist unabhängig von Server-Daten, deshalb statisch.
 const AKTIONEN = [
@@ -262,42 +338,60 @@ function setSelectValues(form, key, values) {
     component.component.data = { values };
     component.redraw();
 }
-async function loadJobs() {
+async function loadProcesses() {
     // Kein API-Key nötig: läuft über die aktuelle Browser-Session (Session-Cookie),
     // genau wie die dforms-Aufrufe der Toolbox.
-    const response = await (0, getAllJobs_1.getJobs)(window.location.origin, "");
-    return response.body._embedded?.jobs ?? [];
+    const response = await (0, getAllProcesses_1.getAllProcesses)(window.location.origin, "");
+    return response.body._embedded?.processes ?? [];
 }
-function distinctProcessOptions(jobs) {
-    const keys = Array.from(new Set(jobs.map((j) => j.processKey).filter((k) => !!k)));
-    return keys.map((k) => ({ label: k, value: k }));
+async function loadVersions(processKey) {
+    const response = await (0, getProcessVersions_1.getProcessVersions)(window.location.origin, "", processKey);
+    return response.body._embedded?.versions ?? [];
 }
-// "Version" hängt vom gewählten Prozess ab (kaskadierende Selectbox). Ohne
-// gewählten Prozess werden alle vorkommenden Versionen angezeigt.
-function versionOptionsForProcess(jobs, processKey) {
-    const versions = Array.from(new Set(jobs
-        .filter((j) => !processKey || j.processKey === processKey)
-        .map((j) => j.processVersion)
-        .filter((v) => v !== undefined))).sort((a, b) => b - a);
-    return versions.map((v) => ({ label: String(v), value: String(v) }));
+function processOptions(processes) {
+    return processes
+        .filter((p) => !!p.key)
+        .map((p) => ({ label: p.name ?? p.key, value: p.key }));
+}
+function versionOptions(versions) {
+    return versions
+        .filter((v) => v.version !== undefined)
+        .sort((a, b) => b.version - a.version)
+        .map((v) => ({ label: String(v.version), value: String(v.version) }));
 }
 window.formInit = async function (form, data) {
     logger.debug("RemoveUnusedWorkflows-Formular initialisiert.");
     setSelectValues(form, "aktion", AKTIONEN);
-    let jobs = [];
+    let processes = [];
     try {
-        jobs = await loadJobs();
+        processes = await loadProcesses();
     }
     catch (error) {
-        logger.error(`Fehler beim Laden der Jobs: ${error}`);
+        logger.error(`Fehler beim Laden der Prozesse: ${error}`);
     }
-    setSelectValues(form, "prozess", distinctProcessOptions(jobs));
-    setSelectValues(form, "version", versionOptionsForProcess(jobs, data?.prozess));
-    // Kaskade: sobald sich "prozess" ändert, "version" auf die dazu passenden
-    // Versionen neu befüllen.
+    setSelectValues(form, "prozess", processOptions(processes));
+    // "Version" hängt vom gewählten Prozess ab (kaskadierende Selectbox). Die
+    // Versionen kommen nicht mehr aus der Prozess-Liste selbst, sondern werden
+    // pro Prozess über dessen versions-Endpunkt nachgeladen.
+    const loadVersionsForProcess = async (processKey) => {
+        if (!processKey) {
+            setSelectValues(form, "version", []);
+            return;
+        }
+        try {
+            setSelectValues(form, "version", versionOptions(await loadVersions(processKey)));
+        }
+        catch (error) {
+            logger.error(`Fehler beim Laden der Versionen für "${processKey}": ${error}`);
+            setSelectValues(form, "version", []);
+        }
+    };
+    await loadVersionsForProcess(data?.prozess);
+    // Kaskade: sobald sich "prozess" ändert, "version" für den neuen Prozess
+    // neu befüllen.
     form.on("change", (event) => {
         if (event?.changed?.component?.key === "prozess") {
-            setSelectValues(form, "version", versionOptionsForProcess(jobs, event.data?.prozess));
+            loadVersionsForProcess(event.data?.prozess);
         }
     });
 };
