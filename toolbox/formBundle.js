@@ -5165,15 +5165,16 @@ exports.PUBLIC_BUNDLE_REPO_BASE_URL = "https://raw.githubusercontent.com/FOM-Max
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.targetForms = void 0;
 // Kuratierte Liste der nachladbaren Content-Formulare.
-// Neue Einträge hier ergänzen, sobald ein Formular per Formio + uploadFormToCloud
-// eigenständig deploybar ist.
+// Feld-Layout (Formio-Schema) wird bewusst im Process Studio Formular-Editor per
+// Drag&Drop gebaut und bleibt dort führend – nur customJs wird hier automatisiert
+// synchron gehalten. Neue Einträge hier ergänzen, sobald ein Formular per Formio +
+// uploadFormToCloud eigenständig deploybar ist.
 exports.targetForms = [
     {
         id: "removeUnusedWorkflows",
         name: "Ungenutzte Workflows entfernen",
         formId: "2c3e00b6-8e00-4a27-9a9e-2b5dee133ca7",
         bundlePath: "removeUnusedWorkflows/bundle.js",
-        formDefinitionPath: "removeUnusedWorkflows/formDefinition.json",
     },
 ];
 
@@ -5288,20 +5289,13 @@ function getOrCreateMountElement(form) {
 async function ensureTargetFormUpToDate(target) {
     const baseUri = window.location.origin;
     const customJsContent = await loadLatestBundle(target.bundlePath);
-    // Falls das Projekt sein Formio-Schema als Code pflegt (formDefinitionPath
-    // gesetzt), überschreibt dieses Schema bei jedem Update das im Process Studio
-    // Formular-Editor gebaute Schema. Ohne formDefinitionPath bleibt das
-    // Editor-Schema wie bisher unangetastet.
-    const codeOwnedFormDefinition = target.formDefinitionPath
-        ? JSON.parse(await loadLatestBundle(target.formDefinitionPath))
-        : undefined;
     const allForms = await (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN);
     const targetExists = allForms.body.forms.some((f) => f.id === target.formId);
     if (targetExists) {
         logger.debug(`Formular "${target.name}" existiert bereits, aktualisiere customJs.`);
         const existing = await (0, getForm_1.getForm)(baseUri, NO_TOKEN, target.formId);
         const definition = {
-            formioFormDefinition: codeOwnedFormDefinition ?? existing.body.definition.formioFormDefinition,
+            formioFormDefinition: existing.body.definition.formioFormDefinition,
             customCss: existing.body.definition.customCss,
             dvfDefVersion: "1.0",
             customJs: customJsContent,
@@ -5312,9 +5306,9 @@ async function ensureTargetFormUpToDate(target) {
     logger.debug(`Formular "${target.name}" existiert noch nicht, lege es neu an.`);
     await (0, createForm_1.createForm)(baseUri, NO_TOKEN, target.formId, target.name);
     const definition = {
-        // Bootstrap-Schema: ohne formDefinitionPath muss das Feld-Layout danach im
-        // Process Studio Formular-Editor gestaltet werden, hier zählt nur das customJs.
-        formioFormDefinition: codeOwnedFormDefinition ?? { display: "form", components: [] },
+        // Bootstrap-Schema: Feld-Layout muss danach im Process Studio Formular-Editor
+        // gestaltet werden, hier zählt nur das customJs.
+        formioFormDefinition: { display: "form", components: [] },
         customCss: "",
         dvfDefVersion: "1.0",
         customJs: customJsContent,
