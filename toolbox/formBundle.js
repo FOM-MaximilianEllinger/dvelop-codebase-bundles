@@ -5031,152 +5031,6 @@ async function performHttpRequest(url, options) {
 
 /***/ },
 
-/***/ "../../helper/scripting/createScript.ts"
-/*!**********************************************!*\
-  !*** ../../helper/scripting/createScript.ts ***!
-  \**********************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.createScript = createScript;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-async function createScript(baseUri, token, name) {
-    const url = `${baseUri}/scripting/script`;
-    const headers = {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-    };
-    const body = {
-        name: name
-    };
-    const options = {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
-}
-
-
-/***/ },
-
-/***/ "../../helper/scripting/getAllScripts.ts"
-/*!***********************************************!*\
-  !*** ../../helper/scripting/getAllScripts.ts ***!
-  \***********************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getAllScripts = getAllScripts;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-async function getAllScripts(baseUri, token) {
-    const url = `${baseUri}/scripting/script`;
-    const headers = {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-    };
-    const options = {
-        method: "GET",
-        headers
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
-}
-
-
-/***/ },
-
-/***/ "../../helper/scripting/getScriptVersion.ts"
-/*!**************************************************!*\
-  !*** ../../helper/scripting/getScriptVersion.ts ***!
-  \**************************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getScriptVersion = getScriptVersion;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-async function getScriptVersion(baseUri, token, scriptId) {
-    const url = `${baseUri}/scripting/script/${scriptId}/version`;
-    const headers = {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-    };
-    const options = {
-        method: "GET",
-        headers,
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
-}
-
-
-/***/ },
-
-/***/ "../../helper/scripting/patchScript.ts"
-/*!*********************************************!*\
-  !*** ../../helper/scripting/patchScript.ts ***!
-  \*********************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.PatchScript_Scriptbody_CustomerVariable = exports.PatchScript_Scriptbody_OutputProperty = exports.PatchScript_Scriptbody_InputProperty = exports.PatchScript_Scriptbody_Description = exports.PatchScript_Scriptbody_Action = exports.PatchScript_Scriptbody = void 0;
-exports.patchScript = patchScript;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-class PatchScript_Scriptbody {
-}
-exports.PatchScript_Scriptbody = PatchScript_Scriptbody;
-class PatchScript_Scriptbody_Action {
-}
-exports.PatchScript_Scriptbody_Action = PatchScript_Scriptbody_Action;
-class PatchScript_Scriptbody_Description {
-}
-exports.PatchScript_Scriptbody_Description = PatchScript_Scriptbody_Description;
-class PatchScript_Scriptbody_InputProperty {
-}
-exports.PatchScript_Scriptbody_InputProperty = PatchScript_Scriptbody_InputProperty;
-class PatchScript_Scriptbody_OutputProperty {
-}
-exports.PatchScript_Scriptbody_OutputProperty = PatchScript_Scriptbody_OutputProperty;
-class PatchScript_Scriptbody_CustomerVariable {
-}
-exports.PatchScript_Scriptbody_CustomerVariable = PatchScript_Scriptbody_CustomerVariable;
-/**
- * Overrides a script version with the provided body content.
- *
- * @param baseUri - The base URI of the API endpoint.
- * @param token - The authorization token to access the API.
- * @param scriptId - The unique identifier of the script to override.
- * @param scriptVersionId - The unique identifier of the script version to override.
- * @param body - The content to override the script version with.
- * @returns A promise that resolves to the API response containing the overridden script details.
- */
-async function patchScript(baseUri, token, scriptId, scriptVersionId, body) {
-    const url = `${baseUri}/scripting/script/${scriptId}/version/${scriptVersionId}`;
-    const headers = {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-    };
-    const options = {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify(body),
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
-}
-
-
-/***/ },
-
 /***/ "../../helper/utils/logger.ts"
 /*!************************************!*\
   !*** ../../helper/utils/logger.ts ***!
@@ -5309,17 +5163,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.APICredentials = void 0;
 const getForm_1 = __webpack_require__(/*! ../../../helper/dforms/getForm */ "../../helper/dforms/getForm.ts");
 const createForm_1 = __webpack_require__(/*! ../../../helper/dforms/createForm */ "../../helper/dforms/createForm.ts");
 const patchForm_1 = __webpack_require__(/*! ../../../helper/dforms/patchForm */ "../../helper/dforms/patchForm.ts");
 const logger_1 = __webpack_require__(/*! ../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 const targetForms_1 = __webpack_require__(/*! ./config/targetForms */ "./src/config/targetForms.ts");
 const publicBundleRepo_1 = __webpack_require__(/*! ./config/publicBundleRepo */ "./src/config/publicBundleRepo.ts");
-const createScript_1 = __webpack_require__(/*! ../../../helper/scripting/createScript */ "../../helper/scripting/createScript.ts");
-const getAllScripts_1 = __webpack_require__(/*! ../../../helper/scripting/getAllScripts */ "../../helper/scripting/getAllScripts.ts");
-const getScriptVersion_1 = __webpack_require__(/*! ../../../helper/scripting/getScriptVersion */ "../../helper/scripting/getScriptVersion.ts");
-const patchScript_1 = __webpack_require__(/*! ../../../helper/scripting/patchScript */ "../../helper/scripting/patchScript.ts");
 const sweetalert2_1 = __importDefault(__webpack_require__(/*! sweetalert2 */ "./node_modules/sweetalert2/dist/sweetalert2.all.js"));
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
 function getErrorMessage(error) {
@@ -5336,164 +5185,15 @@ const TOOLBOX_FORM_NAME = "Toolbox";
 // Pfad des eigenen Bundles im öffentlichen Artefakt-Repo (wird von
 // .github/workflows/publish-bundles.yml dorthin veröffentlicht).
 const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
-// Name des Process-Studio-Skripts, in dem der API-Key als verschlüsselte
-// customerVariable hinterlegt wird (siehe saveApiKeyToConfigScript unten).
-const TOOLBOX_CONFIG_SCRIPT_NAME = "ToolboxConfig";
-class APICredentials {
-    // apiKey kommt aus dem Formularfeld "apiKey" (vom Nutzer eingegeben), statt fest im
-    // customJs-Bundle zu stehen. baseUri wird aus der aktuellen Seite abgeleitet.
-    constructor(apiKey) {
-        this.baseUri = window.location.origin;
-        this.apiKey = apiKey;
-    }
-}
-exports.APICredentials = APICredentials;
-/**
- * Stellt sicher, dass das Skript TOOLBOX_CONFIG_SCRIPT_NAME im Process Studio
- * existiert (legt es per createScript neu an, falls es noch keins mit diesem Namen
- * gibt) und liefert seine scriptId sowie die id der Version zurück, die patchScript
- * zum Schreiben von customerVariables benötigt.
- */
-async function ensureConfigScriptExists(credentials) {
-    const all = await (0, getAllScripts_1.getAllScripts)(credentials.baseUri, credentials.apiKey);
-    let scriptId = all.body.find((s) => s.name === TOOLBOX_CONFIG_SCRIPT_NAME)?.id;
-    if (!scriptId) {
-        logger.debug(`Skript "${TOOLBOX_CONFIG_SCRIPT_NAME}" existiert noch nicht, lege es neu an.`);
-        const created = await (0, createScript_1.createScript)(credentials.baseUri, credentials.apiKey, TOOLBOX_CONFIG_SCRIPT_NAME);
-        scriptId = created.body.id;
-    }
-    const versions = await (0, getScriptVersion_1.getScriptVersion)(credentials.baseUri, credentials.apiKey, scriptId);
-    const versionId = versions.body[0]?.id;
-    if (!versionId) {
-        throw new Error(`Keine Version für Skript "${TOOLBOX_CONFIG_SCRIPT_NAME}" gefunden.`);
-    }
-    return { scriptId, versionId };
-}
-/**
- * Hinterlegt den übergebenen API-Key als verschlüsselte customerVariable im
- * ToolboxConfig-Skript, damit andere Automationen/Skripte im Process Studio darauf
- * zugreifen können, ohne dass der Key im Klartext im Bundle steht. d.velop gibt
- * verschlüsselte customerVariables per API nicht wieder im Klartext zurück – das
- * apiKey-Feld hier im Formular muss deshalb weiterhin bei jedem Öffnen neu
- * ausgefüllt werden, dies schreibt nur (Backup/Weiterverwendung durch andere
- * Skripte). Wirft bei Fehlern, damit Aufrufer (z.B. updateApiKey) das dem Nutzer
- * anzeigen können.
- */
-async function writeApiKeyToConfigScript(credentials) {
-    const { scriptId, versionId } = await ensureConfigScriptExists(credentials);
-    const customerVariable = {
-        key: "apiKey",
-        value: credentials.apiKey,
-        encrypted: true,
-    };
-    await (0, patchScript_1.patchScript)(credentials.baseUri, credentials.apiKey, scriptId, versionId, {
-        customerVariables: [customerVariable],
-    });
-    logger.debug(`API-Key im Skript "${TOOLBOX_CONFIG_SCRIPT_NAME}" gespeichert.`);
-}
-// Fire-and-forget-Variante für Stellen, an denen ein Fehler beim Speichern nicht den
-// eigentlichen Ablauf (Formular laden/aktualisieren) unterbrechen soll.
-async function saveApiKeyToConfigScript(credentials) {
-    try {
-        await writeApiKeyToConfigScript(credentials);
-    }
-    catch (error) {
-        logger.error(`Fehler beim Speichern des API-Keys im Konfigurations-Skript "${TOOLBOX_CONFIG_SCRIPT_NAME}": ${error}`);
-    }
-}
-/**
- * Liest den API-Key aus der customerVariable "apiKey" des ToolboxConfig-Skripts,
- * ohne selbst schon einen API-Key zu benötigen (lesende Scripting-Aufrufe laufen im
- * Process-Studio-Kontext über die Browser-Session, nicht über den elevierten
- * API-Key, der nur für schreibende dforms/scripting-Aufrufe nötig ist). Liefert
- * undefined, wenn das Skript noch nicht existiert oder noch keine apiKey-Variable
- * gesetzt ist (z.B. beim allerersten Laden der Toolbox).
- */
-async function loadApiKeyFromConfigScript(baseUri) {
-    try {
-        const all = await (0, getAllScripts_1.getAllScripts)(baseUri, "");
-        const script = all.body.find((s) => s.name === TOOLBOX_CONFIG_SCRIPT_NAME);
-        if (!script?.id) {
-            return undefined;
-        }
-        const versions = await (0, getScriptVersion_1.getScriptVersion)(baseUri, "", script.id);
-        return versions.body[0]?.customerVariables?.find((v) => v.key === "apiKey")?.value;
-    }
-    catch (error) {
-        logger.debug(`API-Key konnte nicht aus Skript "${TOOLBOX_CONFIG_SCRIPT_NAME}" gelesen werden: ${error}`);
-        return undefined;
-    }
-}
-/**
- * Fragt den API-Key per SweetAlert2 ab und speichert ihn im ToolboxConfig-Skript.
- * Wird von formInit genutzt, wenn loadApiKeyFromConfigScript nichts liefert (erster
- * Aufruf überhaupt, Skript existiert noch nicht).
- */
-async function promptAndStoreApiKey() {
-    const result = await sweetalert2_1.default.fire({
-        title: "API-Key hinterlegen",
-        text: "Es ist noch kein API-Key im Skript \"" + TOOLBOX_CONFIG_SCRIPT_NAME + "\" hinterlegt.",
-        input: "password",
-        inputLabel: "API-Key",
-        inputPlaceholder: "API-Key eingeben",
-        inputAttributes: { autocapitalize: "off", autocorrect: "off" },
-        showCancelButton: true,
-        confirmButtonText: "Speichern",
-        cancelButtonText: "Abbrechen",
-        inputValidator: (value) => (!value ? "Bitte einen API-Key eingeben." : undefined),
-    });
-    if (!result.isConfirmed || !result.value) {
-        return undefined;
-    }
-    try {
-        await writeApiKeyToConfigScript(new APICredentials(result.value));
-    }
-    catch (error) {
-        await showErrorAlert("API-Key konnte nicht im Skript gespeichert werden", error);
-    }
-    return result.value;
-}
-/**
- * Button "updateApiKey": öffnet ein SweetAlert2-Dialogfenster zur einmaligen
- * Eingabe des API-Keys und speichert ihn danach im ToolboxConfig-Skript. SweetAlert2
- * wird dafür vollständig ins Formular-Bundle mitgebaut (siehe package.json), da im
- * Process-Studio-Formularkontext kein globales Swal zur Verfügung steht.
- */
-async function updateApiKey(form, instance, data) {
-    const result = await sweetalert2_1.default.fire({
-        title: "API-Key hinterlegen",
-        input: "password",
-        inputLabel: "API-Key",
-        inputPlaceholder: "API-Key eingeben",
-        inputAttributes: { autocapitalize: "off", autocorrect: "off" },
-        showCancelButton: true,
-        confirmButtonText: "Speichern",
-        cancelButtonText: "Abbrechen",
-        inputValidator: (value) => (!value ? "Bitte einen API-Key eingeben." : undefined),
-    });
-    if (!result.isConfirmed || !result.value) {
-        return;
-    }
-    try {
-        const credentials = new APICredentials(result.value);
-        await writeApiKeyToConfigScript(credentials);
-        await showSuccessAlert("Gespeichert", `API-Key wurde im Skript "${TOOLBOX_CONFIG_SCRIPT_NAME}" hinterlegt.`);
-    }
-    catch (error) {
-        await showErrorAlert("API-Key konnte nicht gespeichert werden", error);
-    }
-}
-window.updateApiKey = updateApiKey;
-window.formInit = async function (form, data) {
+// Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
+// dieselbe Origin (window.location.origin) schickt der Browser automatisch das
+// Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
+// Die Helper (getForm/createForm/patchForm) erwarten trotzdem einen Token-Parameter
+// für den Authorization-Header – der bleibt hier bewusst leer.
+const NO_TOKEN = "";
+window.formInit = function (form, data) {
     logger.debug("FormLoader initialisiert.");
     populateAvailableForms(form);
-    let apiKey = await loadApiKeyFromConfigScript(window.location.origin);
-    if (!apiKey) {
-        apiKey = await promptAndStoreApiKey();
-    }
-    if (apiKey) {
-        form.getComponent("apiKey")?.setValue(apiKey);
-    }
     document.addEventListener("keydown", function (event) {
         if (event.ctrlKey && event.key === "F1") {
             console.log("data");
@@ -5552,10 +5252,11 @@ function getOrCreateMountElement(form) {
  * So erledigt ein Klick auf createOrUpdate wirklich beides: anlegen ODER
  * aktualisieren, immer mit dem aktuellsten Stand aus GitHub main.
  */
-async function ensureTargetFormUpToDate(credentials, target) {
+async function ensureTargetFormUpToDate(target) {
+    const baseUri = window.location.origin;
     const customJsContent = await loadLatestBundle(target.bundlePath);
     try {
-        const existing = await (0, getForm_1.getForm)(credentials.baseUri, credentials.apiKey, target.formId);
+        const existing = await (0, getForm_1.getForm)(baseUri, NO_TOKEN, target.formId);
         logger.debug(`Formular "${target.name}" existiert bereits, aktualisiere customJs.`);
         const definition = {
             formioFormDefinition: existing.body.definition.formioFormDefinition,
@@ -5563,7 +5264,7 @@ async function ensureTargetFormUpToDate(credentials, target) {
             dvfDefVersion: "1.0",
             customJs: customJsContent,
         };
-        await (0, patchForm_1.patchForm)(credentials.baseUri, credentials.apiKey, target.formId, target.name, definition);
+        await (0, patchForm_1.patchForm)(baseUri, NO_TOKEN, target.formId, target.name, definition);
         return definition;
     }
     catch (error) {
@@ -5572,7 +5273,7 @@ async function ensureTargetFormUpToDate(credentials, target) {
             throw error;
         }
         logger.debug(`Formular "${target.name}" existiert noch nicht, lege es neu an.`);
-        await (0, createForm_1.createForm)(credentials.baseUri, credentials.apiKey, target.formId, target.name);
+        await (0, createForm_1.createForm)(baseUri, NO_TOKEN, target.formId, target.name);
         const definition = {
             // Bootstrap-Schema: Feld-Layout muss danach ggf. im Process Studio
             // Formular-Editor gestaltet werden, hier zählt nur das customJs.
@@ -5581,7 +5282,7 @@ async function ensureTargetFormUpToDate(credentials, target) {
             dvfDefVersion: "1.0",
             customJs: customJsContent,
         };
-        await (0, patchForm_1.patchForm)(credentials.baseUri, credentials.apiKey, target.formId, target.name, definition);
+        await (0, patchForm_1.patchForm)(baseUri, NO_TOKEN, target.formId, target.name, definition);
         return definition;
     }
 }
@@ -5609,9 +5310,7 @@ async function createOrUpdate(form, instance, data) {
         return;
     }
     try {
-        const credentials = new APICredentials(data.apiKey);
-        void saveApiKeyToConfigScript(credentials);
-        const definition = await ensureTargetFormUpToDate(credentials, target);
+        const definition = await ensureTargetFormUpToDate(target);
         injectContentCss(definition.customCss);
         if (!window.Formio) {
             throw new Error("Formio ist im aktuellen Kontext nicht verfügbar.");
@@ -5642,28 +5341,22 @@ window.createOrUpdate = createOrUpdate;
  * Stand für den nächsten Aufruf.
  */
 async function updateForm(form, instance, data) {
-    if (!data.apiKey) {
-        logger.error('Feld "apiKey" ist leer. Bitte API-Key im Formular eintragen.');
-        await showErrorAlert("API-Key fehlt", 'Feld "apiKey" ist leer. Bitte API-Key im Formular eintragen.');
-        return;
-    }
     if (TOOLBOX_FORM_ID === "TODO-GUID") {
         logger.error("TOOLBOX_FORM_ID ist noch nicht gesetzt (siehe Kommentar am Anfang von form.ts).");
         await showErrorAlert("Toolbox nicht konfiguriert", "TOOLBOX_FORM_ID ist noch nicht gesetzt (siehe Kommentar am Anfang von form.ts).");
         return;
     }
     try {
-        const credentials = new APICredentials(data.apiKey);
-        void saveApiKeyToConfigScript(credentials);
+        const baseUri = window.location.origin;
         const customJsContent = await loadLatestBundle(TOOLBOX_BUNDLE_PATH);
-        const existing = await (0, getForm_1.getForm)(credentials.baseUri, credentials.apiKey, TOOLBOX_FORM_ID);
+        const existing = await (0, getForm_1.getForm)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID);
         const definition = {
             formioFormDefinition: existing.body.definition.formioFormDefinition,
             customCss: existing.body.definition.customCss,
             dvfDefVersion: "1.0",
             customJs: customJsContent,
         };
-        await (0, patchForm_1.patchForm)(credentials.baseUri, credentials.apiKey, TOOLBOX_FORM_ID, TOOLBOX_FORM_NAME, definition);
+        await (0, patchForm_1.patchForm)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID, TOOLBOX_FORM_NAME, definition);
         logger.info("Toolbox-Formular aktualisiert. Bitte Seite neu laden, damit die neue Version greift.");
         await showSuccessAlert("Toolbox aktualisiert", "Bitte Seite neu laden, damit die neue Version greift.");
     }
