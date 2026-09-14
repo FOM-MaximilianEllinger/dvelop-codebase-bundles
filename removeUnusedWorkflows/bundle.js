@@ -257,6 +257,34 @@ async function getProcessVersions(baseUri, token, processKey) {
 
 /***/ }),
 
+/***/ "../../helper/process/migrateProcessInstances.ts":
+/*!*******************************************************!*\
+  !*** ../../helper/process/migrateProcessInstances.ts ***!
+  \*******************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.migrateProcessInstances = migrateProcessInstances;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+async function migrateProcessInstances(baseUri, token, processKey, version) {
+    const url = `${baseUri}/process/processes/${encodeURIComponent(processKey)}/versions/${encodeURIComponent(String(version))}/migration`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ }),
+
 /***/ "../../helper/utils/logger.ts":
 /*!************************************!*\
   !*** ../../helper/utils/logger.ts ***!
@@ -372,6 +400,7 @@ const getAllProcesses_1 = __webpack_require__(/*! ../../../helper/process/getAll
 const getProcessVersions_1 = __webpack_require__(/*! ../../../helper/process/getProcessVersions */ "../../helper/process/getProcessVersions.ts");
 const getActiveInstanceCount_1 = __webpack_require__(/*! ../../../helper/process/getActiveInstanceCount */ "../../helper/process/getActiveInstanceCount.ts");
 const cancelProcessInstances_1 = __webpack_require__(/*! ../../../helper/process/cancelProcessInstances */ "../../helper/process/cancelProcessInstances.ts");
+const migrateProcessInstances_1 = __webpack_require__(/*! ../../../helper/process/migrateProcessInstances */ "../../helper/process/migrateProcessInstances.ts");
 // Lädt SweetAlert2 bei Bedarf nach, analog zu deleteBadgesFromDocumentReaderForm/src/form.ts.
 function loadSweetAlert() {
     return new Promise((resolve) => {
@@ -390,9 +419,10 @@ function loadSweetAlert() {
     });
 }
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
-// Eigene Aktion (kein JobType): bricht alle Versionen eines Prozesses ab,
-// unabhängig von der gewählten "Version".
+// Eigene Aktionen (kein JobType): wirken unabhängig von der gewählten
+// "Version" auf alle Versionen eines Prozesses.
 const CANCEL_ALL_ACTION = "CANCEL_ALL";
+const MIGRATE_ALL_ACTION = "MIGRATE_ALL";
 // "Aktion" ist unabhängig von Server-Daten, deshalb statisch.
 const AKTIONEN = [
     { label: "Erneut versuchen", value: getAllJobs_1.JobType.Retry },
@@ -400,6 +430,7 @@ const AKTIONEN = [
     { label: "Alle abbrechen", value: CANCEL_ALL_ACTION },
     { label: "Löschen", value: getAllJobs_1.JobType.Deletion },
     { label: "Migrieren", value: getAllJobs_1.JobType.Migration },
+    { label: "Alle migrieren", value: MIGRATE_ALL_ACTION },
 ];
 // Setzt die Optionen einer Select-Komponente und stößt ein Redraw an, analog zu
 // populateAvailableForms in projects/Toolbox/src/form.ts.
@@ -454,14 +485,18 @@ function setLabel(form, key, label) {
     component.component.label = label;
     component.redraw();
 }
-// Ermittelt für alle Versionen eines Prozesses jeweils die Anzahl aktiver
-// Instanzen. Einzelne fehlgeschlagene Abfragen zählen als 0, damit eine
-// Version mit Fehler nicht die gesamte Summe verhindert.
-async function getActiveInstanceCountPerVersion(processKey) {
+// Liefert die Versionsnummern aller Versionen eines Prozesses, absteigend
+// nicht garantiert (Reihenfolge wie von der API zurückgegeben).
+async function getVersionNumbers(processKey) {
     const versions = await loadVersions(processKey);
-    const versionNumbers = versions
+    return versions
         .filter((v) => v.number !== undefined)
         .map((v) => v.number);
+}
+// Ermittelt für die angegebenen Versionen jeweils die Anzahl aktiver
+// Instanzen. Einzelne fehlgeschlagene Abfragen zählen als 0, damit eine
+// Version mit Fehler nicht die gesamte Summe verhindert.
+async function getActiveInstanceCounts(processKey, versionNumbers) {
     return Promise.all(versionNumbers.map(async (version) => {
         try {
             const response = await (0, getActiveInstanceCount_1.getActiveInstanceCount)(window.location.origin, "", processKey, version);
@@ -475,17 +510,18 @@ async function getActiveInstanceCountPerVersion(processKey) {
 }
 // Lädt die Anzahl laufender Instanzen und zeigt sie im Info-Feld an. Je nach
 // gewählter Aktion entweder für die gewählte Version oder summiert über alle
-// Versionen des Prozesses ("Alle abbrechen"). Die Sichtbarkeit von Info-Feld
+// (bzw. alle älteren) Versionen des Prozesses. Die Sichtbarkeit von Info-Feld
 // und Button regelt form.json selbst über customConditional.
 async function refreshInstanceInfo(form, aktion, processKey, version) {
     if (!processKey) {
         return;
     }
     if (aktion === CANCEL_ALL_ACTION) {
-        setLabel(form, "instanzenAbbrechen", "Alle Instanzen abbrechen");
+        setLabel(form, "instanzenAction", "Alle Instanzen abbrechen");
         setContent(form, "instanzenInfo", "<p>Anzahl laufender Instanzen wird geladen…</p>");
         try {
-            const counts = await getActiveInstanceCountPerVersion(processKey);
+            const versionNumbers = await getVersionNumbers(processKey);
+            const counts = await getActiveInstanceCounts(processKey, versionNumbers);
             const total = counts.reduce((sum, c) => sum + c.count, 0);
             setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${total}</strong> Instanz(en) über <strong>${counts.length}</strong> Version(en) von "${processKey}".</p>`);
         }
@@ -496,7 +532,7 @@ async function refreshInstanceInfo(form, aktion, processKey, version) {
         return;
     }
     if (aktion === getAllJobs_1.JobType.Cancel && version) {
-        setLabel(form, "instanzenAbbrechen", "Instanzen abbrechen");
+        setLabel(form, "instanzenAction", "Instanzen abbrechen");
         setContent(form, "instanzenInfo", "<p>Anzahl laufender Instanzen wird geladen…</p>");
         try {
             const response = await (0, getActiveInstanceCount_1.getActiveInstanceCount)(window.location.origin, "", processKey, version);
@@ -507,75 +543,229 @@ async function refreshInstanceInfo(form, aktion, processKey, version) {
             logger.error(`Fehler beim Laden der aktiven Instanzenanzahl für "${processKey}" Version ${version}: ${error}`);
             setContent(form, "instanzenInfo", "<p>Fehler beim Laden der Instanzenanzahl.</p>");
         }
+        return;
+    }
+    if (aktion === MIGRATE_ALL_ACTION) {
+        setLabel(form, "instanzenAction", "Alle auf aktuellste Version migrieren");
+        setContent(form, "instanzenInfo", "<p>Anzahl laufender Instanzen wird geladen…</p>");
+        try {
+            const versionNumbers = await getVersionNumbers(processKey);
+            if (versionNumbers.length === 0) {
+                setContent(form, "instanzenInfo", `<p>Keine Versionen für "${processKey}" gefunden.</p>`);
+                return;
+            }
+            const latest = Math.max(...versionNumbers);
+            const olderVersions = versionNumbers.filter((v) => v !== latest);
+            if (olderVersions.length === 0) {
+                setContent(form, "instanzenInfo", `<p>Es gibt nur die aktuelle Version <strong>${latest}</strong> – keine Migration notwendig.</p>`);
+                return;
+            }
+            const counts = await getActiveInstanceCounts(processKey, olderVersions);
+            const total = counts.reduce((sum, c) => sum + c.count, 0);
+            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${total}</strong> Instanz(en) über <strong>${olderVersions.length}</strong> ältere Version(en) von "${processKey}" – werden auf Version <strong>${latest}</strong> migriert.</p>`);
+        }
+        catch (error) {
+            logger.error(`Fehler beim Laden der aktiven Instanzenanzahl (alle Versionen) für "${processKey}": ${error}`);
+            setContent(form, "instanzenInfo", "<p>Fehler beim Laden der Instanzenanzahl.</p>");
+        }
+        return;
+    }
+    if (aktion === getAllJobs_1.JobType.Migration && version) {
+        setLabel(form, "instanzenAction", "Auf aktuellste Version migrieren");
+        setContent(form, "instanzenInfo", "<p>Anzahl laufender Instanzen wird geladen…</p>");
+        try {
+            const [versionNumbers, response] = await Promise.all([
+                getVersionNumbers(processKey),
+                (0, getActiveInstanceCount_1.getActiveInstanceCount)(window.location.origin, "", processKey, version),
+            ]);
+            const count = response.body.count ?? 0;
+            const latest = versionNumbers.length ? Math.max(...versionNumbers) : undefined;
+            const targetText = latest !== undefined ? ` auf Version <strong>${latest}</strong>` : "";
+            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${count}</strong> Instanz(en) von "${processKey}" (Version ${version}) – werden${targetText} migriert.</p>`);
+        }
+        catch (error) {
+            logger.error(`Fehler beim Laden der aktiven Instanzenanzahl für "${processKey}" Version ${version}: ${error}`);
+            setContent(form, "instanzenInfo", "<p>Fehler beim Laden der Instanzenanzahl.</p>");
+        }
     }
 }
-// Fragt per SweetAlert2 den Abbruchgrund ab und bricht danach die Instanzen
-// ab: bei Aktion "Abbrechen" nur die gewählte Version, bei "Alle abbrechen"
-// alle Versionen des gewählten Prozesses.
-async function cancelInstances(form, aktion, processKey, version) {
+// Bricht die Instanzen der gewählten Version ab (nach Abfrage des
+// Abbruchgrunds per SweetAlert2), mit Lade-Anzeige während des Requests.
+async function cancelSingleVersion(form, processKey, version) {
+    await loadSweetAlert();
+    const { value: cancelReason, isConfirmed } = await Swal.fire({
+        title: "Instanzen abbrechen",
+        input: "text",
+        inputLabel: `Grund für den Abbruch von "${processKey}" (Version ${version})`,
+        inputPlaceholder: "Abbruchgrund…",
+        showCancelButton: true,
+        confirmButtonText: "Abbrechen",
+        cancelButtonText: "Zurück",
+        inputValidator: (value) => (!value ? "Bitte einen Grund angeben." : undefined),
+    });
+    if (!isConfirmed || !cancelReason) {
+        return;
+    }
+    Swal.fire({
+        title: "Instanzen werden abgebrochen…",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading(),
+    });
+    try {
+        await (0, cancelProcessInstances_1.cancelProcessInstances)(window.location.origin, "", processKey, version, cancelReason);
+        await Swal.fire({ icon: "success", title: "Abgebrochen", text: "Die Instanzen wurden abgebrochen." });
+        await refreshInstanceInfo(form, getAllJobs_1.JobType.Cancel, processKey, version);
+    }
+    catch (error) {
+        logger.error(`Fehler beim Abbrechen der Instanzen von "${processKey}" Version ${version}: ${error}`);
+        await Swal.fire({ icon: "error", title: "Fehler beim Abbrechen", text: String(error) });
+    }
+}
+// Bricht die Instanzen aller Versionen eines Prozesses ab, mit
+// Fortschrittsanzeige (Version X von Y) während der einzelnen Requests.
+async function cancelAllVersions(form, processKey) {
+    await loadSweetAlert();
+    const { value: cancelReason, isConfirmed } = await Swal.fire({
+        title: "Alle Instanzen abbrechen",
+        input: "text",
+        inputLabel: `Grund für den Abbruch aller Versionen von "${processKey}"`,
+        inputPlaceholder: "Abbruchgrund…",
+        showCancelButton: true,
+        confirmButtonText: "Alle abbrechen",
+        cancelButtonText: "Zurück",
+        inputValidator: (value) => (!value ? "Bitte einen Grund angeben." : undefined),
+    });
+    if (!isConfirmed || !cancelReason) {
+        return;
+    }
+    try {
+        const versionNumbers = await getVersionNumbers(processKey);
+        Swal.fire({
+            title: "Instanzen werden abgebrochen…",
+            html: `Version <b>1</b> von <b>${versionNumbers.length}</b>`,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading(),
+        });
+        for (let i = 0; i < versionNumbers.length; i++) {
+            Swal.update({ html: `Version <b>${i + 1}</b> von <b>${versionNumbers.length}</b> (Nr. ${versionNumbers[i]})` });
+            await (0, cancelProcessInstances_1.cancelProcessInstances)(window.location.origin, "", processKey, versionNumbers[i], cancelReason);
+        }
+        await Swal.fire({
+            icon: "success",
+            title: "Abgebrochen",
+            text: `Instanzen aller ${versionNumbers.length} Version(en) von "${processKey}" wurden abgebrochen.`,
+        });
+        await refreshInstanceInfo(form, CANCEL_ALL_ACTION, processKey, undefined);
+    }
+    catch (error) {
+        logger.error(`Fehler beim Abbrechen aller Instanzen von "${processKey}": ${error}`);
+        await Swal.fire({ icon: "error", title: "Fehler beim Abbrechen", text: String(error) });
+    }
+}
+// Migriert die Instanzen der gewählten Version auf die aktuellste Version,
+// mit Lade-Anzeige während des Requests.
+async function migrateSingleVersion(form, processKey, version) {
+    await loadSweetAlert();
+    const { isConfirmed } = await Swal.fire({
+        title: "Auf aktuellste Version migrieren?",
+        text: `Instanzen von "${processKey}" (Version ${version}) werden auf die aktuellste Version migriert.`,
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Migrieren",
+        cancelButtonText: "Zurück",
+    });
+    if (!isConfirmed) {
+        return;
+    }
+    Swal.fire({
+        title: "Instanzen werden migriert…",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading(),
+    });
+    try {
+        await (0, migrateProcessInstances_1.migrateProcessInstances)(window.location.origin, "", processKey, version);
+        await Swal.fire({ icon: "success", title: "Migriert", text: "Die Instanzen wurden migriert." });
+        await refreshInstanceInfo(form, getAllJobs_1.JobType.Migration, processKey, version);
+    }
+    catch (error) {
+        logger.error(`Fehler beim Migrieren der Instanzen von "${processKey}" Version ${version}: ${error}`);
+        await Swal.fire({ icon: "error", title: "Fehler beim Migrieren", text: String(error) });
+    }
+}
+// Migriert die Instanzen aller älteren Versionen eines Prozesses auf die
+// aktuellste Version, mit Fortschrittsanzeige (Version X von Y).
+async function migrateAllVersions(form, processKey) {
+    await loadSweetAlert();
+    try {
+        const versionNumbers = await getVersionNumbers(processKey);
+        if (versionNumbers.length === 0) {
+            await Swal.fire({ icon: "info", title: "Keine Versionen", text: `Für "${processKey}" wurden keine Versionen gefunden.` });
+            return;
+        }
+        const latest = Math.max(...versionNumbers);
+        const olderVersions = versionNumbers.filter((v) => v !== latest);
+        if (olderVersions.length === 0) {
+            await Swal.fire({ icon: "info", title: "Keine Migration notwendig", text: `Es gibt nur die aktuelle Version ${latest}.` });
+            return;
+        }
+        const { isConfirmed } = await Swal.fire({
+            title: "Alle auf aktuellste Version migrieren?",
+            text: `${olderVersions.length} ältere Version(en) von "${processKey}" werden auf Version ${latest} migriert.`,
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonText: "Alle migrieren",
+            cancelButtonText: "Zurück",
+        });
+        if (!isConfirmed) {
+            return;
+        }
+        Swal.fire({
+            title: "Instanzen werden migriert…",
+            html: `Version <b>1</b> von <b>${olderVersions.length}</b>`,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading(),
+        });
+        for (let i = 0; i < olderVersions.length; i++) {
+            Swal.update({ html: `Version <b>${i + 1}</b> von <b>${olderVersions.length}</b> (Nr. ${olderVersions[i]})` });
+            await (0, migrateProcessInstances_1.migrateProcessInstances)(window.location.origin, "", processKey, olderVersions[i]);
+        }
+        await Swal.fire({
+            icon: "success",
+            title: "Migriert",
+            text: `${olderVersions.length} ältere Version(en) von "${processKey}" wurden auf Version ${latest} migriert.`,
+        });
+        await refreshInstanceInfo(form, MIGRATE_ALL_ACTION, processKey, undefined);
+    }
+    catch (error) {
+        logger.error(`Fehler beim Migrieren aller Instanzen von "${processKey}": ${error}`);
+        await Swal.fire({ icon: "error", title: "Fehler beim Migrieren", text: String(error) });
+    }
+}
+// Klick-Handler des generischen Aktions-Buttons: leitet je nach gewählter
+// Aktion an den passenden Cancel- bzw. Migrations-Ablauf weiter.
+async function runPrimaryAction(form, aktion, processKey, version) {
     if (!processKey) {
         return;
     }
     if (aktion === CANCEL_ALL_ACTION) {
-        await loadSweetAlert();
-        const { value: cancelReason, isConfirmed } = await Swal.fire({
-            title: "Alle Instanzen abbrechen",
-            input: "text",
-            inputLabel: `Grund für den Abbruch aller Versionen von "${processKey}"`,
-            inputPlaceholder: "Abbruchgrund…",
-            showCancelButton: true,
-            confirmButtonText: "Alle abbrechen",
-            cancelButtonText: "Zurück",
-            inputValidator: (value) => (!value ? "Bitte einen Grund angeben." : undefined),
-        });
-        if (!isConfirmed || !cancelReason) {
-            return;
-        }
-        try {
-            const versions = await loadVersions(processKey);
-            const versionNumbers = versions
-                .filter((v) => v.number !== undefined)
-                .map((v) => v.number);
-            for (const versionNumber of versionNumbers) {
-                await (0, cancelProcessInstances_1.cancelProcessInstances)(window.location.origin, "", processKey, versionNumber, cancelReason);
-            }
-            await Swal.fire({
-                icon: "success",
-                title: "Abgebrochen",
-                text: `Instanzen aller ${versionNumbers.length} Version(en) von "${processKey}" wurden abgebrochen.`,
-            });
-            await refreshInstanceInfo(form, aktion, processKey, version);
-        }
-        catch (error) {
-            logger.error(`Fehler beim Abbrechen aller Instanzen von "${processKey}": ${error}`);
-            await Swal.fire({ icon: "error", title: "Fehler beim Abbrechen", text: String(error) });
-        }
-        return;
+        await cancelAllVersions(form, processKey);
     }
-    if (aktion === getAllJobs_1.JobType.Cancel && version) {
-        await loadSweetAlert();
-        const { value: cancelReason, isConfirmed } = await Swal.fire({
-            title: "Instanzen abbrechen",
-            input: "text",
-            inputLabel: `Grund für den Abbruch von "${processKey}" (Version ${version})`,
-            inputPlaceholder: "Abbruchgrund…",
-            showCancelButton: true,
-            confirmButtonText: "Abbrechen",
-            cancelButtonText: "Zurück",
-            inputValidator: (value) => (!value ? "Bitte einen Grund angeben." : undefined),
-        });
-        if (!isConfirmed || !cancelReason) {
-            return;
-        }
-        try {
-            await (0, cancelProcessInstances_1.cancelProcessInstances)(window.location.origin, "", processKey, version, cancelReason);
-            await Swal.fire({ icon: "success", title: "Abgebrochen", text: "Die Instanzen wurden abgebrochen." });
-            await refreshInstanceInfo(form, aktion, processKey, version);
-        }
-        catch (error) {
-            logger.error(`Fehler beim Abbrechen der Instanzen von "${processKey}" Version ${version}: ${error}`);
-            await Swal.fire({ icon: "error", title: "Fehler beim Abbrechen", text: String(error) });
-        }
+    else if (aktion === getAllJobs_1.JobType.Cancel && version) {
+        await cancelSingleVersion(form, processKey, version);
+    }
+    else if (aktion === MIGRATE_ALL_ACTION) {
+        await migrateAllVersions(form, processKey);
+    }
+    else if (aktion === getAllJobs_1.JobType.Migration && version) {
+        await migrateSingleVersion(form, processKey, version);
     }
 }
 window.formInit = async function (form, data) {
@@ -619,10 +809,11 @@ window.formInit = async function (form, data) {
             refreshInstanceInfo(form, event.data?.aktion, event.data?.prozess, event.data?.version);
         }
     });
-    // Klick auf den "Instanzen abbrechen"-Button (form.json: action "event",
-    // event "cancelInstances").
-    form.on("cancelInstances", () => {
-        cancelInstances(form, form.data?.aktion, form.data?.prozess, form.data?.version);
+    // Klick auf den Aktions-Button (form.json: action "event", event
+    // "primaryAction") – führt je nach Aktion Cancel/Migration (einzeln oder
+    // für alle Versionen) aus.
+    form.on("primaryAction", () => {
+        runPrimaryAction(form, form.data?.aktion, form.data?.prozess, form.data?.version);
     });
 };
 

@@ -414,16 +414,16 @@
                 "when": null,
                 "eq": ""
             },
-            "customConditional": "show = !!(data.prozess && ((data.aktion === 'CANCEL' && data.version) || data.aktion === 'CANCEL_ALL'));",
+            "customConditional": "show = !!(data.prozess && ((data.aktion === 'CANCEL' && data.version) || data.aktion === 'CANCEL_ALL' || (data.aktion === 'MIGRATION' && data.version) || data.aktion === 'MIGRATE_ALL'));",
             "id": "instanzenInfo01"
         },
         {
-            "label": "Instanzen abbrechen",
+            "label": "Ausführen",
             "action": "event",
             "showValidations": false,
             "theme": "danger",
-            "event": "cancelInstances",
-            "key": "instanzenAbbrechen",
+            "event": "primaryAction",
+            "key": "instanzenAction",
             "type": "button",
             "input": true,
             "tableView": false,
@@ -433,8 +433,8 @@
                 "when": null,
                 "eq": ""
             },
-            "customConditional": "show = !!(data.prozess && ((data.aktion === 'CANCEL' && data.version) || data.aktion === 'CANCEL_ALL'));",
-            "id": "instanzenAbbrechen01"
+            "customConditional": "show = !!(data.prozess && ((data.aktion === 'CANCEL' && data.version) || data.aktion === 'CANCEL_ALL' || (data.aktion === 'MIGRATION' && data.version) || data.aktion === 'MIGRATE_ALL'));",
+            "id": "instanzenAction01"
         }
     ]
 }
