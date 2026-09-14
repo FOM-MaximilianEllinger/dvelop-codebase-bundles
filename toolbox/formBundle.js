@@ -5402,6 +5402,58 @@ async function saveApiKeyToConfigScript(credentials) {
     }
 }
 /**
+ * Liest den API-Key aus der customerVariable "apiKey" des ToolboxConfig-Skripts,
+ * ohne selbst schon einen API-Key zu benötigen (lesende Scripting-Aufrufe laufen im
+ * Process-Studio-Kontext über die Browser-Session, nicht über den elevierten
+ * API-Key, der nur für schreibende dforms/scripting-Aufrufe nötig ist). Liefert
+ * undefined, wenn das Skript noch nicht existiert oder noch keine apiKey-Variable
+ * gesetzt ist (z.B. beim allerersten Laden der Toolbox).
+ */
+async function loadApiKeyFromConfigScript(baseUri) {
+    try {
+        const all = await (0, getAllScripts_1.getAllScripts)(baseUri, "");
+        const script = all.body.find((s) => s.name === TOOLBOX_CONFIG_SCRIPT_NAME);
+        if (!script?.id) {
+            return undefined;
+        }
+        const versions = await (0, getScriptVersion_1.getScriptVersion)(baseUri, "", script.id);
+        return versions.body[0]?.customerVariables?.find((v) => v.key === "apiKey")?.value;
+    }
+    catch (error) {
+        logger.debug(`API-Key konnte nicht aus Skript "${TOOLBOX_CONFIG_SCRIPT_NAME}" gelesen werden: ${error}`);
+        return undefined;
+    }
+}
+/**
+ * Fragt den API-Key per SweetAlert2 ab und speichert ihn im ToolboxConfig-Skript.
+ * Wird von formInit genutzt, wenn loadApiKeyFromConfigScript nichts liefert (erster
+ * Aufruf überhaupt, Skript existiert noch nicht).
+ */
+async function promptAndStoreApiKey() {
+    const result = await sweetalert2_1.default.fire({
+        title: "API-Key hinterlegen",
+        text: "Es ist noch kein API-Key im Skript \"" + TOOLBOX_CONFIG_SCRIPT_NAME + "\" hinterlegt.",
+        input: "password",
+        inputLabel: "API-Key",
+        inputPlaceholder: "API-Key eingeben",
+        inputAttributes: { autocapitalize: "off", autocorrect: "off" },
+        showCancelButton: true,
+        confirmButtonText: "Speichern",
+        cancelButtonText: "Abbrechen",
+        inputValidator: (value) => (!value ? "Bitte einen API-Key eingeben." : undefined),
+    });
+    if (!result.isConfirmed || !result.value) {
+        return undefined;
+    }
+    try {
+        await writeApiKeyToConfigScript(new APICredentials(result.value));
+    }
+    catch (error) {
+        await showErrorAlert("API-Key konnte nicht im Skript gespeichert werden", error);
+    }
+    return result.value;
+}
+/**
  * Button "updateApiKey": öffnet ein SweetAlert2-Dialogfenster zur einmaligen
  * Eingabe des API-Keys und speichert ihn danach im ToolboxConfig-Skript. SweetAlert2
  * wird dafür vollständig ins Formular-Bundle mitgebaut (siehe package.json), da im
@@ -5432,11 +5484,15 @@ async function updateApiKey(form, instance, data) {
     }
 }
 window.updateApiKey = updateApiKey;
-window.formInit = function (form, data) {
+window.formInit = async function (form, data) {
     logger.debug("FormLoader initialisiert.");
     populateAvailableForms(form);
-    if (data?.apiKey) {
-        void saveApiKeyToConfigScript(new APICredentials(data.apiKey));
+    let apiKey = await loadApiKeyFromConfigScript(window.location.origin);
+    if (!apiKey) {
+        apiKey = await promptAndStoreApiKey();
+    }
+    if (apiKey) {
+        form.getComponent("apiKey")?.setValue(apiKey);
     }
     document.addEventListener("keydown", function (event) {
         if (event.ctrlKey && event.key === "F1") {
@@ -5550,11 +5606,6 @@ async function createOrUpdate(form, instance, data) {
     if (!target) {
         logger.error(`Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
         await showErrorAlert("Formular konnte nicht geladen werden", `Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
-        return;
-    }
-    if (!data.apiKey) {
-        logger.error('Feld "apiKey" ist leer. Bitte API-Key im Formular eintragen.');
-        await showErrorAlert("API-Key fehlt", 'Feld "apiKey" ist leer. Bitte API-Key im Formular eintragen.');
         return;
     }
     try {
