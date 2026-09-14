@@ -233,7 +233,7 @@
                 "eq": "",
                 "json": ""
             },
-            "customConditional": "",
+            "customConditional": "show = !!data.aktion;",
             "logic": [],
             "attributes": {},
             "overlay": {
@@ -365,7 +365,7 @@
                 "eq": "",
                 "json": ""
             },
-            "customConditional": "",
+            "customConditional": "show = !!(data.prozess && data.aktion && data.aktion !== 'CANCEL_ALL' && data.aktion !== 'MIGRATE_ALL' && data.aktion !== 'RETRY_ALL' && data.aktion !== 'DELETE_ALL');",
             "logic": [],
             "attributes": {},
             "overlay": {
@@ -414,7 +414,7 @@
                 "when": null,
                 "eq": ""
             },
-            "customConditional": "show = !!(data.prozess && ((data.aktion === 'CANCEL' && data.version) || data.aktion === 'CANCEL_ALL' || (data.aktion === 'MIGRATION' && data.version) || data.aktion === 'MIGRATE_ALL'));",
+            "customConditional": "show = !!(data.prozess && ((data.aktion === 'CANCEL' && data.version) || data.aktion === 'CANCEL_ALL' || (data.aktion === 'MIGRATION' && data.version) || data.aktion === 'MIGRATE_ALL' || (data.aktion === 'RETRY' && data.version) || data.aktion === 'RETRY_ALL' || (data.aktion === 'DELETION' && data.version) || data.aktion === 'DELETE_ALL'));",
             "id": "instanzenInfo01"
         },
         {
@@ -433,7 +433,7 @@
                 "when": null,
                 "eq": ""
             },
-            "customConditional": "show = !!(data.prozess && ((data.aktion === 'CANCEL' && data.version) || data.aktion === 'CANCEL_ALL' || (data.aktion === 'MIGRATION' && data.version) || data.aktion === 'MIGRATE_ALL'));",
+            "customConditional": "show = !!(data.prozess && ((data.aktion === 'CANCEL' && data.version) || data.aktion === 'CANCEL_ALL' || (data.aktion === 'MIGRATION' && data.version) || data.aktion === 'MIGRATE_ALL' || (data.aktion === 'RETRY' && data.version) || data.aktion === 'RETRY_ALL' || (data.aktion === 'DELETION' && data.version) || data.aktion === 'DELETE_ALL'));",
             "id": "instanzenAction01"
         }
     ]

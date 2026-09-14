@@ -117,6 +117,33 @@ async function cancelProcessInstances(baseUri, token, processKey, version, cance
 
 /***/ }),
 
+/***/ "../../helper/process/deleteProcessVersion.ts":
+/*!****************************************************!*\
+  !*** ../../helper/process/deleteProcessVersion.ts ***!
+  \****************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.deleteProcessVersion = deleteProcessVersion;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+async function deleteProcessVersion(baseUri, token, processKey, version) {
+    const url = `${baseUri}/process/processes/${encodeURIComponent(processKey)}/versions/${encodeURIComponent(String(version))}`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "DELETE",
+        headers,
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ }),
+
 /***/ "../../helper/process/getActiveInstanceCount.ts":
 /*!******************************************************!*\
   !*** ../../helper/process/getActiveInstanceCount.ts ***!
@@ -285,6 +312,34 @@ async function migrateProcessInstances(baseUri, token, processKey, version) {
 
 /***/ }),
 
+/***/ "../../helper/process/retryProcessInstances.ts":
+/*!*****************************************************!*\
+  !*** ../../helper/process/retryProcessInstances.ts ***!
+  \*****************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.retryProcessInstances = retryProcessInstances;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+async function retryProcessInstances(baseUri, token, processKey, version) {
+    const url = `${baseUri}/process/processes/${encodeURIComponent(processKey)}/versions/${encodeURIComponent(String(version))}/retry`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ }),
+
 /***/ "../../helper/utils/logger.ts":
 /*!************************************!*\
   !*** ../../helper/utils/logger.ts ***!
@@ -401,6 +456,8 @@ const getProcessVersions_1 = __webpack_require__(/*! ../../../helper/process/get
 const getActiveInstanceCount_1 = __webpack_require__(/*! ../../../helper/process/getActiveInstanceCount */ "../../helper/process/getActiveInstanceCount.ts");
 const cancelProcessInstances_1 = __webpack_require__(/*! ../../../helper/process/cancelProcessInstances */ "../../helper/process/cancelProcessInstances.ts");
 const migrateProcessInstances_1 = __webpack_require__(/*! ../../../helper/process/migrateProcessInstances */ "../../helper/process/migrateProcessInstances.ts");
+const retryProcessInstances_1 = __webpack_require__(/*! ../../../helper/process/retryProcessInstances */ "../../helper/process/retryProcessInstances.ts");
+const deleteProcessVersion_1 = __webpack_require__(/*! ../../../helper/process/deleteProcessVersion */ "../../helper/process/deleteProcessVersion.ts");
 // Lädt SweetAlert2 bei Bedarf nach, analog zu deleteBadgesFromDocumentReaderForm/src/form.ts.
 function loadSweetAlert() {
     return new Promise((resolve) => {
@@ -423,12 +480,16 @@ const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
 // "Version" auf alle Versionen eines Prozesses.
 const CANCEL_ALL_ACTION = "CANCEL_ALL";
 const MIGRATE_ALL_ACTION = "MIGRATE_ALL";
+const RETRY_ALL_ACTION = "RETRY_ALL";
+const DELETE_ALL_ACTION = "DELETE_ALL";
 // "Aktion" ist unabhängig von Server-Daten, deshalb statisch.
 const AKTIONEN = [
     { label: "Erneut versuchen", value: getAllJobs_1.JobType.Retry },
+    { label: "Alle erneut versuchen", value: RETRY_ALL_ACTION },
     { label: "Abbrechen", value: getAllJobs_1.JobType.Cancel },
     { label: "Alle abbrechen", value: CANCEL_ALL_ACTION },
-    { label: "Löschen", value: getAllJobs_1.JobType.Deletion },
+    { label: "Prozessversion löschen", value: getAllJobs_1.JobType.Deletion },
+    { label: "Alle Prozessversionen löschen", value: DELETE_ALL_ACTION },
     { label: "Migrieren", value: getAllJobs_1.JobType.Migration },
     { label: "Alle migrieren", value: MIGRATE_ALL_ACTION },
 ];
@@ -457,6 +518,12 @@ function processOptions(processes) {
     return processes
         .filter((p) => !!p.key)
         .map((p) => ({ label: p.name ?? p.key, value: p.key }));
+}
+// Cache Prozess-Key -> Prozess-Name, damit Meldungen den lesbaren Namen statt
+// des technischen Keys (z.B. "p-729f3447-...") anzeigen können.
+let processNameByKey = {};
+function getProcessDisplayName(processKey) {
+    return processNameByKey[processKey] ?? processKey;
 }
 function versionOptions(versions) {
     return versions
@@ -523,7 +590,7 @@ async function refreshInstanceInfo(form, aktion, processKey, version) {
             const versionNumbers = await getVersionNumbers(processKey);
             const counts = await getActiveInstanceCounts(processKey, versionNumbers);
             const total = counts.reduce((sum, c) => sum + c.count, 0);
-            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${total}</strong> Instanz(en) über <strong>${counts.length}</strong> Version(en) von "${processKey}".</p>`);
+            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${total}</strong> Instanz(en) über <strong>${counts.length}</strong> Version(en) von "${getProcessDisplayName(processKey)}".</p>`);
         }
         catch (error) {
             logger.error(`Fehler beim Laden der aktiven Instanzenanzahl (alle Versionen) für "${processKey}": ${error}`);
@@ -537,7 +604,7 @@ async function refreshInstanceInfo(form, aktion, processKey, version) {
         try {
             const response = await (0, getActiveInstanceCount_1.getActiveInstanceCount)(window.location.origin, "", processKey, version);
             const count = response.body.count ?? 0;
-            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${count}</strong> Instanz(en) von "${processKey}" (Version ${version}).</p>`);
+            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${count}</strong> Instanz(en) von "${getProcessDisplayName(processKey)}" (Version ${version}).</p>`);
         }
         catch (error) {
             logger.error(`Fehler beim Laden der aktiven Instanzenanzahl für "${processKey}" Version ${version}: ${error}`);
@@ -551,7 +618,7 @@ async function refreshInstanceInfo(form, aktion, processKey, version) {
         try {
             const versionNumbers = await getVersionNumbers(processKey);
             if (versionNumbers.length === 0) {
-                setContent(form, "instanzenInfo", `<p>Keine Versionen für "${processKey}" gefunden.</p>`);
+                setContent(form, "instanzenInfo", `<p>Keine Versionen für "${getProcessDisplayName(processKey)}" gefunden.</p>`);
                 return;
             }
             const latest = Math.max(...versionNumbers);
@@ -562,7 +629,7 @@ async function refreshInstanceInfo(form, aktion, processKey, version) {
             }
             const counts = await getActiveInstanceCounts(processKey, olderVersions);
             const total = counts.reduce((sum, c) => sum + c.count, 0);
-            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${total}</strong> Instanz(en) über <strong>${olderVersions.length}</strong> ältere Version(en) von "${processKey}" – werden auf Version <strong>${latest}</strong> migriert.</p>`);
+            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${total}</strong> Instanz(en) über <strong>${olderVersions.length}</strong> ältere Version(en) von "${getProcessDisplayName(processKey)}" – werden auf Version <strong>${latest}</strong> migriert.</p>`);
         }
         catch (error) {
             logger.error(`Fehler beim Laden der aktiven Instanzenanzahl (alle Versionen) für "${processKey}": ${error}`);
@@ -581,7 +648,65 @@ async function refreshInstanceInfo(form, aktion, processKey, version) {
             const count = response.body.count ?? 0;
             const latest = versionNumbers.length ? Math.max(...versionNumbers) : undefined;
             const targetText = latest !== undefined ? ` auf Version <strong>${latest}</strong>` : "";
-            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${count}</strong> Instanz(en) von "${processKey}" (Version ${version}) – werden${targetText} migriert.</p>`);
+            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${count}</strong> Instanz(en) von "${getProcessDisplayName(processKey)}" (Version ${version}) – werden${targetText} migriert.</p>`);
+        }
+        catch (error) {
+            logger.error(`Fehler beim Laden der aktiven Instanzenanzahl für "${processKey}" Version ${version}: ${error}`);
+            setContent(form, "instanzenInfo", "<p>Fehler beim Laden der Instanzenanzahl.</p>");
+        }
+        return;
+    }
+    if (aktion === RETRY_ALL_ACTION) {
+        setLabel(form, "instanzenAction", "Alle erneut versuchen");
+        setContent(form, "instanzenInfo", "<p>Anzahl laufender Instanzen wird geladen…</p>");
+        try {
+            const versionNumbers = await getVersionNumbers(processKey);
+            const counts = await getActiveInstanceCounts(processKey, versionNumbers);
+            const total = counts.reduce((sum, c) => sum + c.count, 0);
+            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${total}</strong> Instanz(en) über <strong>${counts.length}</strong> Version(en) von "${getProcessDisplayName(processKey)}".</p>`);
+        }
+        catch (error) {
+            logger.error(`Fehler beim Laden der aktiven Instanzenanzahl (alle Versionen) für "${processKey}": ${error}`);
+            setContent(form, "instanzenInfo", "<p>Fehler beim Laden der Instanzenanzahl.</p>");
+        }
+        return;
+    }
+    if (aktion === getAllJobs_1.JobType.Retry && version) {
+        setLabel(form, "instanzenAction", "Erneut versuchen");
+        setContent(form, "instanzenInfo", "<p>Anzahl laufender Instanzen wird geladen…</p>");
+        try {
+            const response = await (0, getActiveInstanceCount_1.getActiveInstanceCount)(window.location.origin, "", processKey, version);
+            const count = response.body.count ?? 0;
+            setContent(form, "instanzenInfo", `<p>Aktuell laufen <strong>${count}</strong> Instanz(en) von "${getProcessDisplayName(processKey)}" (Version ${version}).</p>`);
+        }
+        catch (error) {
+            logger.error(`Fehler beim Laden der aktiven Instanzenanzahl für "${processKey}" Version ${version}: ${error}`);
+            setContent(form, "instanzenInfo", "<p>Fehler beim Laden der Instanzenanzahl.</p>");
+        }
+        return;
+    }
+    if (aktion === DELETE_ALL_ACTION) {
+        setLabel(form, "instanzenAction", "Alle Prozessversionen löschen");
+        setContent(form, "instanzenInfo", "<p>Anzahl laufender Instanzen wird geladen…</p>");
+        try {
+            const versionNumbers = await getVersionNumbers(processKey);
+            const counts = await getActiveInstanceCounts(processKey, versionNumbers);
+            const total = counts.reduce((sum, c) => sum + c.count, 0);
+            setContent(form, "instanzenInfo", `<p><strong>${counts.length}</strong> Version(en) von "${getProcessDisplayName(processKey)}" werden gelöscht (aktuell <strong>${total}</strong> laufende Instanz(en)).</p>`);
+        }
+        catch (error) {
+            logger.error(`Fehler beim Laden der aktiven Instanzenanzahl (alle Versionen) für "${processKey}": ${error}`);
+            setContent(form, "instanzenInfo", "<p>Fehler beim Laden der Instanzenanzahl.</p>");
+        }
+        return;
+    }
+    if (aktion === getAllJobs_1.JobType.Deletion && version) {
+        setLabel(form, "instanzenAction", "Prozessversion löschen");
+        setContent(form, "instanzenInfo", "<p>Anzahl laufender Instanzen wird geladen…</p>");
+        try {
+            const response = await (0, getActiveInstanceCount_1.getActiveInstanceCount)(window.location.origin, "", processKey, version);
+            const count = response.body.count ?? 0;
+            setContent(form, "instanzenInfo", `<p>Version <strong>${version}</strong> von "${getProcessDisplayName(processKey)}" wird gelöscht (aktuell <strong>${count}</strong> laufende Instanz(en)).</p>`);
         }
         catch (error) {
             logger.error(`Fehler beim Laden der aktiven Instanzenanzahl für "${processKey}" Version ${version}: ${error}`);
@@ -596,7 +721,7 @@ async function cancelSingleVersion(form, processKey, version) {
     const { value: cancelReason, isConfirmed } = await Swal.fire({
         title: "Instanzen abbrechen",
         input: "text",
-        inputLabel: `Grund für den Abbruch von "${processKey}" (Version ${version})`,
+        inputLabel: `Grund für den Abbruch von "${getProcessDisplayName(processKey)}" (Version ${version})`,
         inputPlaceholder: "Abbruchgrund…",
         showCancelButton: true,
         confirmButtonText: "Abbrechen",
@@ -630,7 +755,7 @@ async function cancelAllVersions(form, processKey) {
     const { value: cancelReason, isConfirmed } = await Swal.fire({
         title: "Alle Instanzen abbrechen",
         input: "text",
-        inputLabel: `Grund für den Abbruch aller Versionen von "${processKey}"`,
+        inputLabel: `Grund für den Abbruch aller Versionen von "${getProcessDisplayName(processKey)}"`,
         inputPlaceholder: "Abbruchgrund…",
         showCancelButton: true,
         confirmButtonText: "Alle abbrechen",
@@ -657,7 +782,7 @@ async function cancelAllVersions(form, processKey) {
         await Swal.fire({
             icon: "success",
             title: "Abgebrochen",
-            text: `Instanzen aller ${versionNumbers.length} Version(en) von "${processKey}" wurden abgebrochen.`,
+            text: `Instanzen aller ${versionNumbers.length} Version(en) von "${getProcessDisplayName(processKey)}" wurden abgebrochen.`,
         });
         await refreshInstanceInfo(form, CANCEL_ALL_ACTION, processKey, undefined);
     }
@@ -672,7 +797,7 @@ async function migrateSingleVersion(form, processKey, version) {
     await loadSweetAlert();
     const { isConfirmed } = await Swal.fire({
         title: "Auf aktuellste Version migrieren?",
-        text: `Instanzen von "${processKey}" (Version ${version}) werden auf die aktuellste Version migriert.`,
+        text: `Instanzen von "${getProcessDisplayName(processKey)}" (Version ${version}) werden auf die aktuellste Version migriert.`,
         icon: "question",
         showCancelButton: true,
         confirmButtonText: "Migrieren",
@@ -705,7 +830,7 @@ async function migrateAllVersions(form, processKey) {
     try {
         const versionNumbers = await getVersionNumbers(processKey);
         if (versionNumbers.length === 0) {
-            await Swal.fire({ icon: "info", title: "Keine Versionen", text: `Für "${processKey}" wurden keine Versionen gefunden.` });
+            await Swal.fire({ icon: "info", title: "Keine Versionen", text: `Für "${getProcessDisplayName(processKey)}" wurden keine Versionen gefunden.` });
             return;
         }
         const latest = Math.max(...versionNumbers);
@@ -716,7 +841,7 @@ async function migrateAllVersions(form, processKey) {
         }
         const { isConfirmed } = await Swal.fire({
             title: "Alle auf aktuellste Version migrieren?",
-            text: `${olderVersions.length} ältere Version(en) von "${processKey}" werden auf Version ${latest} migriert.`,
+            text: `${olderVersions.length} ältere Version(en) von "${getProcessDisplayName(processKey)}" werden auf Version ${latest} migriert.`,
             icon: "question",
             showCancelButton: true,
             confirmButtonText: "Alle migrieren",
@@ -740,7 +865,7 @@ async function migrateAllVersions(form, processKey) {
         await Swal.fire({
             icon: "success",
             title: "Migriert",
-            text: `${olderVersions.length} ältere Version(en) von "${processKey}" wurden auf Version ${latest} migriert.`,
+            text: `${olderVersions.length} ältere Version(en) von "${getProcessDisplayName(processKey)}" wurden auf Version ${latest} migriert.`,
         });
         await refreshInstanceInfo(form, MIGRATE_ALL_ACTION, processKey, undefined);
     }
@@ -749,8 +874,165 @@ async function migrateAllVersions(form, processKey) {
         await Swal.fire({ icon: "error", title: "Fehler beim Migrieren", text: String(error) });
     }
 }
+// Versucht die (fehlgeschlagenen) Instanzen der gewählten Version erneut,
+// mit Lade-Anzeige während des Requests.
+async function retrySingleVersion(form, processKey, version) {
+    await loadSweetAlert();
+    const { isConfirmed } = await Swal.fire({
+        title: "Erneut versuchen?",
+        text: `Instanzen von "${getProcessDisplayName(processKey)}" (Version ${version}) werden erneut versucht.`,
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Erneut versuchen",
+        cancelButtonText: "Zurück",
+    });
+    if (!isConfirmed) {
+        return;
+    }
+    Swal.fire({
+        title: "Instanzen werden erneut versucht…",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading(),
+    });
+    try {
+        await (0, retryProcessInstances_1.retryProcessInstances)(window.location.origin, "", processKey, version);
+        await Swal.fire({ icon: "success", title: "Erneut versucht", text: "Die Instanzen wurden erneut versucht." });
+        await refreshInstanceInfo(form, getAllJobs_1.JobType.Retry, processKey, version);
+    }
+    catch (error) {
+        logger.error(`Fehler beim erneuten Versuch der Instanzen von "${processKey}" Version ${version}: ${error}`);
+        await Swal.fire({ icon: "error", title: "Fehler beim erneuten Versuch", text: String(error) });
+    }
+}
+// Versucht die Instanzen aller Versionen eines Prozesses erneut, mit
+// Fortschrittsanzeige (Version X von Y).
+async function retryAllVersions(form, processKey) {
+    await loadSweetAlert();
+    try {
+        const versionNumbers = await getVersionNumbers(processKey);
+        if (versionNumbers.length === 0) {
+            await Swal.fire({ icon: "info", title: "Keine Versionen", text: `Für "${getProcessDisplayName(processKey)}" wurden keine Versionen gefunden.` });
+            return;
+        }
+        const { isConfirmed } = await Swal.fire({
+            title: "Alle erneut versuchen?",
+            text: `${versionNumbers.length} Version(en) von "${getProcessDisplayName(processKey)}" werden erneut versucht.`,
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonText: "Alle erneut versuchen",
+            cancelButtonText: "Zurück",
+        });
+        if (!isConfirmed) {
+            return;
+        }
+        Swal.fire({
+            title: "Instanzen werden erneut versucht…",
+            html: `Version <b>1</b> von <b>${versionNumbers.length}</b>`,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading(),
+        });
+        for (let i = 0; i < versionNumbers.length; i++) {
+            Swal.update({ html: `Version <b>${i + 1}</b> von <b>${versionNumbers.length}</b> (Nr. ${versionNumbers[i]})` });
+            await (0, retryProcessInstances_1.retryProcessInstances)(window.location.origin, "", processKey, versionNumbers[i]);
+        }
+        await Swal.fire({
+            icon: "success",
+            title: "Erneut versucht",
+            text: `Instanzen aller ${versionNumbers.length} Version(en) von "${getProcessDisplayName(processKey)}" wurden erneut versucht.`,
+        });
+        await refreshInstanceInfo(form, RETRY_ALL_ACTION, processKey, undefined);
+    }
+    catch (error) {
+        logger.error(`Fehler beim erneuten Versuch aller Instanzen von "${processKey}": ${error}`);
+        await Swal.fire({ icon: "error", title: "Fehler beim erneuten Versuch", text: String(error) });
+    }
+}
+// Löscht die gewählte Prozessversion unwiderruflich, mit Lade-Anzeige während
+// des Requests.
+async function deleteSingleVersion(form, processKey, version) {
+    await loadSweetAlert();
+    const { isConfirmed } = await Swal.fire({
+        title: "Prozessversion löschen?",
+        html: `Version <strong>${version}</strong> von "${getProcessDisplayName(processKey)}" wird <strong>unwiderruflich</strong> gelöscht.`,
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#c0392b",
+        confirmButtonText: "Löschen",
+        cancelButtonText: "Zurück",
+    });
+    if (!isConfirmed) {
+        return;
+    }
+    Swal.fire({
+        title: "Prozessversion wird gelöscht…",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading(),
+    });
+    try {
+        await (0, deleteProcessVersion_1.deleteProcessVersion)(window.location.origin, "", processKey, version);
+        await Swal.fire({ icon: "success", title: "Gelöscht", text: "Die Prozessversion wurde gelöscht." });
+        await refreshInstanceInfo(form, getAllJobs_1.JobType.Deletion, processKey, version);
+    }
+    catch (error) {
+        logger.error(`Fehler beim Löschen der Prozessversion von "${processKey}" Version ${version}: ${error}`);
+        await Swal.fire({ icon: "error", title: "Fehler beim Löschen", text: String(error) });
+    }
+}
+// Löscht alle Prozessversionen eines Prozesses unwiderruflich, mit
+// Fortschrittsanzeige (Version X von Y).
+async function deleteAllVersions(form, processKey) {
+    await loadSweetAlert();
+    try {
+        const versionNumbers = await getVersionNumbers(processKey);
+        if (versionNumbers.length === 0) {
+            await Swal.fire({ icon: "info", title: "Keine Versionen", text: `Für "${getProcessDisplayName(processKey)}" wurden keine Versionen gefunden.` });
+            return;
+        }
+        const { isConfirmed } = await Swal.fire({
+            title: "Alle Prozessversionen löschen?",
+            html: `<strong>${versionNumbers.length}</strong> Version(en) von "${getProcessDisplayName(processKey)}" werden <strong>unwiderruflich</strong> gelöscht.`,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#c0392b",
+            confirmButtonText: "Alle löschen",
+            cancelButtonText: "Zurück",
+        });
+        if (!isConfirmed) {
+            return;
+        }
+        Swal.fire({
+            title: "Prozessversionen werden gelöscht…",
+            html: `Version <b>1</b> von <b>${versionNumbers.length}</b>`,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading(),
+        });
+        for (let i = 0; i < versionNumbers.length; i++) {
+            Swal.update({ html: `Version <b>${i + 1}</b> von <b>${versionNumbers.length}</b> (Nr. ${versionNumbers[i]})` });
+            await (0, deleteProcessVersion_1.deleteProcessVersion)(window.location.origin, "", processKey, versionNumbers[i]);
+        }
+        await Swal.fire({
+            icon: "success",
+            title: "Gelöscht",
+            text: `${versionNumbers.length} Version(en) von "${getProcessDisplayName(processKey)}" wurden gelöscht.`,
+        });
+        await refreshInstanceInfo(form, DELETE_ALL_ACTION, processKey, undefined);
+    }
+    catch (error) {
+        logger.error(`Fehler beim Löschen aller Prozessversionen von "${processKey}": ${error}`);
+        await Swal.fire({ icon: "error", title: "Fehler beim Löschen", text: String(error) });
+    }
+}
 // Klick-Handler des generischen Aktions-Buttons: leitet je nach gewählter
-// Aktion an den passenden Cancel- bzw. Migrations-Ablauf weiter.
+// Aktion an den passenden Cancel-, Migrations-, Retry- bzw. Lösch-Ablauf
+// weiter.
 async function runPrimaryAction(form, aktion, processKey, version) {
     if (!processKey) {
         return;
@@ -767,6 +1049,18 @@ async function runPrimaryAction(form, aktion, processKey, version) {
     else if (aktion === getAllJobs_1.JobType.Migration && version) {
         await migrateSingleVersion(form, processKey, version);
     }
+    else if (aktion === RETRY_ALL_ACTION) {
+        await retryAllVersions(form, processKey);
+    }
+    else if (aktion === getAllJobs_1.JobType.Retry && version) {
+        await retrySingleVersion(form, processKey, version);
+    }
+    else if (aktion === DELETE_ALL_ACTION) {
+        await deleteAllVersions(form, processKey);
+    }
+    else if (aktion === getAllJobs_1.JobType.Deletion && version) {
+        await deleteSingleVersion(form, processKey, version);
+    }
 }
 window.formInit = async function (form, data) {
     logger.debug("RemoveUnusedWorkflows-Formular initialisiert.");
@@ -779,6 +1073,9 @@ window.formInit = async function (form, data) {
         logger.error(`Fehler beim Laden der Prozesse: ${error}`);
     }
     setSelectValues(form, "prozess", processOptions(processes));
+    processNameByKey = Object.fromEntries(processes
+        .filter((p) => !!p.key)
+        .map((p) => [p.key, p.name ?? p.key]));
     // "Version" hängt vom gewählten Prozess ab (kaskadierende Selectbox). Die
     // Versionen kommen nicht mehr aus der Prozess-Liste selbst, sondern werden
     // pro Prozess über dessen versions-Endpunkt nachgeladen.
