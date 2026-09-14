@@ -5288,7 +5288,7 @@ async function ensureTargetFormUpToDate(target) {
     const baseUri = window.location.origin;
     const customJsContent = await loadLatestBundle(target.bundlePath);
     const allForms = await (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN);
-    const targetExists = allForms.body.some((f) => f.id === target.formId);
+    const targetExists = allForms.body.forms.some((f) => f.id === target.formId);
     if (targetExists) {
         logger.debug(`Formular "${target.name}" existiert bereits, aktualisiere customJs.`);
         const existing = await (0, getForm_1.getForm)(baseUri, NO_TOKEN, target.formId);
