@@ -179,18 +179,19 @@ async function getActiveInstanceCount(baseUri, token, processKey, version) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.JobType = exports.State = exports.SelfType = void 0;
-exports.getJobs = getJobs;
+exports.JobType = exports.JobState = exports.Type = void 0;
+exports.getAllJobs = getAllJobs;
 const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-var SelfType;
-(function (SelfType) {
-    SelfType["ApplicationHALJSON"] = "application/hal+json";
-})(SelfType || (exports.SelfType = SelfType = {}));
-var State;
-(function (State) {
-    State["Ended"] = "ENDED";
-    State["Error"] = "ERROR";
-})(State || (exports.State = State = {}));
+var Type;
+(function (Type) {
+    Type["ApplicationHALJSON"] = "application/hal+json";
+})(Type || (exports.Type = Type = {}));
+var JobState;
+(function (JobState) {
+    JobState["Scheduled"] = "SCHEDULED";
+    JobState["Ended"] = "ENDED";
+    JobState["Pending"] = "PENDING";
+})(JobState || (exports.JobState = JobState = {}));
 var JobType;
 (function (JobType) {
     JobType["Cancel"] = "CANCEL";
@@ -198,8 +199,8 @@ var JobType;
     JobType["Migration"] = "MIGRATION";
     JobType["Retry"] = "RETRY";
 })(JobType || (exports.JobType = JobType = {}));
-async function getJobs(baseUri, token) {
-    const url = `${baseUri}/process/instances`;
+async function getAllJobs(baseUri, token) {
+    const url = `${baseUri}/process/jobs`;
     const headers = {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
@@ -493,6 +494,13 @@ const AKTIONEN = [
     { label: "Migrieren", value: getAllJobs_1.JobType.Migration },
     { label: "Alle migrieren", value: MIGRATE_ALL_ACTION },
 ];
+// Filter für die Jobs-Übersicht ("" = alle Status).
+const JOB_STATE_FILTER_OPTIONS = [
+    { label: "Alle", value: "" },
+    { label: "Geplant", value: getAllJobs_1.JobState.Scheduled },
+    { label: "Ausstehend", value: getAllJobs_1.JobState.Pending },
+    { label: "Beendet", value: getAllJobs_1.JobState.Ended },
+];
 // Setzt die Optionen einer Select-Komponente und stößt ein Redraw an, analog zu
 // populateAvailableForms in projects/Toolbox/src/form.ts.
 function setSelectValues(form, key, values) {
@@ -524,6 +532,84 @@ function processOptions(processes) {
 let processNameByKey = {};
 function getProcessDisplayName(processKey) {
     return processNameByKey[processKey] ?? processKey;
+}
+// Alle Jobs (unter https://.../process/jobs), zuletzt geladen für die
+// Jobs-Übersicht unterhalb der Aktion-Auswahl.
+let allJobs = [];
+async function loadAllJobs() {
+    const response = await (0, getAllJobs_1.getAllJobs)(window.location.origin, "");
+    return response.body._embedded?.jobs ?? [];
+}
+function jobStateLabel(state) {
+    switch (state) {
+        case getAllJobs_1.JobState.Scheduled:
+            return "Geplant";
+        case getAllJobs_1.JobState.Pending:
+            return "Ausstehend";
+        case getAllJobs_1.JobState.Ended:
+            return "Beendet";
+        default:
+            return state ?? "-";
+    }
+}
+function formatJobDate(value) {
+    if (!value) {
+        return "-";
+    }
+    const date = new Date(value);
+    return isNaN(date.getTime()) ? String(value) : date.toLocaleString("de-DE");
+}
+// Rendert die (optional nach Status gefilterte) Jobs-Liste als HTML-Tabelle
+// für die "jobsListe"-Content-Komponente.
+function renderJobsTable(jobs, stateFilter) {
+    const filtered = stateFilter ? jobs.filter((job) => job.state === stateFilter) : jobs;
+    if (filtered.length === 0) {
+        return "<p>Keine Jobs gefunden.</p>";
+    }
+    const rows = filtered
+        .map((job) => `
+      <tr>
+        <td>${job.type ?? "-"}</td>
+        <td>${job.processKey ? getProcessDisplayName(job.processKey) : "-"}</td>
+        <td>${job.processVersion ?? "-"}</td>
+        <td>${jobStateLabel(job.state)}</td>
+        <td>${formatJobDate(job.creationDate)}</td>
+        <td>${formatJobDate(job.startDate)}</td>
+      </tr>`)
+        .join("");
+    return `
+    <table class="table table-striped" style="width:100%;">
+      <thead>
+        <tr>
+          <th>Typ</th>
+          <th>Prozess</th>
+          <th>Version</th>
+          <th>Status</th>
+          <th>Erstellt</th>
+          <th>Gestartet</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+// Rendert die zuletzt geladenen Jobs (aus dem Cache) gefiltert nach Status.
+function refreshJobsList(form, stateFilter) {
+    setContent(form, "jobsListe", renderJobsTable(allJobs, stateFilter));
+}
+// Lädt die Jobs neu vom Server und rendert sie mit dem aktuell gewählten
+// Status-Filter. Wird initial sowie nach jeder Aktion aufgerufen, damit die
+// Übersicht aktuell bleibt.
+async function reloadJobsList(form) {
+    setContent(form, "jobsListe", "<p>Jobs werden geladen…</p>");
+    try {
+        allJobs = await loadAllJobs();
+    }
+    catch (error) {
+        logger.error(`Fehler beim Laden der Jobs: ${error}`);
+        setContent(form, "jobsListe", "<p>Fehler beim Laden der Jobs.</p>");
+        return;
+    }
+    refreshJobsList(form, form.data?.jobsState);
 }
 function versionOptions(versions) {
     return versions
@@ -1061,6 +1147,9 @@ async function runPrimaryAction(form, aktion, processKey, version) {
     else if (aktion === getAllJobs_1.JobType.Deletion && version) {
         await deleteSingleVersion(form, processKey, version);
     }
+    // Jobs-Übersicht neu laden, da die obigen Aktionen neue Jobs anlegen bzw.
+    // bestehende beenden können.
+    await reloadJobsList(form);
 }
 window.formInit = async function (form, data) {
     logger.debug("RemoveUnusedWorkflows-Formular initialisiert.");
@@ -1076,6 +1165,10 @@ window.formInit = async function (form, data) {
     processNameByKey = Object.fromEntries(processes
         .filter((p) => !!p.key)
         .map((p) => [p.key, p.name ?? p.key]));
+    // Jobs-Übersicht (unter https://.../process/jobs) mit Status-Filter,
+    // unabhängig von der gewählten Aktion/Prozess/Version.
+    setSelectValues(form, "jobsState", JOB_STATE_FILTER_OPTIONS);
+    await reloadJobsList(form);
     // "Version" hängt vom gewählten Prozess ab (kaskadierende Selectbox). Die
     // Versionen kommen nicht mehr aus der Prozess-Liste selbst, sondern werden
     // pro Prozess über dessen versions-Endpunkt nachgeladen.
@@ -1104,6 +1197,9 @@ window.formInit = async function (form, data) {
         }
         if (changedKey === "prozess" || changedKey === "version" || changedKey === "aktion") {
             refreshInstanceInfo(form, event.data?.aktion, event.data?.prozess, event.data?.version);
+        }
+        if (changedKey === "jobsState") {
+            refreshJobsList(form, event.data?.jobsState);
         }
     });
     // Klick auf den Aktions-Button (form.json: action "event", event

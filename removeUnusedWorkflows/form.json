@@ -134,6 +134,62 @@
             "defaultValue": ""
         },
         {
+            "label": "Jobs-Status-Filter",
+            "labelPosition": "top",
+            "widget": "choicesjs",
+            "placeholder": "",
+            "hidden": false,
+            "hideLabel": false,
+            "multiple": false,
+            "dataSrc": "values",
+            "data": {
+                "values": [
+                    {
+                        "label": "",
+                        "value": ""
+                    }
+                ]
+            },
+            "lazyLoad": true,
+            "searchEnabled": true,
+            "validate": {
+                "required": false
+            },
+            "key": "jobsState",
+            "conditional": {
+                "show": null,
+                "when": null,
+                "eq": ""
+            },
+            "customConditional": "",
+            "clearOnHide": false,
+            "type": "select",
+            "input": true,
+            "tableView": true,
+            "id": "jobsState01",
+            "defaultValue": ""
+        },
+        {
+            "label": "Jobs",
+            "customClass": "",
+            "tag": "div",
+            "attrs": [],
+            "content": "<p>Jobs werden geladen…</p>",
+            "refreshOnChange": false,
+            "key": "jobsListe",
+            "type": "htmlelement",
+            "input": false,
+            "tableView": false,
+            "hidden": false,
+            "conditional": {
+                "show": null,
+                "when": null,
+                "eq": ""
+            },
+            "customConditional": "",
+            "id": "jobsListe01"
+        },
+        {
             "label": "Prozess",
             "labelPosition": "top",
             "widget": "choicesjs",
