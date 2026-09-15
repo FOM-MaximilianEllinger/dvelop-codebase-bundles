@@ -599,11 +599,43 @@ function jobMatchesFilters(job) {
     }
     return true;
 }
+let jobSort = null;
+function compareJobs(a, b, sort) {
+    let result;
+    switch (sort.field) {
+        case "type":
+            result = (a.type ?? "").localeCompare(b.type ?? "");
+            break;
+        case "processKey": {
+            const nameA = a.processKey ? getProcessDisplayName(a.processKey) : "";
+            const nameB = b.processKey ? getProcessDisplayName(b.processKey) : "";
+            result = nameA.localeCompare(nameB);
+            break;
+        }
+        case "processVersion":
+            result = (a.processVersion ?? 0) - (b.processVersion ?? 0);
+            break;
+        case "state":
+            result = (a.state ?? "").localeCompare(b.state ?? "");
+            break;
+        case "creationDate":
+            result = new Date(a.creationDate ?? 0).getTime() - new Date(b.creationDate ?? 0).getTime();
+            break;
+        case "startDate":
+            result = new Date(a.startDate ?? 0).getTime() - new Date(b.startDate ?? 0).getTime();
+            break;
+    }
+    return sort.direction === "asc" ? result : -result;
+}
 // Rendert nur die Tabellenzeilen (ohne Filterzeile/Header), damit ein
-// Filterwechsel nur den <tbody>-Inhalt austauscht und die Filterfelder
-// (samt Fokus/Cursor) nicht durch ein volles Redraw verloren gehen.
+// Filter- oder Sortierwechsel nur den <tbody>-Inhalt austauscht und die
+// Filterfelder (samt Fokus/Cursor) nicht durch ein volles Redraw verloren
+// gehen.
 function renderJobsTableRows(jobs) {
     const filtered = jobs.filter(jobMatchesFilters);
+    if (jobSort) {
+        filtered.sort((a, b) => compareJobs(a, b, jobSort));
+    }
     if (filtered.length === 0) {
         return `<tr><td colspan="6">Keine Jobs gefunden.</td></tr>`;
     }
@@ -638,6 +670,11 @@ function renderJobsFilterRow() {
       <th><input type="text" data-job-filter="started" placeholder="Filtern…" value="${escapeHtml(jobFilters.started)}" style="width:100%;" /></th>
     </tr>`;
 }
+// Baut eine klickbare, sortierbare Spaltenüberschrift mit Sortierpfeil.
+function renderJobsHeaderCell(label, field) {
+    const indicator = jobSort && jobSort.field === field ? (jobSort.direction === "asc" ? " ▲" : " ▼") : "";
+    return `<th data-job-sort="${field}" style="cursor:pointer; user-select:none; white-space:nowrap;">${escapeHtml(label)}<span data-job-sort-indicator="${field}">${indicator}</span></th>`;
+}
 // Baut die vollständige Tabelle (Header + Filterzeile + Zeilen). Wird nur bei
 // einem echten Neuladen der Jobs vom Server aufgerufen.
 function renderJobsTableShell() {
@@ -645,12 +682,12 @@ function renderJobsTableShell() {
     <table class="table table-striped" style="width:100%;">
       <thead>
         <tr>
-          <th>Typ</th>
-          <th>Prozess</th>
-          <th>Version</th>
-          <th>Status</th>
-          <th>Erstellt</th>
-          <th>Gestartet</th>
+          ${renderJobsHeaderCell("Typ", "type")}
+          ${renderJobsHeaderCell("Prozess", "processKey")}
+          ${renderJobsHeaderCell("Version", "processVersion")}
+          ${renderJobsHeaderCell("Status", "state")}
+          ${renderJobsHeaderCell("Erstellt", "creationDate")}
+          ${renderJobsHeaderCell("Gestartet", "startDate")}
         </tr>
         ${renderJobsFilterRow()}
       </thead>
@@ -666,19 +703,32 @@ function refreshJobsTableBody(form) {
         tbody.innerHTML = renderJobsTableRows(allJobs);
     }
 }
-// Bindet die Filterfelder per Event-Delegation auf dem stabilen
-// Komponenten-Wrapper, statt auf jedes Feld einzeln zu horchen – so
-// funktioniert es unabhängig davon, wann formio den Inhalt tatsächlich in
-// den DOM schreibt, und muss nach einem reinen Body-Update nicht neu
-// gebunden werden.
-function bindJobsFilterListeners(form) {
+// Aktualisiert nur die Sortierpfeile in den Spaltenüberschriften (ohne die
+// Filterzeile neu zu erzeugen), nachdem sich die Sortierung geändert hat.
+function updateJobsSortIndicators(form) {
     const component = form.getComponent("jobsListe");
     const root = component?.element;
-    if (!root || root.dataset.filtersBound === "true") {
+    if (!root) {
         return;
     }
-    root.dataset.filtersBound = "true";
-    root.addEventListener("input", (event) => {
+    root.querySelectorAll("[data-job-sort-indicator]").forEach((el) => {
+        const field = el.getAttribute("data-job-sort-indicator");
+        el.textContent = jobSort && jobSort.field === field ? (jobSort.direction === "asc" ? " ▲" : " ▼") : "";
+    });
+}
+// Bindet Filter- und Sortier-Interaktionen per Event-Delegation auf dem
+// stabilen Komponenten-Wrapper, statt auf jedes Feld/jede Überschrift
+// einzeln zu horchen – so funktioniert es unabhängig davon, wann formio den
+// Inhalt tatsächlich in den DOM schreibt, und muss nach einem reinen
+// Body-Update nicht neu gebunden werden.
+function bindJobsTableEvents(form) {
+    const component = form.getComponent("jobsListe");
+    const root = component?.element;
+    if (!root || root.dataset.eventsBound === "true") {
+        return;
+    }
+    root.dataset.eventsBound = "true";
+    const handleFilterChange = (event) => {
         const target = event.target;
         const field = target?.getAttribute("data-job-filter");
         if (!field) {
@@ -686,22 +736,31 @@ function bindJobsFilterListeners(form) {
         }
         jobFilters[field] = target.value;
         refreshJobsTableBody(form);
-    });
-    root.addEventListener("change", (event) => {
-        const target = event.target;
-        const field = target?.getAttribute("data-job-filter");
+    };
+    root.addEventListener("input", handleFilterChange);
+    root.addEventListener("change", handleFilterChange);
+    root.addEventListener("click", (event) => {
+        const target = event.target?.closest("[data-job-sort]");
+        const field = target?.getAttribute("data-job-sort");
         if (!field) {
             return;
         }
-        jobFilters[field] = target.value;
+        if (jobSort && jobSort.field === field) {
+            jobSort = { field, direction: jobSort.direction === "asc" ? "desc" : "asc" };
+        }
+        else {
+            jobSort = { field, direction: "asc" };
+        }
+        updateJobsSortIndicators(form);
         refreshJobsTableBody(form);
     });
 }
 // Rendert Header, Filterzeile und Zeilen komplett neu (z.B. nach dem Laden
-// neuer Jobs vom Server) und bindet die Filter-Listener auf den neuen Wrapper.
+// neuer Jobs vom Server) und bindet die Filter-/Sortier-Listener auf den
+// neuen Wrapper.
 function renderJobsList(form) {
     setContent(form, "jobsListe", renderJobsTableShell());
-    bindJobsFilterListeners(form);
+    bindJobsTableEvents(form);
 }
 // Lädt die Jobs neu vom Server und rendert die Übersicht mit dem aktuell
 // gesetzten Spaltenfiltern neu. Wird initial sowie nach jeder Aktion
