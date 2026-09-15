@@ -134,62 +134,6 @@
             "defaultValue": ""
         },
         {
-            "label": "Jobs-Status-Filter",
-            "labelPosition": "top",
-            "widget": "choicesjs",
-            "placeholder": "",
-            "hidden": false,
-            "hideLabel": false,
-            "multiple": false,
-            "dataSrc": "values",
-            "data": {
-                "values": [
-                    {
-                        "label": "",
-                        "value": ""
-                    }
-                ]
-            },
-            "lazyLoad": true,
-            "searchEnabled": true,
-            "validate": {
-                "required": false
-            },
-            "key": "jobsState",
-            "conditional": {
-                "show": null,
-                "when": null,
-                "eq": ""
-            },
-            "customConditional": "",
-            "clearOnHide": false,
-            "type": "select",
-            "input": true,
-            "tableView": true,
-            "id": "jobsState01",
-            "defaultValue": ""
-        },
-        {
-            "label": "Jobs",
-            "customClass": "",
-            "tag": "div",
-            "attrs": [],
-            "content": "<p>Jobs werden geladen…</p>",
-            "refreshOnChange": false,
-            "key": "jobsListe",
-            "type": "htmlelement",
-            "input": false,
-            "tableView": false,
-            "hidden": false,
-            "conditional": {
-                "show": null,
-                "when": null,
-                "eq": ""
-            },
-            "customConditional": "",
-            "id": "jobsListe01"
-        },
-        {
             "label": "Prozess",
             "labelPosition": "top",
             "widget": "choicesjs",
@@ -491,6 +435,26 @@
             },
             "customConditional": "show = !!(data.prozess && ((data.aktion === 'CANCEL' && data.version) || data.aktion === 'CANCEL_ALL' || (data.aktion === 'MIGRATION' && data.version) || data.aktion === 'MIGRATE_ALL' || (data.aktion === 'RETRY' && data.version) || data.aktion === 'RETRY_ALL' || (data.aktion === 'DELETION' && data.version) || data.aktion === 'DELETE_ALL'));",
             "id": "instanzenAction01"
+        },
+        {
+            "label": "Jobs",
+            "customClass": "",
+            "tag": "div",
+            "attrs": [],
+            "content": "<p>Jobs werden geladen…</p>",
+            "refreshOnChange": false,
+            "key": "jobsListe",
+            "type": "htmlelement",
+            "input": false,
+            "tableView": false,
+            "hidden": false,
+            "conditional": {
+                "show": null,
+                "when": null,
+                "eq": ""
+            },
+            "customConditional": "",
+            "id": "jobsListe01"
         }
     ]
 }

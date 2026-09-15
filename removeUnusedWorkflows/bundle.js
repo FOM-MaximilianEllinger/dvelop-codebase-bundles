@@ -494,13 +494,6 @@ const AKTIONEN = [
     { label: "Migrieren", value: getAllJobs_1.JobType.Migration },
     { label: "Alle migrieren", value: MIGRATE_ALL_ACTION },
 ];
-// Filter für die Jobs-Übersicht ("" = alle Status).
-const JOB_STATE_FILTER_OPTIONS = [
-    { label: "Alle", value: "" },
-    { label: "Geplant", value: getAllJobs_1.JobState.Scheduled },
-    { label: "Ausstehend", value: getAllJobs_1.JobState.Pending },
-    { label: "Beendet", value: getAllJobs_1.JobState.Ended },
-];
 // Setzt die Optionen einer Select-Komponente und stößt ein Redraw an, analog zu
 // populateAvailableForms in projects/Toolbox/src/form.ts.
 function setSelectValues(form, key, values) {
@@ -559,24 +552,95 @@ function formatJobDate(value) {
     const date = new Date(value);
     return isNaN(date.getTime()) ? String(value) : date.toLocaleString("de-DE");
 }
-// Rendert die (optional nach Status gefilterte) Jobs-Liste als HTML-Tabelle
-// für die "jobsListe"-Content-Komponente.
-function renderJobsTable(jobs, stateFilter) {
-    const filtered = stateFilter ? jobs.filter((job) => job.state === stateFilter) : jobs;
-    if (filtered.length === 0) {
-        return "<p>Keine Jobs gefunden.</p>";
+function jobTypeLabel(type) {
+    switch (type) {
+        case getAllJobs_1.JobType.Cancel:
+            return "Abbrechen";
+        case getAllJobs_1.JobType.Deletion:
+            return "Löschen";
+        case getAllJobs_1.JobType.Migration:
+            return "Migrieren";
+        case getAllJobs_1.JobType.Retry:
+            return "Erneut versuchen";
+        default:
+            return type ?? "-";
     }
-    const rows = filtered
+}
+function escapeHtml(value) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+const jobFilters = { type: "", processKey: "", version: "", state: "", created: "", started: "" };
+function jobMatchesFilters(job) {
+    if (jobFilters.type && job.type !== jobFilters.type) {
+        return false;
+    }
+    if (jobFilters.state && job.state !== jobFilters.state) {
+        return false;
+    }
+    if (jobFilters.version && !String(job.processVersion ?? "").includes(jobFilters.version)) {
+        return false;
+    }
+    if (jobFilters.processKey) {
+        const processName = job.processKey ? getProcessDisplayName(job.processKey) : "";
+        const haystack = `${processName} ${job.processKey ?? ""}`.toLowerCase();
+        if (!haystack.includes(jobFilters.processKey.toLowerCase())) {
+            return false;
+        }
+    }
+    if (jobFilters.created && !formatJobDate(job.creationDate).toLowerCase().includes(jobFilters.created.toLowerCase())) {
+        return false;
+    }
+    if (jobFilters.started && !formatJobDate(job.startDate).toLowerCase().includes(jobFilters.started.toLowerCase())) {
+        return false;
+    }
+    return true;
+}
+// Rendert nur die Tabellenzeilen (ohne Filterzeile/Header), damit ein
+// Filterwechsel nur den <tbody>-Inhalt austauscht und die Filterfelder
+// (samt Fokus/Cursor) nicht durch ein volles Redraw verloren gehen.
+function renderJobsTableRows(jobs) {
+    const filtered = jobs.filter(jobMatchesFilters);
+    if (filtered.length === 0) {
+        return `<tr><td colspan="6">Keine Jobs gefunden.</td></tr>`;
+    }
+    return filtered
         .map((job) => `
       <tr>
-        <td>${job.type ?? "-"}</td>
-        <td>${job.processKey ? getProcessDisplayName(job.processKey) : "-"}</td>
+        <td>${jobTypeLabel(job.type)}</td>
+        <td>${job.processKey ? escapeHtml(getProcessDisplayName(job.processKey)) : "-"}</td>
         <td>${job.processVersion ?? "-"}</td>
         <td>${jobStateLabel(job.state)}</td>
         <td>${formatJobDate(job.creationDate)}</td>
         <td>${formatJobDate(job.startDate)}</td>
       </tr>`)
         .join("");
+}
+// Baut die Filterzeile mit je einem Eingabefeld pro Spalte. Typ/Status sind
+// Dropdowns (feste Werte), die übrigen Spalten Freitext-Filter ("enthält").
+function renderJobsFilterRow() {
+    const typeOptions = [{ value: "", label: "Alle" }, ...Object.values(getAllJobs_1.JobType).map((value) => ({ value, label: jobTypeLabel(value) }))]
+        .map((opt) => `<option value="${opt.value}"${jobFilters.type === opt.value ? " selected" : ""}>${escapeHtml(opt.label)}</option>`)
+        .join("");
+    const stateOptions = [{ value: "", label: "Alle" }, ...Object.values(getAllJobs_1.JobState).map((value) => ({ value, label: jobStateLabel(value) }))]
+        .map((opt) => `<option value="${opt.value}"${jobFilters.state === opt.value ? " selected" : ""}>${escapeHtml(opt.label)}</option>`)
+        .join("");
+    return `
+    <tr>
+      <th><select data-job-filter="type" style="width:100%;">${typeOptions}</select></th>
+      <th><input type="text" data-job-filter="processKey" placeholder="Filtern…" value="${escapeHtml(jobFilters.processKey)}" style="width:100%;" /></th>
+      <th><input type="text" data-job-filter="version" placeholder="Filtern…" value="${escapeHtml(jobFilters.version)}" style="width:100%;" /></th>
+      <th><select data-job-filter="state" style="width:100%;">${stateOptions}</select></th>
+      <th><input type="text" data-job-filter="created" placeholder="Filtern…" value="${escapeHtml(jobFilters.created)}" style="width:100%;" /></th>
+      <th><input type="text" data-job-filter="started" placeholder="Filtern…" value="${escapeHtml(jobFilters.started)}" style="width:100%;" /></th>
+    </tr>`;
+}
+// Baut die vollständige Tabelle (Header + Filterzeile + Zeilen). Wird nur bei
+// einem echten Neuladen der Jobs vom Server aufgerufen.
+function renderJobsTableShell() {
     return `
     <table class="table table-striped" style="width:100%;">
       <thead>
@@ -588,17 +652,60 @@ function renderJobsTable(jobs, stateFilter) {
           <th>Erstellt</th>
           <th>Gestartet</th>
         </tr>
+        ${renderJobsFilterRow()}
       </thead>
-      <tbody>${rows}</tbody>
+      <tbody id="jobsTableBody">${renderJobsTableRows(allJobs)}</tbody>
     </table>`;
 }
-// Rendert die zuletzt geladenen Jobs (aus dem Cache) gefiltert nach Status.
-function refreshJobsList(form, stateFilter) {
-    setContent(form, "jobsListe", renderJobsTable(allJobs, stateFilter));
+// Tauscht nur den Tabellenkörper aus (Filterwechsel), ohne die Filterzeile
+// per formio-Redraw neu zu erzeugen.
+function refreshJobsTableBody(form) {
+    const component = form.getComponent("jobsListe");
+    const tbody = component?.element?.querySelector("#jobsTableBody") ?? null;
+    if (tbody) {
+        tbody.innerHTML = renderJobsTableRows(allJobs);
+    }
 }
-// Lädt die Jobs neu vom Server und rendert sie mit dem aktuell gewählten
-// Status-Filter. Wird initial sowie nach jeder Aktion aufgerufen, damit die
-// Übersicht aktuell bleibt.
+// Bindet die Filterfelder per Event-Delegation auf dem stabilen
+// Komponenten-Wrapper, statt auf jedes Feld einzeln zu horchen – so
+// funktioniert es unabhängig davon, wann formio den Inhalt tatsächlich in
+// den DOM schreibt, und muss nach einem reinen Body-Update nicht neu
+// gebunden werden.
+function bindJobsFilterListeners(form) {
+    const component = form.getComponent("jobsListe");
+    const root = component?.element;
+    if (!root || root.dataset.filtersBound === "true") {
+        return;
+    }
+    root.dataset.filtersBound = "true";
+    root.addEventListener("input", (event) => {
+        const target = event.target;
+        const field = target?.getAttribute("data-job-filter");
+        if (!field) {
+            return;
+        }
+        jobFilters[field] = target.value;
+        refreshJobsTableBody(form);
+    });
+    root.addEventListener("change", (event) => {
+        const target = event.target;
+        const field = target?.getAttribute("data-job-filter");
+        if (!field) {
+            return;
+        }
+        jobFilters[field] = target.value;
+        refreshJobsTableBody(form);
+    });
+}
+// Rendert Header, Filterzeile und Zeilen komplett neu (z.B. nach dem Laden
+// neuer Jobs vom Server) und bindet die Filter-Listener auf den neuen Wrapper.
+function renderJobsList(form) {
+    setContent(form, "jobsListe", renderJobsTableShell());
+    bindJobsFilterListeners(form);
+}
+// Lädt die Jobs neu vom Server und rendert die Übersicht mit dem aktuell
+// gesetzten Spaltenfiltern neu. Wird initial sowie nach jeder Aktion
+// aufgerufen, damit die Übersicht aktuell bleibt.
 async function reloadJobsList(form) {
     setContent(form, "jobsListe", "<p>Jobs werden geladen…</p>");
     try {
@@ -609,7 +716,7 @@ async function reloadJobsList(form) {
         setContent(form, "jobsListe", "<p>Fehler beim Laden der Jobs.</p>");
         return;
     }
-    refreshJobsList(form, form.data?.jobsState);
+    renderJobsList(form);
 }
 function versionOptions(versions) {
     return versions
@@ -1165,9 +1272,8 @@ window.formInit = async function (form, data) {
     processNameByKey = Object.fromEntries(processes
         .filter((p) => !!p.key)
         .map((p) => [p.key, p.name ?? p.key]));
-    // Jobs-Übersicht (unter https://.../process/jobs) mit Status-Filter,
+    // Jobs-Übersicht (unter https://.../process/jobs) mit Filtern pro Spalte,
     // unabhängig von der gewählten Aktion/Prozess/Version.
-    setSelectValues(form, "jobsState", JOB_STATE_FILTER_OPTIONS);
     await reloadJobsList(form);
     // "Version" hängt vom gewählten Prozess ab (kaskadierende Selectbox). Die
     // Versionen kommen nicht mehr aus der Prozess-Liste selbst, sondern werden
@@ -1197,9 +1303,6 @@ window.formInit = async function (form, data) {
         }
         if (changedKey === "prozess" || changedKey === "version" || changedKey === "aktion") {
             refreshInstanceInfo(form, event.data?.aktion, event.data?.prozess, event.data?.version);
-        }
-        if (changedKey === "jobsState") {
-            refreshJobsList(form, event.data?.jobsState);
         }
     });
     // Klick auf den Aktions-Button (form.json: action "event", event
