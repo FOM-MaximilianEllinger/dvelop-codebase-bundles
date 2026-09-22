@@ -599,7 +599,8 @@ function jobMatchesFilters(job) {
     }
     return true;
 }
-let jobSort = null;
+// Standard: neueste Jobs zuerst (nach Erstellungsdatum absteigend).
+let jobSort = { field: "creationDate", direction: "desc" };
 function compareJobs(a, b, sort) {
     let result;
     switch (sort.field) {
