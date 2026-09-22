@@ -5257,7 +5257,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 3;
+const TOOLBOX_VERSION_COUNTER = 4;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5297,16 +5297,48 @@ function populateAvailableForms(form) {
 // Formulardaten (form.data), damit er sich über eine Komponente mit genau
 // diesem Key (z.B. readonly Textfeld) im Process Studio Formular-Editor
 // anzeigen lässt.
-const TOOLBOX_VERSION_FIELD_KEY = "toolboxVersion";
+const updateFormKey = "updateForm";
 function populateVersionCounter(form) {
-    form.data[TOOLBOX_VERSION_FIELD_KEY] = TOOLBOX_VERSION_COUNTER;
+    form.data[updateFormKey] = TOOLBOX_VERSION_COUNTER;
     // Holen der Update-Schaltfläche aus dem Formular.
-    const updateButton = form.getComponent(TOOLBOX_VERSION_FIELD_KEY);
+    const updateButton = form.getComponent(updateFormKey);
     if (!updateButton) {
-        logger.warn(`Komponente "${TOOLBOX_VERSION_FIELD_KEY}" nicht im Formular gefunden.`);
+        logger.warn(`Komponente "${updateFormKey}" nicht im Formular gefunden.`);
         return;
     }
     updateButton.label = `Toolbox aktualisieren (Version ${TOOLBOX_VERSION_COUNTER})`;
+    // Bis die Prüfung gegen GitHub abgeschlossen ist, bleibt der Button
+    // deaktiviert, damit kein Update auf eine (fälschlich) gleich neue Version
+    // angestoßen werden kann.
+    updateButton.disabled = true;
+    updateButton.redraw();
+    void enableUpdateButtonIfNewerVersionAvailable(updateButton);
+}
+// webpack.form.config.js baut mit mode: "development" (kein Minify), daher
+// taucht der Konstantenname im veröffentlichten Bundle unverändert als
+// "TOOLBOX_VERSION_COUNTER = <Zahl>;" auf. Das erlaubt es, die im GitHub-Repo
+// veröffentlichte Version zu ermitteln, ohne eine eigene Versionsdatei pflegen
+// zu müssen.
+const VERSION_COUNTER_PATTERN = /TOOLBOX_VERSION_COUNTER\s*=\s*(\d+)/;
+// Lädt das aktuell auf GitHub veröffentlichte Toolbox-Bundle und aktiviert die
+// Update-Schaltfläche nur, wenn die dort enthaltene Version neuer ist als die
+// hier im Browser laufende (TOOLBOX_VERSION_COUNTER). So bleibt der Button
+// inaktiv, wenn bereits die aktuellste Version läuft.
+async function enableUpdateButtonIfNewerVersionAvailable(updateButton) {
+    try {
+        const remoteBundleContent = await loadLatestBundle(TOOLBOX_BUNDLE_PATH);
+        const match = remoteBundleContent.match(VERSION_COUNTER_PATTERN);
+        if (!match) {
+            logger.warn("Version im veröffentlichten Toolbox-Bundle konnte nicht ermittelt werden.");
+            return;
+        }
+        const remoteVersion = parseInt(match[1], 10);
+        updateButton.disabled = remoteVersion <= TOOLBOX_VERSION_COUNTER;
+        updateButton.redraw();
+    }
+    catch (error) {
+        logger.error(`Fehler beim Prüfen auf eine neue Toolbox-Version: ${getErrorMessage(error)}`);
+    }
 }
 const CONTENT_CSS_STYLE_ID = "form-loader-content-css";
 const CONTENT_MOUNT_ID = "form-loader-content-mount";
