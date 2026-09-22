@@ -5257,7 +5257,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 5;
+const TOOLBOX_VERSION_COUNTER = 6;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5333,6 +5333,7 @@ async function enableUpdateButtonIfNewerVersionAvailable(updateButton) {
             return;
         }
         const remoteVersion = parseInt(match[1], 10);
+        logger.info(`Veröffentlichte Toolbox-Version auf GitHub: ${remoteVersion}, lokale Version: ${TOOLBOX_VERSION_COUNTER}.`);
         updateButton.component.disabled = remoteVersion <= TOOLBOX_VERSION_COUNTER;
         updateButton.redraw();
     }
