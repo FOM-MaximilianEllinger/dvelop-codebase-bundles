@@ -5259,14 +5259,14 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 21;
+const TOOLBOX_VERSION_COUNTER = 22;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
 // Die Helper (getForm/createForm/patchForm) erwarten trotzdem einen Token-Parameter
 // für den Authorization-Header – der bleibt hier bewusst leer.
 const NO_TOKEN = "";
-window.onInitialization = function (form, instance, data) {
+function onInitialization(form, instance, data) {
     logger.debug("FormLoader initialisiert.");
     setupAvailableFormsSelector(form);
     populateVersionCounter(form);
@@ -5283,7 +5283,9 @@ window.onInitialization = function (form, instance, data) {
             console.dir(document);
         }
     });
-};
+}
+;
+window.onInitialization = onInitialization;
 // Registriert den change-Listener der Select-Komponente "availableForms" -
 // einmalig beim Formular-Init, damit er bei einem erneuten Befüllen (siehe
 // populateAvailableForms, z.B. nach createOrUpdate) nicht mehrfach hängt.
