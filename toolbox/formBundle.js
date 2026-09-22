@@ -5257,7 +5257,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 10;
+const TOOLBOX_VERSION_COUNTER = 11;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5293,7 +5293,7 @@ function populateAvailableForms(form) {
     };
     selector.redraw();
 }
-// Schreibt TOOLBOX_VERSION_COUNTER unter dem Key "toolboxVersion" in die
+// Schreibt TOOLBOX_VERSION_COUNTER unter dem Key "updateFormKey" in die
 // Formulardaten (form.data), damit er sich über eine Komponente mit genau
 // diesem Key (z.B. readonly Textfeld) im Process Studio Formular-Editor
 // anzeigen lässt.
@@ -5307,9 +5307,6 @@ function populateVersionCounter(form) {
         return;
     }
     updateButton.label = `Toolbox aktualisieren (Version ${TOOLBOX_VERSION_COUNTER})`;
-    // Bis die Prüfung gegen GitHub abgeschlossen ist, bleibt der Button
-    // deaktiviert, damit kein Update auf eine (fälschlich) gleich neue Version
-    // angestoßen werden kann.
     updateButton.component.disabled = true;
     updateButton.redraw();
     void enableUpdateButtonIfNewerVersionAvailable(updateButton);
