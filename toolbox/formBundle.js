@@ -5208,6 +5208,7 @@ exports.targetForms = [
     {
         id: "removeUnusedWorkflows",
         name: "Ungenutzte Workflows entfernen",
+        description: "Entfernt Workflows, die in keinem Prozess mehr referenziert werden.",
         formId: "2c3e00b6-8e00-4a27-9a9e-2b5dee133ca7",
         bundlePath: "removeUnusedWorkflows/bundle.js",
         formDefinitionPath: "removeUnusedWorkflows/form.json",
@@ -5257,7 +5258,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 11;
+const TOOLBOX_VERSION_COUNTER = 12;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5292,6 +5293,21 @@ function populateAvailableForms(form) {
         values: targetForms_1.targetForms.map((t) => ({ label: t.name, value: t.id })),
     };
     selector.redraw();
+    selector.on("change", () => updateToolDescription(form, selector.getValue()));
+    updateToolDescription(form, selector.getValue());
+}
+const toolDescriptionKey = "toolDescription";
+// Zeigt die Beschreibung des im Dropdown "availableForms" ausgewählten Eintrags
+// (siehe config/targetForms.ts) in der Content-Komponente "toolDescription" an.
+function updateToolDescription(form, selectedTargetId) {
+    const descriptionComponent = form.getComponent(toolDescriptionKey);
+    if (!descriptionComponent) {
+        logger.warn(`Komponente "${toolDescriptionKey}" nicht im Formular gefunden.`);
+        return;
+    }
+    const target = targetForms_1.targetForms.find((t) => t.id === selectedTargetId);
+    descriptionComponent.component.html = target?.description ?? "";
+    descriptionComponent.redraw();
 }
 // Schreibt TOOLBOX_VERSION_COUNTER unter dem Key "updateFormKey" in die
 // Formulardaten (form.data), damit er sich über eine Komponente mit genau
