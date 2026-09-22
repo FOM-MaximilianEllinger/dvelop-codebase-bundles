@@ -477,6 +477,11 @@ function loadSweetAlert() {
     });
 }
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
+// Eigener Versionszähler, analog zu TOOLBOX_VERSION_COUNTER in
+// projects/Toolbox/src/form.ts: wird von publish-bundles.yml bei jedem
+// Publish automatisch um 1 erhöht, damit die Toolbox (loadedTools-Grid)
+// erkennen kann, ob auf GitHub eine neuere Version dieses Tools liegt.
+const REMOVEUNUSEDWORKFLOWS_VERSION_COUNTER = 2;
 // Eigene Aktionen (kein JobType): wirken unabhängig von der gewählten
 // "Version" auf alle Versionen eines Prozesses.
 const CANCEL_ALL_ACTION = "CANCEL_ALL";
