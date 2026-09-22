@@ -5259,7 +5259,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 14;
+const TOOLBOX_VERSION_COUNTER = 15;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5359,14 +5359,20 @@ async function enableUpdateButtonIfNewerVersionAvailable(updateButton) {
 const loadedToolsKey = "loadedTools";
 const loadedToolNameKey = "loadedTool";
 const loadedToolUpdateButtonKey = "updateTool";
+// Nicht gerenderte, aber in den Zeilendaten mitgeführte Kennung, damit
+// window.updateTool (siehe unten) die Zeile zuverlässig auf die passende
+// targetForms-Konfiguration zurückführen kann, statt über den Anzeigenamen
+// zu matchen.
+const loadedToolTargetIdKey = "targetId";
 // Befüllt das DataGrid "loadedTools" mit allen kuratierten targetForms
 // (config/targetForms.ts), die in dforms bereits existieren (per formId in
 // getAllForms geprüft - unabhängig davon, ob sie in dieser Browser-Session
 // über das availableForms-Dropdown geladen wurden). Pro Zeile zeigt der
 // Update-Button "updateTool" die aktuell auf GitHub veröffentlichte Version
 // dieses Tools (per versionConstantName-Regex aus dessen Bundle ausgelesen,
-// analog zu TOOLBOX_VERSION_COUNTER/VERSION_COUNTER_PATTERN) und aktualisiert
-// bei Klick nur dieses eine Ziel-Formular in dforms.
+// analog zu TOOLBOX_VERSION_COUNTER/VERSION_COUNTER_PATTERN). Der Klick auf
+// den Button ruft (per im Formular-Editor konfigurierter Custom-Action, siehe
+// window.updateTool weiter unten) "updateTool(form, instance, data);" auf.
 async function populateLoadedTools(form) {
     const grid = form.getComponent(loadedToolsKey);
     if (!grid) {
@@ -5377,10 +5383,10 @@ async function populateLoadedTools(form) {
         const baseUri = window.location.origin;
         const allForms = await (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN);
         const loadedTargets = targetForms_1.targetForms.filter((t) => allForms.body.forms.some((f) => f.id === t.formId));
-        grid.setValue(loadedTargets.map((t) => ({ [loadedToolNameKey]: t.name })));
+        grid.setValue(loadedTargets.map((t) => ({ [loadedToolNameKey]: t.name, [loadedToolTargetIdKey]: t.id })));
         grid.redraw();
         loadedTargets.forEach((target, index) => {
-            void wireLoadedToolRow(grid, target, index);
+            void labelLoadedToolRowButton(grid, target, index);
         });
     }
     catch (error) {
@@ -5388,18 +5394,14 @@ async function populateLoadedTools(form) {
     }
 }
 // Beschriftet den Update-Button einer einzelnen loadedTools-Zeile mit der
-// aktuell veröffentlichten Version des jeweiligen Tools und verdrahtet den
-// Klick mit einem Update nur dieses einen Ziel-Formulars.
-async function wireLoadedToolRow(grid, target, rowIndex) {
+// aktuell veröffentlichten Version des jeweiligen Tools.
+async function labelLoadedToolRowButton(grid, target, rowIndex) {
     const row = grid.rows?.[rowIndex];
     const updateButton = row?.[loadedToolUpdateButtonKey];
     if (!updateButton) {
         logger.warn(`Komponente "${loadedToolUpdateButtonKey}" in Zeile ${rowIndex} von "${loadedToolsKey}" nicht gefunden.`);
         return;
     }
-    updateButton.on("click", () => {
-        void updateLoadedTool(target, updateButton);
-    });
     try {
         const bundleContent = await loadLatestBundle(target.bundlePath);
         const versionPattern = new RegExp(`${target.versionConstantName}\\s*=\\s*(\\d+)`);
@@ -5413,12 +5415,25 @@ async function wireLoadedToolRow(grid, target, rowIndex) {
     }
     updateButton.redraw();
 }
-// Aktualisiert genau ein Ziel-Formular aus dem loadedTools-Grid (patcht
-// customJs/Schema in dforms per ensureTargetFormUpToDate), ohne es hier zu
-// mounten - dafür weiterhin das availableForms-Dropdown + createOrUpdate nutzen.
-async function updateLoadedTool(target, updateButton) {
-    updateButton.component.disabled = true;
-    updateButton.redraw();
+/**
+ * Custom-Action des Update-Buttons "updateTool" innerhalb einer loadedTools-Zeile
+ * (im Process Studio Formular-Editor als "updateTool(form, instance, data);"
+ * konfiguriert - analog zu createOrUpdate/updateForm oben). "data" ist dabei die
+ * Zeilendaten des DataGrids (enthält targetId, siehe populateLoadedTools), nicht
+ * die gesamten Formulardaten. Patcht nur dieses eine Ziel-Formular in dforms
+ * (per ensureTargetFormUpToDate), ohne es hier zu mounten - dafür weiterhin das
+ * availableForms-Dropdown + createOrUpdate nutzen.
+ */
+async function updateTool(form, instance, data) {
+    const targetId = data?.[loadedToolTargetIdKey];
+    const target = targetForms_1.targetForms.find((t) => t.id === targetId);
+    if (!target) {
+        logger.error(`Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
+        await showErrorAlert("Werkzeug konnte nicht aktualisiert werden", `Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
+        return;
+    }
+    instance.component.disabled = true;
+    instance.redraw();
     try {
         await ensureTargetFormUpToDate(target);
         await showSuccessAlert("Werkzeug aktualisiert", `"${target.name}" wurde aktualisiert.`);
@@ -5428,10 +5443,11 @@ async function updateLoadedTool(target, updateButton) {
         await showErrorAlert(`Fehler beim Aktualisieren von "${target.name}"`, error);
     }
     finally {
-        updateButton.component.disabled = false;
-        updateButton.redraw();
+        instance.component.disabled = false;
+        instance.redraw();
     }
 }
+window.updateTool = updateTool;
 const CONTENT_CSS_STYLE_ID = "form-loader-content-css";
 const CONTENT_MOUNT_ID = "form-loader-content-mount";
 // Aktuell aktive Ziel-Formular-Instanz (falls schon eins geladen wurde) sowie ihr
