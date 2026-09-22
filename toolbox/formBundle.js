@@ -5259,7 +5259,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 16;
+const TOOLBOX_VERSION_COUNTER = 17;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5427,19 +5427,36 @@ function populateLoadedTools(form, loadedTargets) {
     }
     grid.setValue(loadedTargets.map((t) => ({ [loadedToolNameKey]: t.name, [loadedToolTargetIdKey]: t.id })));
     grid.redraw();
-    loadedTargets.forEach((target, index) => {
-        void labelLoadedToolRowButton(grid, target, index);
-    });
+    labelLoadedToolRowButtons(grid, loadedTargets);
 }
-// Beschriftet den Update-Button einer einzelnen loadedTools-Zeile mit der
-// aktuell veröffentlichten Version des jeweiligen Tools.
-async function labelLoadedToolRowButton(grid, target, rowIndex) {
-    const row = grid.rows?.[rowIndex];
-    const updateButton = row?.[loadedToolUpdateButtonKey];
-    if (!updateButton) {
-        logger.warn(`Komponente "${loadedToolUpdateButtonKey}" in Zeile ${rowIndex} von "${loadedToolsKey}" nicht gefunden.`);
+// Beschriftet pro Zeile den Update-Button mit der aktuell veröffentlichten
+// Version des jeweiligen Tools. Läuft über ALLE Nested-Components des Grids
+// per everyComponent() (Standard-Formio-API, unabhängig von der internen
+// Zeilen-Datenstruktur - ein direkter Zugriff über einen Zeilenindex, z.B.
+// grid.rows[i], hat sich als nicht zuverlässig herausgestellt) und ordnet
+// jeden gefundenen "updateTool"-Button anhand der targetId in dessen
+// Zeilendaten (component.data - siehe loadedToolTargetIdKey) dem passenden
+// Eintrag aus loadedTargets zu.
+function labelLoadedToolRowButtons(grid, loadedTargets) {
+    if (typeof grid.everyComponent !== "function") {
+        logger.warn(`"${loadedToolsKey}" unterstützt everyComponent() nicht, Versions-Beschriftung wird übersprungen.`);
         return;
     }
+    grid.everyComponent((component) => {
+        if (component.component?.key !== loadedToolUpdateButtonKey)
+            return;
+        const targetId = component.data?.[loadedToolTargetIdKey];
+        const target = loadedTargets.find((t) => t.id === targetId);
+        if (!target) {
+            logger.warn(`Zu Button "${loadedToolUpdateButtonKey}" konnte kein passendes Werkzeug (targetId "${targetId}") gefunden werden.`);
+            return;
+        }
+        void labelLoadedToolRowButton(component, target);
+    });
+}
+// Lädt das Bundle des Tools und beschriftet den übergebenen Button-Instance
+// mit dessen aktuell veröffentlichter Version.
+async function labelLoadedToolRowButton(updateButton, target) {
     try {
         const bundleContent = await loadLatestBundle(target.bundlePath);
         const versionPattern = new RegExp(`${target.versionConstantName}\\s*=\\s*(\\d+)`);
