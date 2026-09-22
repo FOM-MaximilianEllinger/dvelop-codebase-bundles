@@ -5259,7 +5259,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 17;
+const TOOLBOX_VERSION_COUNTER = 18;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5323,9 +5323,18 @@ async function refreshToolLists(form) {
     try {
         const baseUri = window.location.origin;
         const allForms = await (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN);
+        // Diagnose (bewusst auf warn-Level, damit es in der Konsole nicht
+        // rausgefiltert wird): zeigt, ob getAllForms() die formId eines Tools
+        // überhaupt als "schon angelegt" erkennt.
+        logger.warn(`refreshToolLists: ${allForms.body.forms.length} Formulare in dforms gefunden. ` +
+            `targetForms: ${targetForms_1.targetForms.map((t) => `${t.name}=${t.formId}`).join(", ")}`);
         const isAlreadyLoaded = (t) => allForms.body.forms.some((f) => f.id === t.formId);
-        populateAvailableForms(form, targetForms_1.targetForms.filter((t) => !isAlreadyLoaded(t)));
-        populateLoadedTools(form, targetForms_1.targetForms.filter(isAlreadyLoaded));
+        const availableTargets = targetForms_1.targetForms.filter((t) => !isAlreadyLoaded(t));
+        const loadedTargets = targetForms_1.targetForms.filter(isAlreadyLoaded);
+        logger.warn(`refreshToolLists: verfügbar=[${availableTargets.map((t) => t.name).join(", ")}], ` +
+            `geladen=[${loadedTargets.map((t) => t.name).join(", ")}]`);
+        populateAvailableForms(form, availableTargets);
+        populateLoadedTools(form, loadedTargets);
     }
     catch (error) {
         logger.error(`Fehler beim Ermitteln bereits angelegter Werkzeuge: ${getErrorMessage(error)}`);
@@ -5422,9 +5431,10 @@ function populateLoadedTools(form, loadedTargets) {
         return;
     }
     if (loadedTargets.length === 0) {
-        logger.debug(`Keine bereits angelegten Werkzeuge gefunden, "${loadedToolsKey}" bleibt leer.`);
+        logger.warn(`populateLoadedTools: keine bereits angelegten Werkzeuge übergeben, "${loadedToolsKey}" bleibt leer.`);
         return;
     }
+    logger.warn(`populateLoadedTools: befülle "${loadedToolsKey}" mit ${loadedTargets.length} Zeile(n): ${loadedTargets.map((t) => t.name).join(", ")}`);
     grid.setValue(loadedTargets.map((t) => ({ [loadedToolNameKey]: t.name, [loadedToolTargetIdKey]: t.id })));
     grid.redraw();
     labelLoadedToolRowButtons(grid, loadedTargets);
