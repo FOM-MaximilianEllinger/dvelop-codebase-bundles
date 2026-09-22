@@ -5259,7 +5259,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 19;
+const TOOLBOX_VERSION_COUNTER = 20;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5436,17 +5436,7 @@ function populateLoadedTools(form, loadedTargets) {
     }
     logger.warn(`populateLoadedTools: befülle "${loadedToolsKey}" mit ${loadedTargets.length} Zeile(n): ${loadedTargets.map((t) => t.name).join(", ")}`);
     grid.setValue(loadedTargets.map((t) => ({ [loadedToolNameKey]: t.name, [loadedToolTargetIdKey]: t.id })));
-    // grid.redraw() reicht in dieser Formio-Version nicht aus, um das DataGrid
-    // nach einem programmatischen setValue() tatsächlich neu zu zeichnen (Daten
-    // waren laut Diagnose-Logs korrekt gesetzt, UI blieb aber leer) -
-    // triggerRedraw() ist die auf der Instanz vorhandene, funktionierende
-    // Methode dafür.
-    if (typeof grid.triggerRedraw === "function") {
-        grid.triggerRedraw();
-    }
-    else {
-        grid.redraw();
-    }
+    grid.redraw();
     labelLoadedToolRowButtons(grid, loadedTargets);
 }
 // Beschriftet pro Zeile den Update-Button mit der aktuell veröffentlichten
