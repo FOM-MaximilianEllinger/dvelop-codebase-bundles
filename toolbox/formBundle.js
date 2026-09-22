@@ -4836,6 +4836,43 @@ async function getForm(baseUri, token, formId) {
 
 /***/ },
 
+/***/ "../../helper/dforms/newVersion.ts"
+/*!*****************************************!*\
+  !*** ../../helper/dforms/newVersion.ts ***!
+  \*****************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.newVersion = newVersion;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Creates a new version of an existing form by sending a POST request to the specified API endpoint.
+ *
+ * @param baseUri - The base URI of the API.
+ * @param token - The authorization token to access the API.
+ * @param formId - The unique identifier of the form for which a new version is created.
+ * @returns A promise that resolves to the API response containing the new version data.
+ */
+async function newVersion(baseUri, token, formId) {
+    const url = `${baseUri}/dforms/api/forms/${formId}/versions`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
 /***/ "../../helper/dforms/patchForm.ts"
 /*!****************************************!*\
   !*** ../../helper/dforms/patchForm.ts ***!
@@ -5196,6 +5233,7 @@ const getForm_1 = __webpack_require__(/*! ../../../helper/dforms/getForm */ "../
 const createForm_1 = __webpack_require__(/*! ../../../helper/processstudio/createForm */ "../../helper/processstudio/createForm.ts");
 const getAllForms_1 = __webpack_require__(/*! ../../../helper/processstudio/getAllForms */ "../../helper/processstudio/getAllForms.ts");
 const patchForm_1 = __webpack_require__(/*! ../../../helper/dforms/patchForm */ "../../helper/dforms/patchForm.ts");
+const newVersion_1 = __webpack_require__(/*! ../../../helper/dforms/newVersion */ "../../helper/dforms/newVersion.ts");
 const logger_1 = __webpack_require__(/*! ../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 const targetForms_1 = __webpack_require__(/*! ./config/targetForms */ "./src/config/targetForms.ts");
 const publicBundleRepo_1 = __webpack_require__(/*! ./config/publicBundleRepo */ "./src/config/publicBundleRepo.ts");
@@ -5215,6 +5253,11 @@ const TOOLBOX_FORM_NAME = "Toolbox";
 // Pfad des eigenen Bundles im öffentlichen Artefakt-Repo (wird von
 // .github/workflows/publish-bundles.yml dorthin veröffentlicht).
 const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
+// Eigener Versionszähler, gepflegt im Sourcecode (nicht auf dem Server
+// abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
+// hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
+// jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
+const TOOLBOX_VERSION_COUNTER = 2;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5224,6 +5267,7 @@ const NO_TOKEN = "";
 window.formInit = function (form, data) {
     logger.debug("FormLoader initialisiert.");
     populateAvailableForms(form);
+    populateVersionCounter(form);
     document.addEventListener("keydown", function (event) {
         if (event.ctrlKey && event.key === "F1") {
             console.log("data");
@@ -5248,6 +5292,20 @@ function populateAvailableForms(form) {
         values: targetForms_1.targetForms.map((t) => ({ label: t.name, value: t.id })),
     };
     selector.redraw();
+}
+// Schreibt TOOLBOX_VERSION_COUNTER unter dem Key "toolboxVersion" in die
+// Formulardaten (form.data), damit er sich über eine Komponente mit genau
+// diesem Key (z.B. readonly Textfeld) im Process Studio Formular-Editor
+// anzeigen lässt.
+const TOOLBOX_VERSION_FIELD_KEY = "toolboxVersion";
+function populateVersionCounter(form) {
+    form.data[TOOLBOX_VERSION_FIELD_KEY] = TOOLBOX_VERSION_COUNTER;
+    const versionField = form.getComponent(TOOLBOX_VERSION_FIELD_KEY);
+    if (!versionField) {
+        logger.warn(`Komponente "${TOOLBOX_VERSION_FIELD_KEY}" nicht im Formular gefunden.`);
+        return;
+    }
+    versionField.setValue(TOOLBOX_VERSION_COUNTER);
 }
 const CONTENT_CSS_STYLE_ID = "form-loader-content-css";
 const CONTENT_MOUNT_ID = "form-loader-content-mount";
@@ -5372,9 +5430,11 @@ window.createOrUpdate = createOrUpdate;
 /**
  * Aktualisiert das Toolbox-Formular selbst: lädt sein eigenes Bundle aus dem
  * öffentlichen Artefakt-Repo und patcht es als customJs auf TOOLBOX_FORM_ID.
- * Das gerade laufende Skript im Browser-Speicher bleibt davon unberührt – deshalb
- * lädt diese Funktion die Seite nach erfolgreichem Patch automatisch neu, damit die
- * neue Version tatsächlich greift.
+ * Legt anschließend per newVersion eine neue dforms-Version an und meldet dazu
+ * TOOLBOX_VERSION_COUNTER (aus dem Sourcecode, siehe Kommentar dort). Das
+ * gerade laufende Skript im Browser-Speicher bleibt davon unberührt – deshalb
+ * lädt diese Funktion die Seite nach erfolgreichem Patch automatisch neu,
+ * damit die neue Version tatsächlich greift.
  */
 async function updateForm(form, instance, data) {
     if (TOOLBOX_FORM_ID === "TODO-GUID") {
@@ -5393,8 +5453,9 @@ async function updateForm(form, instance, data) {
             customJs: customJsContent,
         };
         await (0, patchForm_1.patchForm)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID, TOOLBOX_FORM_NAME, definition);
-        logger.info("Toolbox-Formular aktualisiert. Seite wird neu geladen, damit die neue Version greift.");
-        await showSuccessAlert("Toolbox aktualisiert", "Die Seite wird jetzt neu geladen, damit die neue Version greift.");
+        await (0, newVersion_1.newVersion)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID);
+        logger.info(`Toolbox-Formular aktualisiert (Version ${TOOLBOX_VERSION_COUNTER}). Seite wird neu geladen, damit die neue Version greift.`);
+        await showSuccessAlert("Toolbox aktualisiert", `Version ${TOOLBOX_VERSION_COUNTER} wurde erstellt. Die Seite wird jetzt neu geladen, damit die neue Version greift.`);
         window.location.reload();
     }
     catch (error) {
