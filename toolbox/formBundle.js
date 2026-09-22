@@ -5258,7 +5258,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 12;
+const TOOLBOX_VERSION_COUNTER = 13;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5306,7 +5306,7 @@ function updateToolDescription(form, selectedTargetId) {
         return;
     }
     const target = targetForms_1.targetForms.find((t) => t.id === selectedTargetId);
-    descriptionComponent.component.html = target?.description ?? "";
+    descriptionComponent.component.content = target?.description ?? "";
     descriptionComponent.redraw();
 }
 // Schreibt TOOLBOX_VERSION_COUNTER unter dem Key "updateFormKey" in die
@@ -5492,6 +5492,13 @@ async function updateForm(form, instance, data) {
     try {
         const baseUri = window.location.origin;
         const customJsContent = await loadLatestBundle(TOOLBOX_BUNDLE_PATH);
+        // customJsContent ist die gerade von GitHub geladene, neuere Version (der
+        // Button ist nur aktiv, wenn deren Zähler höher als TOOLBOX_VERSION_COUNTER
+        // ist, siehe enableUpdateButtonIfNewerVersionAvailable) – für die
+        // Erfolgsmeldung deshalb die tatsächlich installierte Version daraus
+        // auslesen statt der alten, noch laufenden TOOLBOX_VERSION_COUNTER.
+        const installedVersionMatch = customJsContent.match(VERSION_COUNTER_PATTERN);
+        const installedVersion = installedVersionMatch ? installedVersionMatch[1] : "?";
         const existing = await (0, getForm_1.getForm)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID);
         const definition = {
             formioFormDefinition: existing.body.definition.formioFormDefinition,
@@ -5501,8 +5508,8 @@ async function updateForm(form, instance, data) {
         };
         await (0, patchForm_1.patchForm)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID, TOOLBOX_FORM_NAME, definition);
         await (0, newVersion_1.newVersion)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID);
-        logger.info(`Toolbox-Formular aktualisiert (Version ${TOOLBOX_VERSION_COUNTER}). Seite wird neu geladen, damit die neue Version greift.`);
-        await showSuccessAlert("Toolbox aktualisiert", `Version ${TOOLBOX_VERSION_COUNTER} wurde erstellt. Die Seite wird jetzt neu geladen, damit die neue Version greift.`);
+        logger.info(`Toolbox-Formular aktualisiert (Version ${installedVersion}). Seite wird neu geladen, damit die neue Version greift.`);
+        await showSuccessAlert("Toolbox aktualisiert", `Version ${installedVersion} wurde erstellt. Die Seite wird jetzt neu geladen, damit die neue Version greift.`);
         window.location.reload();
     }
     catch (error) {
