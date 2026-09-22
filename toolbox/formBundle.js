@@ -5257,7 +5257,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 2;
+const TOOLBOX_VERSION_COUNTER = 3;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5300,12 +5300,13 @@ function populateAvailableForms(form) {
 const TOOLBOX_VERSION_FIELD_KEY = "toolboxVersion";
 function populateVersionCounter(form) {
     form.data[TOOLBOX_VERSION_FIELD_KEY] = TOOLBOX_VERSION_COUNTER;
-    const versionField = form.getComponent(TOOLBOX_VERSION_FIELD_KEY);
-    if (!versionField) {
+    // Holen der Update-Schaltfläche aus dem Formular.
+    const updateButton = form.getComponent(TOOLBOX_VERSION_FIELD_KEY);
+    if (!updateButton) {
         logger.warn(`Komponente "${TOOLBOX_VERSION_FIELD_KEY}" nicht im Formular gefunden.`);
         return;
     }
-    versionField.setValue(TOOLBOX_VERSION_COUNTER);
+    updateButton.label = `Toolbox aktualisieren (Version ${TOOLBOX_VERSION_COUNTER})`;
 }
 const CONTENT_CSS_STYLE_ID = "form-loader-content-css";
 const CONTENT_MOUNT_ID = "form-loader-content-mount";
