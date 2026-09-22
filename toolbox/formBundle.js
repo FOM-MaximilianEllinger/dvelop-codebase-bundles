@@ -5259,24 +5259,26 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 20;
+const TOOLBOX_VERSION_COUNTER = 21;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
 // Die Helper (getForm/createForm/patchForm) erwarten trotzdem einen Token-Parameter
 // für den Authorization-Header – der bleibt hier bewusst leer.
 const NO_TOKEN = "";
-window.formInit = function (form, data) {
+window.onInitialization = function (form, instance, data) {
     logger.debug("FormLoader initialisiert.");
     setupAvailableFormsSelector(form);
     populateVersionCounter(form);
-    void refreshToolLists(form);
+    void refreshToolLists(form, instance);
     document.addEventListener("keydown", function (event) {
         if (event.ctrlKey && event.key === "F1") {
-            console.log("data");
-            console.dir(data);
             console.log("form");
             console.dir(form);
+            console.log("instance");
+            console.dir(instance);
+            console.log("data");
+            console.dir(data);
             console.log("document");
             console.dir(document);
         }
@@ -5319,7 +5321,7 @@ function populateAvailableForms(form, availableTargets) {
 // Wird beim Formular-Init sowie nach jedem createOrUpdate erneut aufgerufen,
 // damit ein frisch angelegtes Werkzeug direkt vom Dropdown ins Grid wandert,
 // ohne dass die Seite neu geladen werden muss.
-async function refreshToolLists(form) {
+async function refreshToolLists(form, instance) {
     try {
         const baseUri = window.location.origin;
         const allForms = await (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN);
@@ -5334,7 +5336,7 @@ async function refreshToolLists(form) {
         logger.warn(`refreshToolLists: verfügbar=[${availableTargets.map((t) => t.name).join(", ")}], ` +
             `geladen=[${loadedTargets.map((t) => t.name).join(", ")}]`);
         populateAvailableForms(form, availableTargets);
-        populateLoadedTools(form, loadedTargets);
+        populateLoadedTools(instance, loadedTargets);
     }
     catch (error) {
         logger.error(`Fehler beim Ermitteln bereits angelegter Werkzeuge: ${getErrorMessage(error)}`);
@@ -5630,7 +5632,10 @@ async function createOrUpdate(form, instance, data) {
         // weil das gerade gemountete Ziel-Formular sonst wieder verschwinden würde -
         // stattdessen Dropdown/Grid ohne Neuladen neu abgleichen, damit das gerade
         // angelegte Werkzeug aus availableForms verschwindet und in loadedTools auftaucht.
-        void refreshToolLists(form);
+        // Hier (anders als in onInitialization) gibt es keine eigene "instance" des
+        // Formular-Roots - "instance" von createOrUpdate ist der auslösende Button,
+        // nicht das Formular -, daher bleibt es beim form.getComponent()-Zugriff.
+        void refreshToolLists(form, form);
         await showSuccessAlert("Erfolgreich geladen", `Formular "${target.name}" wurde angelegt/aktualisiert und geladen.`);
     }
     catch (error) {
