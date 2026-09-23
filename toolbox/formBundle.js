@@ -5214,6 +5214,18 @@ exports.targetForms = [
         formDefinitionPath: "processAdministration/form.json",
         versionConstantName: "PROCESSADMINISTRATION_VERSION_COUNTER",
     },
+    {
+        id: "businessObjectsEditor",
+        name: "Business Objects Editor",
+        description: "Verwaltet Business-Objects-Modelle und deren Einträge (Anlegen, Bearbeiten, Löschen) direkt im Browser.",
+        formId: "cb60481f-c364-4d82-9965-9ce3f25400e4",
+        bundlePath: "businessObjectsEditor/formBundle.js",
+        // Kein formDefinitionPath: das Formio-Schema dieses Formulars wird im
+        // Process Studio Formular-Editor gepflegt (siehe uploadFormToCloud.ts, das
+        // beim Patchen bewusst das dort vorhandene Schema unverändert übernimmt),
+        // nicht wie bei processAdministration aus einer form.json im Sourcecode.
+        versionConstantName: "BUSINESSOBJECTSEDITOR_VERSION_COUNTER",
+    },
 ];
 
 
@@ -5259,7 +5271,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 27;
+const TOOLBOX_VERSION_COUNTER = 28;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
