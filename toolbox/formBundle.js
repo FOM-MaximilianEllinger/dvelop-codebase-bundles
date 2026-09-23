@@ -5271,14 +5271,14 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 29;
+const TOOLBOX_VERSION_COUNTER = 30;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
 // Die Helper (getForm/createForm/patchForm) erwarten trotzdem einen Token-Parameter
 // für den Authorization-Header – der bleibt hier bewusst leer.
 const NO_TOKEN = "";
-function formInit(form, data) {
+function onInitialization(form, instance, data) {
     logger.debug("FormLoader initialisiert.");
     setupAvailableFormsSelector(form);
     populateVersionCounter(form);
@@ -5287,6 +5287,8 @@ function formInit(form, data) {
         if (event.ctrlKey && event.key === "F1") {
             console.log("form");
             console.dir(form);
+            console.log("instance");
+            console.dir(instance);
             console.log("data");
             console.dir(data);
             console.log("document");
@@ -5295,7 +5297,7 @@ function formInit(form, data) {
     });
 }
 ;
-window.formInit = formInit;
+window.onInitialization = onInitialization;
 // Registriert den change-Listener der Select-Komponente "availableForms" -
 // einmalig beim Formular-Init, damit er bei einem erneuten Befüllen (siehe
 // populateAvailableForms, z.B. nach createOrUpdate) nicht mehrfach hängt.
@@ -5418,11 +5420,6 @@ async function enableUpdateButtonIfNewerVersionAvailable(updateButton) {
 const loadedToolsKey = "loadedTools";
 const loadedToolNameKey = "loadedTool";
 const loadedToolUpdateButtonKey = "updateTool";
-// Nicht gerenderte, aber in den Zeilendaten mitgeführte Kennung, damit
-// window.updateTool (siehe unten) die Zeile zuverlässig auf die passende
-// targetForms-Konfiguration zurückführen kann, statt über den Anzeigenamen
-// zu matchen.
-const loadedToolTargetIdKey = "targetId";
 // Befüllt das DataGrid "loadedTools" mit den übergebenen (in dforms bereits
 // existierenden) targetForms-Einträgen - siehe refreshToolLists, das die
 // kuratierte Liste (config/targetForms.ts) entsprechend aufteilt. Pro Zeile
@@ -5449,7 +5446,7 @@ async function populateLoadedTools(form, loadedTargets) {
         return;
     }
     logger.warn(`populateLoadedTools: befülle "${loadedToolsKey}" mit ${loadedTargets.length} Zeile(n): ${loadedTargets.map((t) => t.name).join(", ")}`);
-    grid.setValue(loadedTargets.map((t) => ({ [loadedToolNameKey]: t.name, [loadedToolTargetIdKey]: t.id })));
+    grid.setValue(loadedTargets.map((t) => ({ [loadedToolNameKey]: t.name })));
     // grid.redraw() alleine hat das DataGrid nach einem programmatischen setValue()
     // zuvor nicht sichtbar neu gezeichnet (Daten waren laut Diagnose-Logs korrekt
     // gesetzt, UI blieb aber leer) - rebuild() erzwingt einen kompletten Neuaufbau
@@ -5467,9 +5464,15 @@ async function populateLoadedTools(form, loadedTargets) {
 // per everyComponent() (Standard-Formio-API, unabhängig von der internen
 // Zeilen-Datenstruktur - ein direkter Zugriff über einen Zeilenindex, z.B.
 // grid.rows[i], hat sich als nicht zuverlässig herausgestellt) und ordnet
-// jeden gefundenen "updateTool"-Button anhand der targetId in dessen
-// Zeilendaten (component.data - siehe loadedToolTargetIdKey) dem passenden
-// Eintrag aus loadedTargets zu.
+// jeden gefundenen "updateTool"-Button anhand des Anzeigenamens in dessen
+// Zeilendaten (component.data, Komponente "loadedTool") dem passenden Eintrag
+// aus loadedTargets zu. Es gibt in der loadedTools-Zeile bewusst kein eigenes
+// (verstecktes) Id-Feld: Formio's DataGrid entfernt beim internen Normalisieren
+// jeden Schlüssel, der keiner echten Zeilen-Komponente entspricht - ein zuvor
+// per grid.setValue() zusätzlich mitgegebenes "targetId" kam nie in den
+// Zeilendaten an. Der Anzeigename ("loadedTool") ist eine echte, persistente
+// Komponente und bleibt daher zuverlässig erhalten; er muss unter den
+// targetForms-Einträgen (config/targetForms.ts) eindeutig sein.
 function labelLoadedToolRowButtons(grid, loadedTargets) {
     if (typeof grid.everyComponent !== "function") {
         logger.warn(`"${loadedToolsKey}" unterstützt everyComponent() nicht, Versions-Beschriftung wird übersprungen.`);
@@ -5478,10 +5481,10 @@ function labelLoadedToolRowButtons(grid, loadedTargets) {
     grid.everyComponent((component) => {
         if (component.component?.key !== loadedToolUpdateButtonKey)
             return;
-        const targetId = component.data?.[loadedToolTargetIdKey];
-        const target = loadedTargets.find((t) => t.id === targetId);
+        const toolName = component.data?.[loadedToolNameKey];
+        const target = loadedTargets.find((t) => t.name === toolName);
         if (!target) {
-            logger.warn(`Zu Button "${loadedToolUpdateButtonKey}" konnte kein passendes Werkzeug (targetId "${targetId}") gefunden werden.`);
+            logger.warn(`Zu Button "${loadedToolUpdateButtonKey}" konnte kein passendes Werkzeug (Name "${toolName}") gefunden werden.`);
             return;
         }
         void labelLoadedToolRowButton(component, target);
@@ -5507,17 +5510,20 @@ async function labelLoadedToolRowButton(updateButton, target) {
  * Custom-Action des Update-Buttons "updateTool" innerhalb einer loadedTools-Zeile
  * (im Process Studio Formular-Editor als "updateTool(form, instance, data);"
  * konfiguriert - analog zu createOrUpdate/updateForm oben). "data" ist dabei die
- * Zeilendaten des DataGrids (enthält targetId, siehe populateLoadedTools), nicht
- * die gesamten Formulardaten. Patcht nur dieses eine Ziel-Formular in dforms
- * (per ensureTargetFormUpToDate), ohne es hier zu mounten - dafür weiterhin das
- * availableForms-Dropdown + createOrUpdate nutzen.
+ * Zeilendaten des DataGrids, nicht die gesamten Formulardaten - enthält also nur
+ * den Anzeigenamen (Komponente "loadedTool", siehe loadedToolNameKey), über den
+ * hier auf die passende targetForms-Konfiguration zurückgeschlossen wird (kein
+ * eigenes Id-Feld, siehe Kommentar bei labelLoadedToolRowButtons). Patcht nur
+ * dieses eine Ziel-Formular in dforms (per ensureTargetFormUpToDate), ohne es
+ * hier zu mounten - dafür weiterhin das availableForms-Dropdown + createOrUpdate
+ * nutzen.
  */
 async function updateTool(form, instance, data) {
-    const targetId = data?.[loadedToolTargetIdKey];
-    const target = targetForms_1.targetForms.find((t) => t.id === targetId);
+    const toolName = data?.[loadedToolNameKey];
+    const target = targetForms_1.targetForms.find((t) => t.name === toolName);
     if (!target) {
-        logger.error(`Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
-        await showErrorAlert("Werkzeug konnte nicht aktualisiert werden", `Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
+        logger.error(`Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
+        await showErrorAlert("Werkzeug konnte nicht aktualisiert werden", `Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
         return;
     }
     instance.component.disabled = true;
@@ -5559,14 +5565,14 @@ async function openTargetFormInNewTab(target) {
  * Custom-Action des Buttons "openForm" innerhalb einer loadedTools-Zeile
  * (im Process Studio Formular-Editor als "openForm(form, instance, data);"
  * konfiguriert - analog zu updateTool oben). "data" ist dabei die Zeilendaten
- * des DataGrids (enthält targetId, siehe populateLoadedTools).
+ * des DataGrids (enthält den Anzeigenamen, siehe loadedToolNameKey).
  */
 async function openForm(form, instance, data) {
-    const targetId = data?.[loadedToolTargetIdKey];
-    const target = targetForms_1.targetForms.find((t) => t.id === targetId);
+    const toolName = data?.[loadedToolNameKey];
+    const target = targetForms_1.targetForms.find((t) => t.name === toolName);
     if (!target) {
-        logger.error(`Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
-        await showErrorAlert("Formular konnte nicht geöffnet werden", `Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
+        logger.error(`Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
+        await showErrorAlert("Formular konnte nicht geöffnet werden", `Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
         return;
     }
     instance.component.disabled = true;
@@ -5665,8 +5671,7 @@ async function createOrUpdate(form, instance, data) {
         // Dropdown/Grid neu abgleichen, damit das gerade angelegte Werkzeug aus
         // availableForms verschwindet und in loadedTools auftaucht.
         void refreshToolLists(form);
-        await openTargetFormInNewTab(target);
-        await showSuccessAlert("Erfolgreich geladen", `Formular "${target.name}" wurde angelegt/aktualisiert und in einem neuen Tab geöffnet.`);
+        await showSuccessAlert("Erfolgreich geladen", `Formular "${target.name}" wurde angelegt`);
     }
     catch (error) {
         logger.error(`Fehler beim Laden von Formular "${target.name}": ${error}`);
