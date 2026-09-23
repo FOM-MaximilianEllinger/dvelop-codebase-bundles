@@ -5271,7 +5271,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 28;
+const TOOLBOX_VERSION_COUNTER = 29;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5538,14 +5538,28 @@ async function updateTool(form, instance, data) {
 }
 window.updateTool = updateTool;
 /**
+ * Öffnet ein Ziel-Formular in einem neuen Browser-Tab - dafür wird der von
+ * dforms selbst gelieferte "view"-Link genutzt (siehe getForm._links.view),
+ * statt eine URL zu erraten. Wird sowohl vom "openForm"-Button einer
+ * loadedTools-Zeile als auch direkt nach dem Anlegen/Aktualisieren über
+ * createOrUpdate aufgerufen, damit ein Tool in beiden Fällen genau gleich
+ * geöffnet wird, statt es (wie früher) zusätzlich inline neben dem
+ * Toolbox-Formular zu mounten.
+ */
+async function openTargetFormInNewTab(target) {
+    const baseUri = window.location.origin;
+    const existing = await (0, getForm_1.getForm)(baseUri, NO_TOKEN, target.formId);
+    const viewHref = existing.body._links?.view?.href;
+    if (!viewHref) {
+        throw new Error(`dforms hat für Formular "${target.name}" keinen "view"-Link geliefert.`);
+    }
+    window.open(new URL(viewHref, baseUri).toString(), "_blank", "noopener,noreferrer");
+}
+/**
  * Custom-Action des Buttons "openForm" innerhalb einer loadedTools-Zeile
  * (im Process Studio Formular-Editor als "openForm(form, instance, data);"
  * konfiguriert - analog zu updateTool oben). "data" ist dabei die Zeilendaten
- * des DataGrids (enthält targetId, siehe populateLoadedTools). Öffnet das
- * Ziel-Formular in einem neuen Browser-Tab, statt es wie createOrUpdate inline
- * neben dem Toolbox-Formular zu mounten - dafür wird der von dforms selbst
- * gelieferte "view"-Link genutzt (siehe getForm._links.view), statt eine
- * URL zu erraten.
+ * des DataGrids (enthält targetId, siehe populateLoadedTools).
  */
 async function openForm(form, instance, data) {
     const targetId = data?.[loadedToolTargetIdKey];
@@ -5558,13 +5572,7 @@ async function openForm(form, instance, data) {
     instance.component.disabled = true;
     instance.redraw();
     try {
-        const baseUri = window.location.origin;
-        const existing = await (0, getForm_1.getForm)(baseUri, NO_TOKEN, target.formId);
-        const viewHref = existing.body._links?.view?.href;
-        if (!viewHref) {
-            throw new Error(`dforms hat für Formular "${target.name}" keinen "view"-Link geliefert.`);
-        }
-        window.open(new URL(viewHref, baseUri).toString(), "_blank", "noopener,noreferrer");
+        await openTargetFormInNewTab(target);
     }
     catch (error) {
         logger.error(`Fehler beim Öffnen von "${target.name}": ${getErrorMessage(error)}`);
@@ -5576,26 +5584,6 @@ async function openForm(form, instance, data) {
     }
 }
 window.openForm = openForm;
-const CONTENT_CSS_STYLE_ID = "form-loader-content-css";
-const CONTENT_MOUNT_ID = "form-loader-content-mount";
-// Aktuell aktive Ziel-Formular-Instanz (falls schon eins geladen wurde) sowie ihr
-// Mount-Element. Beides lebt außerhalb des Formio-Schemas des Loaders (reines
-// Code-Element), damit die Auswahl/der Button des Loaders nach dem Laden weiter
-// erreichbar bleiben und man das Ziel-Formular wechseln kann.
-let activeForm = null;
-let activeMountElement = null;
-function getOrCreateMountElement(form) {
-    if (activeMountElement)
-        return activeMountElement;
-    let mount = document.getElementById(CONTENT_MOUNT_ID);
-    if (!mount) {
-        mount = document.createElement("div");
-        mount.id = CONTENT_MOUNT_ID;
-        form.element.insertAdjacentElement("afterend", mount);
-    }
-    activeMountElement = mount;
-    return mount;
-}
 /**
  * Holt zuerst den aktuellen Bundle-Inhalt (customJs) des Ziel-Projekts direkt aus dem
  * öffentlichen Artefakt-Repo (kein Auth nötig, dasselbe Repo, in das
@@ -5658,11 +5646,11 @@ async function loadLatestBundle(bundlePath) {
     return await response.text();
 }
 /**
- * Lädt das ausgewählte Ziel-Formular in ein separates Mount-Element neben dem
- * Loader-Formular. Existiert dort noch kein Ziel-Formular ("gibt es nicht"), wird es
- * per Formio.createForm neu angelegt; läuft dort bereits eines, wird nur dessen
- * Definition per setForm() aktualisiert, statt es zu zerstören und neu aufzubauen.
- * Anschließend wird das customJs des Ziel-Formulars ausgeführt.
+ * Legt das ausgewählte Ziel-Formular an bzw. aktualisiert es (ensureTargetFormUpToDate)
+ * und öffnet es anschließend in einem neuen Tab - genau wie der "openForm"-Button
+ * einer loadedTools-Zeile, nur direkt im Anschluss ans Anlegen. Kein inline-Mounten
+ * mehr neben dem Toolbox-Formular (siehe openTargetFormInNewTab): so verhält sich
+ * ein frisch angelegtes Tool identisch zu einem bereits geladenen.
  */
 async function createOrUpdate(form, instance, data) {
     const targetId = data.availableForms;
@@ -5673,27 +5661,12 @@ async function createOrUpdate(form, instance, data) {
         return;
     }
     try {
-        const definition = await ensureTargetFormUpToDate(target);
-        injectContentCss(definition.customCss);
-        if (!window.Formio) {
-            throw new Error("Formio ist im aktuellen Kontext nicht verfügbar.");
-        }
-        const mountElement = getOrCreateMountElement(form);
-        if (!activeForm) {
-            logger.debug(`Kein Ziel-Formular aktiv, lege "${target.name}" neu an.`);
-            activeForm = await window.Formio.createForm(mountElement, definition.formioFormDefinition);
-        }
-        else {
-            logger.debug(`Ziel-Formular bereits aktiv, aktualisiere auf "${target.name}".`);
-            await activeForm.setForm(definition.formioFormDefinition);
-        }
-        runContentCustomJs(definition.customJs, activeForm);
-        // Kein window.location.reload() hier (anders als bei updateTool/updateForm),
-        // weil das gerade gemountete Ziel-Formular sonst wieder verschwinden würde -
-        // stattdessen Dropdown/Grid ohne Neuladen neu abgleichen, damit das gerade
-        // angelegte Werkzeug aus availableForms verschwindet und in loadedTools auftaucht.
+        await ensureTargetFormUpToDate(target);
+        // Dropdown/Grid neu abgleichen, damit das gerade angelegte Werkzeug aus
+        // availableForms verschwindet und in loadedTools auftaucht.
         void refreshToolLists(form);
-        await showSuccessAlert("Erfolgreich geladen", `Formular "${target.name}" wurde angelegt/aktualisiert und geladen.`);
+        await openTargetFormInNewTab(target);
+        await showSuccessAlert("Erfolgreich geladen", `Formular "${target.name}" wurde angelegt/aktualisiert und in einem neuen Tab geöffnet.`);
     }
     catch (error) {
         logger.error(`Fehler beim Laden von Formular "${target.name}": ${error}`);
@@ -5745,34 +5718,6 @@ async function updateForm(form, instance, data) {
     }
 }
 window.updateForm = updateForm;
-function injectContentCss(css) {
-    let styleEl = document.getElementById(CONTENT_CSS_STYLE_ID);
-    if (!styleEl) {
-        styleEl = document.createElement("style");
-        styleEl.id = CONTENT_CSS_STYLE_ID;
-        document.head.appendChild(styleEl);
-    }
-    styleEl.textContent = css ?? "";
-}
-// Führt das customJs des Ziel-Formulars aus (registriert dessen eigenes
-// window.formInit) und ruft es danach manuell auf, da Process Studio das nur für
-// das ursprünglich deployte Formular automatisch tut.
-function runContentCustomJs(customJs, newForm) {
-    if (!customJs)
-        return;
-    try {
-        // eslint-disable-next-line no-new-func
-        const run = new Function(customJs);
-        run();
-    }
-    catch (error) {
-        logger.error(`Fehler beim Ausführen des customJs: ${error}`);
-        return;
-    }
-    if (typeof window.formInit === "function") {
-        void window.formInit(newForm, newForm.data);
-    }
-}
 
 
 /***/ }
