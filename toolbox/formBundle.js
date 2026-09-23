@@ -5277,7 +5277,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 34;
+const TOOLBOX_VERSION_COUNTER = 35;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5499,22 +5499,51 @@ function labelLoadedToolRowButtons(grid, loadedTargets) {
             logger.warn(`Zu Button "${loadedToolUpdateButtonKey}" konnte kein passendes Werkzeug (Name "${toolName}") gefunden werden.`);
             return;
         }
+        // Sicherer Default, bis die (asynchrone) Versionsprüfung unten fertig ist -
+        // sonst wäre der Button kurzzeitig klickbar, bevor bekannt ist, ob
+        // überhaupt eine neuere Version existiert.
+        component.component.disabled = true;
+        component.redraw();
         void labelLoadedToolRowButton(component, target);
     });
 }
-// Lädt das Bundle des Tools und beschriftet den übergebenen Button-Instance
-// mit dessen aktuell veröffentlichter Version.
+// Ermittelt sowohl die aktuell in dforms installierte Version dieses Tools
+// (aus dessen eigenem customJs, per getForm - das Tool läuft nicht mehr inline
+// im Toolbox-Kontext, es gibt also keine lokale Konstante dafür) als auch die
+// zuletzt auf GitHub veröffentlichte Version (per loadLatestBundle) und
+// beschriftet + (de)aktiviert den übergebenen Button entsprechend - analog zu
+// enableUpdateButtonIfNewerVersionAvailable für den Toolbox-eigenen
+// Update-Button.
 async function labelLoadedToolRowButton(updateButton, target) {
     try {
-        const bundleContent = await loadLatestBundle(target.bundlePath);
+        const baseUri = window.location.origin;
         const versionPattern = new RegExp(`${target.versionConstantName}\\s*=\\s*(\\d+)`);
-        const match = bundleContent.match(versionPattern);
-        const version = match ? match[1] : "?";
-        updateButton.label = `Aktualisieren (Version ${version})`;
+        const [existing, remoteBundleContent] = await Promise.all([
+            (0, getForm_1.getForm)(baseUri, NO_TOKEN, target.formId),
+            loadLatestBundle(target.bundlePath),
+        ]);
+        const remoteMatch = remoteBundleContent.match(versionPattern);
+        if (!remoteMatch) {
+            logger.warn(`Version im veröffentlichten Bundle von "${target.name}" konnte nicht ermittelt werden.`);
+            updateButton.label = "Aktualisieren";
+            updateButton.component.disabled = false;
+            updateButton.redraw();
+            return;
+        }
+        const installedMatch = existing.body.definition.customJs?.match(versionPattern);
+        const remoteVersion = parseInt(remoteMatch[1], 10);
+        const installedVersion = installedMatch ? parseInt(installedMatch[1], 10) : undefined;
+        updateButton.label = `Aktualisieren (Version ${remoteVersion})`;
+        // Kein Update nötig, wenn die installierte Version bereits >= der
+        // veröffentlichten ist. Ist die installierte Version nicht ermittelbar
+        // (z.B. Editor-Schema ohne unseren Versionskommentar), sicherheitshalber
+        // aktiv lassen statt ein mögliches Update zu blockieren.
+        updateButton.component.disabled = installedVersion !== undefined && remoteVersion <= installedVersion;
     }
     catch (error) {
         logger.error(`Fehler beim Ermitteln der Version von "${target.name}": ${getErrorMessage(error)}`);
         updateButton.label = "Aktualisieren";
+        updateButton.component.disabled = false;
     }
     updateButton.redraw();
 }
