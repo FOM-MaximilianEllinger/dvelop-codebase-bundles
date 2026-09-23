@@ -5206,13 +5206,13 @@ exports.targetForms = void 0;
 // eigenständig deploybar ist.
 exports.targetForms = [
     {
-        id: "removeUnusedWorkflows",
-        name: "Ungenutzte Workflows entfernen",
-        description: "Entfernt Workflows, die in keinem Prozess mehr referenziert werden.",
+        id: "processAdministration",
+        name: "Prozess-Administration",
+        description: "Verwaltet die Prozesse in der Systemumgebung.",
         formId: "2c3e00b6-8e00-4a27-9a9e-2b5dee133ca7",
-        bundlePath: "removeUnusedWorkflows/bundle.js",
-        formDefinitionPath: "removeUnusedWorkflows/form.json",
-        versionConstantName: "REMOVEUNUSEDWORKFLOWS_VERSION_COUNTER",
+        bundlePath: "processAdministration/bundle.js",
+        formDefinitionPath: "processAdministration/form.json",
+        versionConstantName: "PROCESSADMINISTRATION_VERSION_COUNTER",
     },
 ];
 
@@ -5259,7 +5259,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 26;
+const TOOLBOX_VERSION_COUNTER = 27;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5525,6 +5525,45 @@ async function updateTool(form, instance, data) {
     }
 }
 window.updateTool = updateTool;
+/**
+ * Custom-Action des Buttons "openForm" innerhalb einer loadedTools-Zeile
+ * (im Process Studio Formular-Editor als "openForm(form, instance, data);"
+ * konfiguriert - analog zu updateTool oben). "data" ist dabei die Zeilendaten
+ * des DataGrids (enthält targetId, siehe populateLoadedTools). Öffnet das
+ * Ziel-Formular in einem neuen Browser-Tab, statt es wie createOrUpdate inline
+ * neben dem Toolbox-Formular zu mounten - dafür wird der von dforms selbst
+ * gelieferte "view"-Link genutzt (siehe getForm._links.view), statt eine
+ * URL zu erraten.
+ */
+async function openForm(form, instance, data) {
+    const targetId = data?.[loadedToolTargetIdKey];
+    const target = targetForms_1.targetForms.find((t) => t.id === targetId);
+    if (!target) {
+        logger.error(`Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
+        await showErrorAlert("Formular konnte nicht geöffnet werden", `Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
+        return;
+    }
+    instance.component.disabled = true;
+    instance.redraw();
+    try {
+        const baseUri = window.location.origin;
+        const existing = await (0, getForm_1.getForm)(baseUri, NO_TOKEN, target.formId);
+        const viewHref = existing.body._links?.view?.href;
+        if (!viewHref) {
+            throw new Error(`dforms hat für Formular "${target.name}" keinen "view"-Link geliefert.`);
+        }
+        window.open(new URL(viewHref, baseUri).toString(), "_blank", "noopener,noreferrer");
+    }
+    catch (error) {
+        logger.error(`Fehler beim Öffnen von "${target.name}": ${getErrorMessage(error)}`);
+        await showErrorAlert(`Fehler beim Öffnen von "${target.name}"`, error);
+    }
+    finally {
+        instance.component.disabled = false;
+        instance.redraw();
+    }
+}
+window.openForm = openForm;
 const CONTENT_CSS_STYLE_ID = "form-loader-content-css";
 const CONTENT_MOUNT_ID = "form-loader-content-mount";
 // Aktuell aktive Ziel-Formular-Instanz (falls schon eins geladen wurde) sowie ihr
