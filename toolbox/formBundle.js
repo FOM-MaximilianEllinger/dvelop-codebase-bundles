@@ -5259,27 +5259,22 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 25;
+const TOOLBOX_VERSION_COUNTER = 26;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
 // Die Helper (getForm/createForm/patchForm) erwarten trotzdem einen Token-Parameter
 // für den Authorization-Header – der bleibt hier bewusst leer.
 const NO_TOKEN = "";
-function onInitialization(form, instance, data) {
+function formInit(form, data) {
     logger.debug("FormLoader initialisiert.");
-    // "form" ist hier keine live Formio-Komponente (kein .getComponent), nur
-    // "instance" ist der tatsächlich gerenderte Formular-Root - deshalb überall
-    // instance statt form für Komponenten-Zugriffe verwenden.
-    setupAvailableFormsSelector(form, instance, data);
-    populateVersionCounter(form, instance, data);
-    void refreshToolLists(form, instance, data);
+    setupAvailableFormsSelector(form);
+    populateVersionCounter(form);
+    void refreshToolLists(form);
     document.addEventListener("keydown", function (event) {
         if (event.ctrlKey && event.key === "F1") {
             console.log("form");
             console.dir(form);
-            console.log("instance");
-            console.dir(instance);
             console.log("data");
             console.dir(data);
             console.log("document");
@@ -5288,17 +5283,17 @@ function onInitialization(form, instance, data) {
     });
 }
 ;
-window.onInitialization = onInitialization;
+window.formInit = formInit;
 // Registriert den change-Listener der Select-Komponente "availableForms" -
 // einmalig beim Formular-Init, damit er bei einem erneuten Befüllen (siehe
 // populateAvailableForms, z.B. nach createOrUpdate) nicht mehrfach hängt.
-function setupAvailableFormsSelector(form, instance, data) {
-    const selector = instance.getComponent("availableForms");
+function setupAvailableFormsSelector(form) {
+    const selector = form.getComponent("availableForms");
     if (!selector) {
         logger.warn('Komponente "availableForms" nicht im Formular gefunden.');
         return;
     }
-    selector.on("change", () => updateToolDescription(form, instance, data, selector.getValue()));
+    selector.on("change", () => updateToolDescription(form, selector.getValue()));
 }
 // Setzt die Auswahl-Optionen der Select-Komponente "availableForms" auf die
 // übergebenen (noch nicht in dforms angelegten) targetForms-Einträge - siehe
@@ -5306,8 +5301,8 @@ function setupAvailableFormsSelector(form, instance, data) {
 // aufteilt, was hier im Dropdown und was im loadedTools-Grid landet. Key an
 // das tatsächliche Feld im Formio-Schema (Process Studio Formular-Editor)
 // anpassen, falls abweichend benannt.
-function populateAvailableForms(form, instance, data, availableTargets) {
-    const selector = instance.getComponent("availableForms");
+function populateAvailableForms(form, availableTargets) {
+    const selector = form.getComponent("availableForms");
     if (!selector) {
         logger.warn('Komponente "availableForms" nicht im Formular gefunden.');
         return;
@@ -5316,7 +5311,7 @@ function populateAvailableForms(form, instance, data, availableTargets) {
         values: availableTargets.map((t) => ({ label: t.name, value: t.id })),
     };
     selector.redraw();
-    updateToolDescription(form, instance, data, selector.getValue());
+    updateToolDescription(form, selector.getValue());
 }
 // Lädt einmalig die vollständige dforms-Formularliste und teilt die
 // kuratierten targetForms (config/targetForms.ts) danach auf: Werkzeuge, die
@@ -5326,7 +5321,7 @@ function populateAvailableForms(form, instance, data, availableTargets) {
 // Wird beim Formular-Init sowie nach jedem createOrUpdate erneut aufgerufen,
 // damit ein frisch angelegtes Werkzeug direkt vom Dropdown ins Grid wandert,
 // ohne dass die Seite neu geladen werden muss.
-async function refreshToolLists(form, instance, data) {
+async function refreshToolLists(form) {
     try {
         const baseUri = window.location.origin;
         const allForms = await (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN);
@@ -5340,21 +5335,21 @@ async function refreshToolLists(form, instance, data) {
         const loadedTargets = targetForms_1.targetForms.filter(isAlreadyLoaded);
         logger.warn(`refreshToolLists: verfügbar=[${availableTargets.map((t) => t.name).join(", ")}], ` +
             `geladen=[${loadedTargets.map((t) => t.name).join(", ")}]`);
-        populateAvailableForms(form, instance, data, availableTargets);
-        populateLoadedTools(form, instance, data, loadedTargets);
+        populateAvailableForms(form, availableTargets);
+        void populateLoadedTools(form, loadedTargets);
     }
     catch (error) {
         logger.error(`Fehler beim Ermitteln bereits angelegter Werkzeuge: ${getErrorMessage(error)}`);
         // Fallback: Dropdown zeigt sicherheitshalber alle kuratierten Werkzeuge an,
         // statt eines, das eigentlich schon geladen ist, dauerhaft zu verstecken.
-        populateAvailableForms(form, instance, data, targetForms_1.targetForms);
+        populateAvailableForms(form, targetForms_1.targetForms);
     }
 }
 const toolDescriptionKey = "toolDescription";
 // Zeigt die Beschreibung des im Dropdown "availableForms" ausgewählten Eintrags
 // (siehe config/targetForms.ts) in der Content-Komponente "toolDescription" an.
-function updateToolDescription(form, instance, data, selectedTargetId) {
-    const descriptionComponent = instance.getComponent(toolDescriptionKey);
+function updateToolDescription(form, selectedTargetId) {
+    const descriptionComponent = form.getComponent(toolDescriptionKey);
     if (!descriptionComponent) {
         logger.warn(`Komponente "${toolDescriptionKey}" nicht im Formular gefunden.`);
         return;
@@ -5368,10 +5363,10 @@ function updateToolDescription(form, instance, data, selectedTargetId) {
 // diesem Key (z.B. readonly Textfeld) im Process Studio Formular-Editor
 // anzeigen lässt.
 const updateFormKey = "updateForm";
-function populateVersionCounter(form, instance, data) {
+function populateVersionCounter(form) {
     form.data[updateFormKey] = TOOLBOX_VERSION_COUNTER;
     // Holen der Update-Schaltfläche aus dem Formular.
-    const updateButton = instance.getComponent(updateFormKey);
+    const updateButton = form.getComponent(updateFormKey);
     if (!updateButton) {
         logger.warn(`Komponente "${updateFormKey}" nicht im Formular gefunden.`);
         return;
@@ -5431,8 +5426,8 @@ const loadedToolTargetIdKey = "targetId";
 // Platzhalter-Zeile an. Mit "Initialize Empty" startet das Grid mit 0 Zeilen,
 // und nur wenn hier tatsächlich bereits angelegte Werkzeuge übergeben werden,
 // wird das Grid befüllt - andernfalls bleibt es unangetastet leer.
-function populateLoadedTools(form, instance, data, loadedTargets) {
-    const grid = instance.getComponent(loadedToolsKey);
+async function populateLoadedTools(form, loadedTargets) {
+    const grid = form.getComponent(loadedToolsKey);
     if (!grid) {
         logger.warn(`Komponente "${loadedToolsKey}" nicht im Formular gefunden.`);
         return;
@@ -5443,7 +5438,16 @@ function populateLoadedTools(form, instance, data, loadedTargets) {
     }
     logger.warn(`populateLoadedTools: befülle "${loadedToolsKey}" mit ${loadedTargets.length} Zeile(n): ${loadedTargets.map((t) => t.name).join(", ")}`);
     grid.setValue(loadedTargets.map((t) => ({ [loadedToolNameKey]: t.name, [loadedToolTargetIdKey]: t.id })));
-    grid.redraw();
+    // grid.redraw() alleine hat das DataGrid nach einem programmatischen setValue()
+    // zuvor nicht sichtbar neu gezeichnet (Daten waren laut Diagnose-Logs korrekt
+    // gesetzt, UI blieb aber leer) - rebuild() erzwingt einen kompletten Neuaufbau
+    // der Zeilen-Komponenten aus den aktuellen Daten.
+    if (typeof grid.rebuild === "function") {
+        await grid.rebuild();
+    }
+    else {
+        grid.redraw();
+    }
     labelLoadedToolRowButtons(grid, loadedTargets);
 }
 // Beschriftet pro Zeile den Update-Button mit der aktuell veröffentlichten
@@ -5637,12 +5641,7 @@ async function createOrUpdate(form, instance, data) {
         // weil das gerade gemountete Ziel-Formular sonst wieder verschwinden würde -
         // stattdessen Dropdown/Grid ohne Neuladen neu abgleichen, damit das gerade
         // angelegte Werkzeug aus availableForms verschwindet und in loadedTools auftaucht.
-        // refreshToolLists/populateLoadedTools/populateAvailableForms nutzen intern
-        // instance.getComponent(...). Hier in createOrUpdate ist "instance" aber der
-        // auslösende Button (aus dessen eigener Custom-Action), nicht das Formular -
-        // "form" ist hier der Wert mit funktionierendem .getComponent(), deshalb an
-        // beiden Stellen form übergeben.
-        void refreshToolLists(form, form, data);
+        void refreshToolLists(form);
         await showSuccessAlert("Erfolgreich geladen", `Formular "${target.name}" wurde angelegt/aktualisiert und geladen.`);
     }
     catch (error) {
