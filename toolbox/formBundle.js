@@ -5277,7 +5277,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 33;
+const TOOLBOX_VERSION_COUNTER = 34;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5563,32 +5563,16 @@ async function updateTool(form, instance, data) {
 }
 window.updateTool = updateTool;
 /**
- * Öffnet ein Ziel-Formular in einem neuen Browser-Tab - dafür wird der von
- * dforms selbst gelieferte "view"-Link genutzt (siehe getForm._links.view),
- * statt eine URL zu erraten. Wird sowohl vom "openForm"-Button einer
- * loadedTools-Zeile als auch direkt nach dem Anlegen/Aktualisieren über
- * createOrUpdate aufgerufen, damit ein Tool in beiden Fällen genau gleich
- * geöffnet wird, statt es (wie früher) zusätzlich inline neben dem
- * Toolbox-Formular zu mounten.
- */
-async function openTargetFormInNewTab(target) {
-    const baseUri = window.location.origin;
-    const existing = await (0, getForm_1.getForm)(baseUri, NO_TOKEN, target.formId);
-    const viewHref = existing.body._links?.view?.href;
-    if (!viewHref) {
-        throw new Error(`dforms hat für Formular "${target.name}" keinen "view"-Link geliefert.`);
-    }
-    window.open(new URL(viewHref, baseUri).toString(), "_blank", "noopener,noreferrer");
-}
-/**
  * Custom-Action des Buttons "openForm" innerhalb einer loadedTools-Zeile
  * (im Process Studio Formular-Editor als "openForm(form, instance, data);"
  * konfiguriert - analog zu updateTool oben).
  */
 async function openForm(form, instance, data) {
-    const toolName = getLoadedToolNameFromRowButton(instance, data);
-    const target = targetForms_1.targetForms.find((t) => t.name === toolName);
-    if (!target) {
+    const toolName = instance._data.loadedTool;
+    const baseUri = window.location.origin;
+    const allForms = await (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN);
+    const targetForm = allForms.body.forms.find((f) => f.id === targetForms_1.targetForms.find((t) => t.name === toolName)?.formId);
+    if (!targetForm) {
         logger.error(`Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
         await showErrorAlert("Formular konnte nicht geöffnet werden", `Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
         return;
@@ -5596,11 +5580,18 @@ async function openForm(form, instance, data) {
     instance.component.disabled = true;
     instance.redraw();
     try {
-        await openTargetFormInNewTab(target);
+        // targetForm kommt bereits aus der frisch geladenen allForms-Liste (siehe
+        // oben) und enthält den "view"-Link direkt - kein zweiter getForm-Aufruf
+        // nötig, um an die URL zu kommen.
+        const viewHref = targetForm._links?.view?.href;
+        if (!viewHref) {
+            throw new Error(`dforms hat für Formular "${toolName}" keinen "view"-Link geliefert.`);
+        }
+        window.open(new URL(viewHref, baseUri).toString(), "_blank", "noopener,noreferrer");
     }
     catch (error) {
-        logger.error(`Fehler beim Öffnen von "${target.name}": ${getErrorMessage(error)}`);
-        await showErrorAlert(`Fehler beim Öffnen von "${target.name}"`, error);
+        logger.error(`Fehler beim Öffnen von "${toolName}": ${getErrorMessage(error)}`);
+        await showErrorAlert(`Fehler beim Öffnen von "${toolName}"`, error);
     }
     finally {
         instance.component.disabled = false;
@@ -5670,11 +5661,9 @@ async function loadLatestBundle(bundlePath) {
     return await response.text();
 }
 /**
- * Legt das ausgewählte Ziel-Formular an bzw. aktualisiert es (ensureTargetFormUpToDate)
- * und öffnet es anschließend in einem neuen Tab - genau wie der "openForm"-Button
- * einer loadedTools-Zeile, nur direkt im Anschluss ans Anlegen. Kein inline-Mounten
- * mehr neben dem Toolbox-Formular (siehe openTargetFormInNewTab): so verhält sich
- * ein frisch angelegtes Tool identisch zu einem bereits geladenen.
+ * Legt das ausgewählte Ziel-Formular an bzw. aktualisiert es (ensureTargetFormUpToDate),
+ * ohne es inline neben dem Toolbox-Formular zu mounten. Zum Öffnen danach den
+ * "öffnen"-Button der neu in loadedTools erscheinenden Zeile nutzen (siehe openForm).
  */
 async function createOrUpdate(form, instance, data) {
     const targetId = data.availableForms;
