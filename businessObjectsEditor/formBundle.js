@@ -204,7 +204,7 @@ const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // projects/Toolbox/src/form.ts: wird von publish-bundles.yml bei jedem
 // Publish automatisch um 1 erhöht, damit die Toolbox (loadedTools-Grid)
 // erkennen kann, ob auf GitHub eine neuere Version dieses Tools liegt.
-const BUSINESSOBJECTSEDITOR_VERSION_COUNTER = 5;
+const BUSINESSOBJECTSEDITOR_VERSION_COUNTER = 6;
 const BASE_URI = window.location.origin;
 const GET_HEADERS = { 'Accept': 'application/json' };
 function loadBootstrap() {
