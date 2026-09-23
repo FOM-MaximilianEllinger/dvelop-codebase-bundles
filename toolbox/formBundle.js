@@ -5277,7 +5277,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 32;
+const TOOLBOX_VERSION_COUNTER = 33;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5518,20 +5518,27 @@ async function labelLoadedToolRowButton(updateButton, target) {
     }
     updateButton.redraw();
 }
+// Ermittelt den Anzeigenamen (Komponente "loadedTool") der loadedTools-Zeile,
+// in der ein Button (openForm/updateTool) sitzt. Der "data"-Parameter, den
+// dforms Custom-Actions für Buttons innerhalb eines DataGrids übergibt, ist
+// dabei NICHT die Zeilendaten, sondern der Inhalt des gesamten Grids (Array
+// aller Zeilen) - per Diagnose bestätigt. instance.data zeigt dagegen
+// zuverlässig auf genau die Zeile, in der die Button-Instanz sitzt (Formio
+// hält für Komponenten innerhalb eines DataGrids deren .data-Property immer
+// auf den lokalen Zeilenkontext, siehe auch component.data in
+// labelLoadedToolRowButtons oben).
+function getLoadedToolNameFromRowButton(instance, data) {
+    return instance?.data?.[loadedToolNameKey] ?? data?.[loadedToolNameKey];
+}
 /**
  * Custom-Action des Update-Buttons "updateTool" innerhalb einer loadedTools-Zeile
  * (im Process Studio Formular-Editor als "updateTool(form, instance, data);"
- * konfiguriert - analog zu createOrUpdate/updateForm oben). "data" ist dabei die
- * Zeilendaten des DataGrids, nicht die gesamten Formulardaten - enthält also nur
- * den Anzeigenamen (Komponente "loadedTool", siehe loadedToolNameKey), über den
- * hier auf die passende targetForms-Konfiguration zurückgeschlossen wird (kein
- * eigenes Id-Feld, siehe Kommentar bei labelLoadedToolRowButtons). Patcht nur
- * dieses eine Ziel-Formular in dforms (per ensureTargetFormUpToDate), ohne es
- * hier zu mounten - dafür weiterhin das availableForms-Dropdown + createOrUpdate
- * nutzen.
+ * konfiguriert - analog zu createOrUpdate/updateForm oben). Patcht nur dieses
+ * eine Ziel-Formular in dforms (per ensureTargetFormUpToDate), ohne es hier zu
+ * mounten - dafür weiterhin das availableForms-Dropdown + createOrUpdate nutzen.
  */
 async function updateTool(form, instance, data) {
-    const toolName = data?.[loadedToolNameKey];
+    const toolName = getLoadedToolNameFromRowButton(instance, data);
     const target = targetForms_1.targetForms.find((t) => t.name === toolName);
     if (!target) {
         logger.error(`Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
@@ -5576,11 +5583,10 @@ async function openTargetFormInNewTab(target) {
 /**
  * Custom-Action des Buttons "openForm" innerhalb einer loadedTools-Zeile
  * (im Process Studio Formular-Editor als "openForm(form, instance, data);"
- * konfiguriert - analog zu updateTool oben). "data" ist dabei die Zeilendaten
- * des DataGrids (enthält den Anzeigenamen, siehe loadedToolNameKey).
+ * konfiguriert - analog zu updateTool oben).
  */
 async function openForm(form, instance, data) {
-    const toolName = data?.[loadedToolNameKey];
+    const toolName = getLoadedToolNameFromRowButton(instance, data);
     const target = targetForms_1.targetForms.find((t) => t.name === toolName);
     if (!target) {
         logger.error(`Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
