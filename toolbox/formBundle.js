@@ -5271,7 +5271,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 30;
+const TOOLBOX_VERSION_COUNTER = 31;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5280,9 +5280,15 @@ const TOOLBOX_VERSION_COUNTER = 30;
 const NO_TOKEN = "";
 function onInitialization(form, instance, data) {
     logger.debug("FormLoader initialisiert.");
-    setupAvailableFormsSelector(form);
-    populateVersionCounter(form);
-    void refreshToolLists(form);
+    // Anders als bei den Button-Custom-Actions (openForm/updateTool/createOrUpdate,
+    // wo "form" die tatsächliche Formio-Webform ist) liefert dieser Init-Hook in
+    // "form" kein Objekt mit getComponent() - die echte Webform steckt in
+    // instance.root (gleiches Muster wie onFormLoad in
+    // projects/CostAccountingWorkflow und projects/GeneralCostAccountingWorkflow).
+    const webform = instance.root;
+    setupAvailableFormsSelector(webform);
+    populateVersionCounter(webform);
+    void refreshToolLists(webform);
     document.addEventListener("keydown", function (event) {
         if (event.ctrlKey && event.key === "F1") {
             console.log("form");
