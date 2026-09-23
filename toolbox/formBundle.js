@@ -5089,6 +5089,12 @@ async function getAllForms(baseUri, token) {
     const options = {
         method: "GET",
         headers,
+        // Ohne dies liefert der Browser bei wiederholten GETs auf dieselbe URL
+        // innerhalb der Session teils eine gecachte Antwort zurück - sichtbar z.B.
+        // in der Toolbox, deren loadedTools-Grid dann bereits gelöschte Formulare
+        // weiterhin als "vorhanden" anzeigt, obwohl sie in dforms nicht mehr
+        // existieren. Diese Liste muss immer den aktuellen Stand widerspiegeln.
+        cache: "no-store",
     };
     return await (0, performHttpRequest_1.performHttpRequest)(url, options);
 }
@@ -5271,7 +5277,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 31;
+const TOOLBOX_VERSION_COUNTER = 32;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
