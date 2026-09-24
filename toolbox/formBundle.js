@@ -5102,6 +5102,152 @@ async function getAllForms(baseUri, token) {
 
 /***/ },
 
+/***/ "../../helper/scripting/createScript.ts"
+/*!**********************************************!*\
+  !*** ../../helper/scripting/createScript.ts ***!
+  \**********************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.createScript = createScript;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+async function createScript(baseUri, token, name) {
+    const url = `${baseUri}/scripting/script`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const body = {
+        name: name
+    };
+    const options = {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/scripting/getAllScripts.ts"
+/*!***********************************************!*\
+  !*** ../../helper/scripting/getAllScripts.ts ***!
+  \***********************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getAllScripts = getAllScripts;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+async function getAllScripts(baseUri, token) {
+    const url = `${baseUri}/scripting/script`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "GET",
+        headers
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/scripting/getScriptVersion.ts"
+/*!**************************************************!*\
+  !*** ../../helper/scripting/getScriptVersion.ts ***!
+  \**************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getScriptVersion = getScriptVersion;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+async function getScriptVersion(baseUri, token, scriptId) {
+    const url = `${baseUri}/scripting/script/${scriptId}/version`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "GET",
+        headers,
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/scripting/patchScript.ts"
+/*!*********************************************!*\
+  !*** ../../helper/scripting/patchScript.ts ***!
+  \*********************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PatchScript_Scriptbody_CustomerVariable = exports.PatchScript_Scriptbody_OutputProperty = exports.PatchScript_Scriptbody_InputProperty = exports.PatchScript_Scriptbody_Description = exports.PatchScript_Scriptbody_Action = exports.PatchScript_Scriptbody = void 0;
+exports.patchScript = patchScript;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+class PatchScript_Scriptbody {
+}
+exports.PatchScript_Scriptbody = PatchScript_Scriptbody;
+class PatchScript_Scriptbody_Action {
+}
+exports.PatchScript_Scriptbody_Action = PatchScript_Scriptbody_Action;
+class PatchScript_Scriptbody_Description {
+}
+exports.PatchScript_Scriptbody_Description = PatchScript_Scriptbody_Description;
+class PatchScript_Scriptbody_InputProperty {
+}
+exports.PatchScript_Scriptbody_InputProperty = PatchScript_Scriptbody_InputProperty;
+class PatchScript_Scriptbody_OutputProperty {
+}
+exports.PatchScript_Scriptbody_OutputProperty = PatchScript_Scriptbody_OutputProperty;
+class PatchScript_Scriptbody_CustomerVariable {
+}
+exports.PatchScript_Scriptbody_CustomerVariable = PatchScript_Scriptbody_CustomerVariable;
+/**
+ * Overrides a script version with the provided body content.
+ *
+ * @param baseUri - The base URI of the API endpoint.
+ * @param token - The authorization token to access the API.
+ * @param scriptId - The unique identifier of the script to override.
+ * @param scriptVersionId - The unique identifier of the script version to override.
+ * @param body - The content to override the script version with.
+ * @returns A promise that resolves to the API response containing the overridden script details.
+ */
+async function patchScript(baseUri, token, scriptId, scriptVersionId, body) {
+    const url = `${baseUri}/scripting/script/${scriptId}/version/${scriptVersionId}`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(body),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
 /***/ "../../helper/utils/logger.ts"
 /*!************************************!*\
   !*** ../../helper/utils/logger.ts ***!
@@ -5207,17 +5353,24 @@ exports.PUBLIC_BUNDLE_REPO_BASE_URL = "https://raw.githubusercontent.com/FOM-Max
 
 // AUTO-GENERIERT von projects/Toolbox/generateTargetForms.js - NICHT VON HAND
 // BEARBEITEN, jeder "npm run build"/"npm run watch" überschreibt diese Datei.
+// Trotzdem mit committet (nicht in .gitignore), damit der Editor/tsc sie auch
+// in einem frischen Checkout sofort findet, bevor irgendwer lokal gebaut hat -
+// ein veralteter committeter Stand ist unkritisch, da jeder Build (auch in CI)
+// sie ohnehin zuerst neu erzeugt.
 // Erfasst automatisch jeden projects/Toolbox_*-Ordner (außer Toolbox_Template*)
 // als Tool. Anzeigename/Beschreibung optional über <projekt>/toolbox.meta.json
-// ({"name": "...", "description": "..."}) anpassen, sonst wird beides aus dem
-// Ordnernamen abgeleitet. Formular-GUID wird deterministisch aus dem
+// ({"name": "...", "description": "...", "type": "form"|"script"}) anpassen,
+// sonst wird Name/Beschreibung aus dem Ordnernamen abgeleitet und "form"
+// angenommen. Formular-GUID (nur type "form") wird deterministisch aus dem
 // Ordnernamen abgeleitet (siehe generateTargetForms.js), außer für Tools in
 // dessen PINNED_FORM_IDS.
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.targetForms = void 0;
-// Kuratierte Liste der nachladbaren Content-Formulare - generiert, siehe oben.
+// Kuratierte Liste der nachladbaren Werkzeuge (Formulare und Scripts) -
+// generiert, siehe oben.
 exports.targetForms = [
     {
+        type: "form",
         id: "businesObjectsEditor",
         name: "Business Objects Editor",
         description: "Verwaltet Business-Objects-Modelle und deren Einträge (Anlegen, Bearbeiten, Löschen) direkt im Browser.",
@@ -5225,12 +5378,20 @@ exports.targetForms = [
         bundlePath: "businesObjectsEditor/formBundle.js",
     },
     {
+        type: "form",
         id: "processAdministration",
         name: "Prozess-Administration",
         description: "Verwaltet die Prozesse in der Systemumgebung.",
         formId: "2c3e00b6-8e00-4a27-9a9e-2b5dee133ca7",
         bundlePath: "processAdministration/formBundle.js",
         formDefinitionPath: "processAdministration/form.json",
+    },
+    {
+        type: "script",
+        id: "userLicenceCounter",
+        name: "User-Lizenz-Zähler",
+        description: "Zählt die lizenzrelevanten Benutzer (ohne technischen Benutzer und @gws.ms-Adressen) und liefert eine HTML-Tabelle mit den Details.",
+        bundlePath: "userLicenceCounter/scriptBundle.js",
     },
 ];
 
@@ -5254,6 +5415,10 @@ const createForm_1 = __webpack_require__(/*! ../../../helper/processstudio/creat
 const getAllForms_1 = __webpack_require__(/*! ../../../helper/processstudio/getAllForms */ "../../helper/processstudio/getAllForms.ts");
 const patchForm_1 = __webpack_require__(/*! ../../../helper/dforms/patchForm */ "../../helper/dforms/patchForm.ts");
 const newVersion_1 = __webpack_require__(/*! ../../../helper/dforms/newVersion */ "../../helper/dforms/newVersion.ts");
+const getAllScripts_1 = __webpack_require__(/*! ../../../helper/scripting/getAllScripts */ "../../helper/scripting/getAllScripts.ts");
+const createScript_1 = __webpack_require__(/*! ../../../helper/scripting/createScript */ "../../helper/scripting/createScript.ts");
+const getScriptVersion_1 = __webpack_require__(/*! ../../../helper/scripting/getScriptVersion */ "../../helper/scripting/getScriptVersion.ts");
+const patchScript_1 = __webpack_require__(/*! ../../../helper/scripting/patchScript */ "../../helper/scripting/patchScript.ts");
 const logger_1 = __webpack_require__(/*! ../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 const targetForms_1 = __webpack_require__(/*! ./config/targetForms */ "./src/config/targetForms.ts");
 const publicBundleRepo_1 = __webpack_require__(/*! ./config/publicBundleRepo */ "./src/config/publicBundleRepo.ts");
@@ -5277,7 +5442,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 36;
+const TOOLBOX_VERSION_COUNTER = 37;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5350,13 +5515,21 @@ function populateAvailableForms(form, availableTargets) {
 async function refreshToolLists(form) {
     try {
         const baseUri = window.location.origin;
-        const allForms = await (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN);
+        const [allForms, allScripts] = await Promise.all([
+            (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN),
+            (0, getAllScripts_1.getAllScripts)(baseUri, NO_TOKEN),
+        ]);
         // Diagnose (bewusst auf warn-Level, damit es in der Konsole nicht
-        // rausgefiltert wird): zeigt, ob getAllForms() die formId eines Tools
-        // überhaupt als "schon angelegt" erkennt.
-        logger.warn(`refreshToolLists: ${allForms.body.forms.length} Formulare in dforms gefunden. ` +
-            `targetForms: ${targetForms_1.targetForms.map((t) => `${t.name}=${t.formId}`).join(", ")}`);
-        const isAlreadyLoaded = (t) => allForms.body.forms.some((f) => f.id === t.formId);
+        // rausgefiltert wird): zeigt, ob ein Tool überhaupt als "schon angelegt"
+        // erkannt wird.
+        logger.warn(`refreshToolLists: ${allForms.body.forms.length} Formulare, ${allScripts.body.length} Scripts in dforms gefunden. ` +
+            `targetForms: ${targetForms_1.targetForms.map((t) => t.type === "form" ? `${t.name}=${t.formId}` : `${t.name}(script)`).join(", ")}`);
+        // Formulare werden über ihre feste formId erkannt, Scripts (die ihre GUID
+        // serverseitig bei createScript bekommen, siehe TargetScriptEntry) über
+        // ihren eindeutigen Namen.
+        const isAlreadyLoaded = (t) => t.type === "form"
+            ? allForms.body.forms.some((f) => f.id === t.formId)
+            : allScripts.body.some((s) => s.name === t.name);
         const availableTargets = targetForms_1.targetForms.filter((t) => !isAlreadyLoaded(t));
         const loadedTargets = targetForms_1.targetForms.filter(isAlreadyLoaded);
         logger.warn(`refreshToolLists: verfügbar=[${availableTargets.map((t) => t.name).join(", ")}], ` +
@@ -5438,6 +5611,10 @@ async function enableUpdateButtonIfNewerVersionAvailable(updateButton) {
 const loadedToolsKey = "loadedTools";
 const loadedToolNameKey = "loadedTool";
 const loadedToolUpdateButtonKey = "updateTool";
+// Tatsächlicher Formio-Component-Key des "öffnen"-Buttons im Process Studio
+// Formular-Editor (nicht "openForm" - der Anzeigename dort ist "Formular
+// öffnen", der Key wurde daraus automatisch generiert).
+const loadedToolOpenButtonKey = "formularOffnen";
 // Befüllt das DataGrid "loadedTools" mit den übergebenen (in dforms bereits
 // existierenden) targetForms-Einträgen - siehe refreshToolLists, das die
 // kuratierte Liste (config/targetForms.ts) entsprechend aufteilt. Pro Zeile
@@ -5497,12 +5674,21 @@ function labelLoadedToolRowButtons(grid, loadedTargets) {
         return;
     }
     grid.everyComponent((component) => {
-        if (component.component?.key !== loadedToolUpdateButtonKey)
+        const key = component.component?.key;
+        if (key !== loadedToolUpdateButtonKey && key !== loadedToolOpenButtonKey)
             return;
         const toolName = component.data?.[loadedToolNameKey];
         const target = loadedTargets.find((t) => t.name === toolName);
         if (!target) {
-            logger.warn(`Zu Button "${loadedToolUpdateButtonKey}" konnte kein passendes Werkzeug (Name "${toolName}") gefunden werden.`);
+            logger.warn(`Zu Button "${key}" konnte kein passendes Werkzeug (Name "${toolName}") gefunden werden.`);
+            return;
+        }
+        if (key === loadedToolOpenButtonKey) {
+            // Scripts laufen server-seitig und haben keine Seite zum Öffnen (anders
+            // als Formulare, die per "view"-Link direkt angezeigt werden können) -
+            // der Button ergibt für sie keinen Sinn.
+            component.component.hidden = target.type === "script";
+            component.redraw();
             return;
         }
         // Sicherer Default, bis die (asynchrone) Versionsprüfung unten fertig ist -
@@ -5519,9 +5705,21 @@ function labelLoadedToolRowButtons(grid, loadedTargets) {
 // zuletzt auf GitHub veröffentlichte Version (per loadLatestBundle) und
 // beschriftet + (de)aktiviert den übergebenen Button entsprechend - analog zu
 // enableUpdateButtonIfNewerVersionAvailable für den Toolbox-eigenen
-// Update-Button.
+// Update-Button. Für Scripts (target.type === "script") gibt es keinen
+// verlässlichen Weg, den installierten Content zurückzulesen (die
+// Scripting-API liefert ihn über die Versions-Liste nicht zurück) - der
+// Button zeigt dort nur die zuletzt veröffentlichte Version an und bleibt
+// immer aktiv, statt einen (unmöglichen) Versionsvergleich vorzutäuschen.
 async function labelLoadedToolRowButton(updateButton, target) {
     try {
+        if (target.type === "script") {
+            const remoteBundleContent = await loadLatestBundle(target.bundlePath);
+            const remoteMatch = remoteBundleContent.match(TOOL_VERSION_COUNTER_PATTERN);
+            updateButton.label = remoteMatch ? `Aktualisieren (Version ${remoteMatch[1]})` : "Aktualisieren";
+            updateButton.component.disabled = false;
+            updateButton.redraw();
+            return;
+        }
         const baseUri = window.location.origin;
         const [existing, remoteBundleContent] = await Promise.all([
             (0, getForm_1.getForm)(baseUri, NO_TOKEN, target.formId),
@@ -5582,7 +5780,7 @@ async function updateTool(form, instance, data) {
     instance.component.disabled = true;
     instance.redraw();
     try {
-        await ensureTargetFormUpToDate(target);
+        await ensureTargetUpToDate(target);
         // Nur das loadedTools-Grid neu abgleichen (baut u.a. diesen Button neu auf,
         // siehe populateLoadedTools/labelLoadedToolRowButtons) - kein
         // window.location.reload() mehr, das die komplette Toolbox-Seite neu
@@ -5604,13 +5802,21 @@ window.updateTool = updateTool;
 /**
  * Custom-Action des Buttons "openForm" innerhalb einer loadedTools-Zeile
  * (im Process Studio Formular-Editor als "openForm(form, instance, data);"
- * konfiguriert - analog zu updateTool oben).
+ * konfiguriert - analog zu updateTool oben). Nur für Formulare relevant
+ * (target.type === "form") - für Scripts blendet labelLoadedToolRowButtons
+ * diesen Button bereits aus, da Scripts keine Seite zum Öffnen haben.
  */
 async function openForm(form, instance, data) {
     const toolName = instance._data.loadedTool;
+    const target = targetForms_1.targetForms.find((t) => t.name === toolName);
+    if (!target || target.type !== "form") {
+        logger.error(`Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
+        await showErrorAlert("Formular konnte nicht geöffnet werden", `Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
+        return;
+    }
     const baseUri = window.location.origin;
     const allForms = await (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN);
-    const targetForm = allForms.body.forms.find((f) => f.id === targetForms_1.targetForms.find((t) => t.name === toolName)?.formId);
+    const targetForm = allForms.body.forms.find((f) => f.id === target.formId);
     if (!targetForm) {
         logger.error(`Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
         await showErrorAlert("Formular konnte nicht geöffnet werden", `Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
@@ -5691,6 +5897,71 @@ async function ensureTargetFormUpToDate(target) {
     await (0, patchForm_1.patchForm)(baseUri, NO_TOKEN, target.formId, target.name, definition);
     return definition;
 }
+/**
+ * Analog zu ensureTargetFormUpToDate, aber für Scripts (Process Studio
+ * "Scripting"-Modul statt dforms-Formular, target.type === "script"). Zwei
+ * wichtige Unterschiede zu Formularen:
+ *  - Scripts haben keine vom Aufrufer wählbare Id: createScript() vergibt die
+ *    GUID serverseitig. Ein bereits angelegtes Script wird deshalb über
+ *    getAllScripts() anhand seines (eindeutigen) Namens gefunden, nicht über
+ *    eine feste Id wie bei Formularen.
+ *  - customerVariables (z.B. ein API-Key, den das Script für eigene Aufrufe
+ *    gegen andere d.velop-APIs braucht) werden hier BEWUSST NIE gesetzt oder
+ *    überschrieben - nur .content wird aktualisiert. Die Scripting-API wird
+ *    hier als partial PATCH behandelt (weggelassene Felder bleiben
+ *    unangetastet); anders als beim Formular-Schema (reine Konfigurationsdaten)
+ *    ließe sich ein versehentliches Überschreiben/Leeren eines bereits
+ *    gesetzten, verschlüsselten API-Keys nicht rückgängig machen. Nach dem
+ *    erstmaligen Anlegen muss der API-Key daher einmalig manuell im Process
+ *    Studio Script-Editor eingetragen werden.
+ */
+async function ensureTargetScriptUpToDate(target) {
+    const baseUri = window.location.origin;
+    const content = await loadLatestBundle(target.bundlePath);
+    const allScripts = await (0, getAllScripts_1.getAllScripts)(baseUri, NO_TOKEN);
+    let script = allScripts.body.find((s) => s.name === target.name);
+    if (!script) {
+        logger.debug(`Script "${target.name}" existiert noch nicht, lege es neu an.`);
+        const created = await (0, createScript_1.createScript)(baseUri, NO_TOKEN, target.name);
+        script = { id: created.body.id, name: target.name };
+    }
+    else {
+        logger.debug(`Script "${target.name}" existiert bereits, aktualisiere Content.`);
+    }
+    if (!script?.id) {
+        throw new Error(`Script "${target.name}" konnte nicht angelegt/gefunden werden (keine Id).`);
+    }
+    const versions = await (0, getScriptVersion_1.getScriptVersion)(baseUri, NO_TOKEN, script.id);
+    const versionId = versions.body[0]?.id;
+    if (!versionId) {
+        throw new Error(`Für Script "${target.name}" wurde keine Version gefunden.`);
+    }
+    const body = {
+        content,
+        actionEnabled: true,
+        action: {
+            display_name: { de: target.name },
+            description: { de: target.description },
+            volatile: true,
+            execution_mode: "Synchron",
+            input_properties: [],
+            output_properties: [],
+        },
+        // customerVariables absichtlich weggelassen, siehe Kommentar an der Funktion.
+    };
+    await (0, patchScript_1.patchScript)(baseUri, NO_TOKEN, script.id, versionId, body);
+}
+// Wählt je nach target.type die passende ensureTarget…UpToDate-Funktion
+// (Formular vs. Script) - einziger Aufrufpunkt für createOrUpdate/updateTool,
+// damit beide nicht selbst zwischen den beiden Werkzeug-Arten unterscheiden
+// müssen.
+async function ensureTargetUpToDate(target) {
+    if (target.type === "script") {
+        await ensureTargetScriptUpToDate(target);
+        return;
+    }
+    await ensureTargetFormUpToDate(target);
+}
 async function loadLatestBundle(bundlePath) {
     const url = `${publicBundleRepo_1.PUBLIC_BUNDLE_REPO_BASE_URL}/${bundlePath}`;
     const response = await fetch(url, { cache: "no-store" });
@@ -5713,7 +5984,7 @@ async function createOrUpdate(form, instance, data) {
         return;
     }
     try {
-        await ensureTargetFormUpToDate(target);
+        await ensureTargetUpToDate(target);
         // Dropdown/Grid neu abgleichen, damit das gerade angelegte Werkzeug aus
         // availableForms verschwindet und in loadedTools auftaucht.
         void refreshToolLists(form);
