@@ -5205,32 +5205,32 @@ exports.PUBLIC_BUNDLE_REPO_BASE_URL = "https://raw.githubusercontent.com/FOM-Max
 
 "use strict";
 
+// AUTO-GENERIERT von projects/Toolbox/generateTargetForms.js - NICHT VON HAND
+// BEARBEITEN, jeder "npm run build"/"npm run watch" überschreibt diese Datei.
+// Erfasst automatisch jeden projects/Toolbox_*-Ordner (außer Toolbox_Template*)
+// als Tool. Anzeigename/Beschreibung optional über <projekt>/toolbox.meta.json
+// ({"name": "...", "description": "..."}) anpassen, sonst wird beides aus dem
+// Ordnernamen abgeleitet. Formular-GUID wird deterministisch aus dem
+// Ordnernamen abgeleitet (siehe generateTargetForms.js), außer für Tools in
+// dessen PINNED_FORM_IDS.
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.targetForms = void 0;
-// Kuratierte Liste der nachladbaren Content-Formulare.
-// Neue Einträge hier ergänzen, sobald ein Formular per Formio + uploadFormToCloud
-// eigenständig deploybar ist.
+// Kuratierte Liste der nachladbaren Content-Formulare - generiert, siehe oben.
 exports.targetForms = [
+    {
+        id: "businesObjectsEditor",
+        name: "Business Objects Editor",
+        description: "Verwaltet Business-Objects-Modelle und deren Einträge (Anlegen, Bearbeiten, Löschen) direkt im Browser.",
+        formId: "cb60481f-c364-4d82-9965-9ce3f25400e4",
+        bundlePath: "businesObjectsEditor/formBundle.js",
+    },
     {
         id: "processAdministration",
         name: "Prozess-Administration",
         description: "Verwaltet die Prozesse in der Systemumgebung.",
         formId: "2c3e00b6-8e00-4a27-9a9e-2b5dee133ca7",
-        bundlePath: "processAdministration/bundle.js",
+        bundlePath: "processAdministration/formBundle.js",
         formDefinitionPath: "processAdministration/form.json",
-        versionConstantName: "PROCESSADMINISTRATION_VERSION_COUNTER",
-    },
-    {
-        id: "businessObjectsEditor",
-        name: "Business Objects Editor",
-        description: "Verwaltet Business-Objects-Modelle und deren Einträge (Anlegen, Bearbeiten, Löschen) direkt im Browser.",
-        formId: "cb60481f-c364-4d82-9965-9ce3f25400e4",
-        bundlePath: "businessObjectsEditor/formBundle.js",
-        // Kein formDefinitionPath: das Formio-Schema dieses Formulars wird im
-        // Process Studio Formular-Editor gepflegt (siehe uploadFormToCloud.ts, das
-        // beim Patchen bewusst das dort vorhandene Schema unverändert übernimmt),
-        // nicht wie bei processAdministration aus einer form.json im Sourcecode.
-        versionConstantName: "BUSINESSOBJECTSEDITOR_VERSION_COUNTER",
     },
 ];
 
@@ -5277,7 +5277,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 35;
+const TOOLBOX_VERSION_COUNTER = 36;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5408,6 +5408,12 @@ function populateVersionCounter(form) {
 // veröffentlichte Version zu ermitteln, ohne eine eigene Versionsdatei pflegen
 // zu müssen.
 const VERSION_COUNTER_PATTERN = /TOOLBOX_VERSION_COUNTER\s*=\s*(\d+)/;
+// Analog zu VERSION_COUNTER_PATTERN, aber für die Ziel-Tools in loadedTools:
+// deren Versionszähler heißt in JEDEM Tool-Projekt einheitlich "VERSION_COUNTER"
+// (nicht mehr projektspezifisch benannt, siehe generateTargetForms.js), daher
+// hier ein einziges, festes Pattern statt einer pro TargetForm konfigurierten
+// Konstante.
+const TOOL_VERSION_COUNTER_PATTERN = /VERSION_COUNTER\s*=\s*(\d+)/;
 // Lädt das aktuell auf GitHub veröffentlichte Toolbox-Bundle und aktiviert die
 // Update-Schaltfläche nur, wenn die dort enthaltene Version neuer ist als die
 // hier im Browser laufende (TOOLBOX_VERSION_COUNTER). So bleibt der Button
@@ -5436,7 +5442,7 @@ const loadedToolUpdateButtonKey = "updateTool";
 // existierenden) targetForms-Einträgen - siehe refreshToolLists, das die
 // kuratierte Liste (config/targetForms.ts) entsprechend aufteilt. Pro Zeile
 // zeigt der Update-Button "updateTool" die aktuell auf GitHub veröffentlichte
-// Version dieses Tools (per versionConstantName-Regex aus dessen Bundle
+// Version dieses Tools (per TOOL_VERSION_COUNTER_PATTERN aus dessen Bundle
 // ausgelesen, analog zu TOOLBOX_VERSION_COUNTER/VERSION_COUNTER_PATTERN). Der
 // Klick auf den Button ruft (per im Formular-Editor konfigurierter
 // Custom-Action, siehe window.updateTool weiter unten)
@@ -5517,12 +5523,11 @@ function labelLoadedToolRowButtons(grid, loadedTargets) {
 async function labelLoadedToolRowButton(updateButton, target) {
     try {
         const baseUri = window.location.origin;
-        const versionPattern = new RegExp(`${target.versionConstantName}\\s*=\\s*(\\d+)`);
         const [existing, remoteBundleContent] = await Promise.all([
             (0, getForm_1.getForm)(baseUri, NO_TOKEN, target.formId),
             loadLatestBundle(target.bundlePath),
         ]);
-        const remoteMatch = remoteBundleContent.match(versionPattern);
+        const remoteMatch = remoteBundleContent.match(TOOL_VERSION_COUNTER_PATTERN);
         if (!remoteMatch) {
             logger.warn(`Version im veröffentlichten Bundle von "${target.name}" konnte nicht ermittelt werden.`);
             updateButton.label = "Aktualisieren";
@@ -5530,7 +5535,7 @@ async function labelLoadedToolRowButton(updateButton, target) {
             updateButton.redraw();
             return;
         }
-        const installedMatch = existing.body.definition.customJs?.match(versionPattern);
+        const installedMatch = existing.body.definition.customJs?.match(TOOL_VERSION_COUNTER_PATTERN);
         const remoteVersion = parseInt(remoteMatch[1], 10);
         const installedVersion = installedMatch ? parseInt(installedMatch[1], 10) : undefined;
         updateButton.label = `Aktualisieren (Version ${remoteVersion})`;
@@ -5578,14 +5583,19 @@ async function updateTool(form, instance, data) {
     instance.redraw();
     try {
         await ensureTargetFormUpToDate(target);
+        // Nur das loadedTools-Grid neu abgleichen (baut u.a. diesen Button neu auf,
+        // siehe populateLoadedTools/labelLoadedToolRowButtons) - kein
+        // window.location.reload() mehr, das die komplette Toolbox-Seite neu
+        // geladen hätte.
+        void refreshToolLists(form);
         await showSuccessAlert("Werkzeug aktualisiert", `"${target.name}" wurde aktualisiert.`);
-        window.location.reload();
     }
     catch (error) {
         logger.error(`Fehler beim Aktualisieren von "${target.name}": ${getErrorMessage(error)}`);
         await showErrorAlert(`Fehler beim Aktualisieren von "${target.name}"`, error);
-    }
-    finally {
+        // Nur im Fehlerfall zurücksetzen - im Erfolgsfall baut refreshToolLists das
+        // Grid (und damit auch diese Button-Instance) ohnehin neu auf, ein Zugriff
+        // auf die dann veraltete "instance" hier wäre wirkungslos.
         instance.component.disabled = false;
         instance.redraw();
     }
