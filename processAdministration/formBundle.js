@@ -478,13 +478,14 @@ function loadSweetAlert() {
 }
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
 // Eigener Versionszähler, analog zu TOOLBOX_VERSION_COUNTER in
-// projects/Toolbox/src/form.ts: wird von publish-bundles.yml bei jedem
-// Publish automatisch um 1 erhöht, damit die Toolbox (loadedTools-Grid)
+// projects/Toolbox/src/form.ts: publish-bundles.yml stempelt bei jedem
+// Publish den nächsten Stand ins veröffentlichte Bundle (der Wert hier ist nur
+// ein Platzhalter und wird nicht hochgezählt), damit die Toolbox (loadedTools-Grid)
 // erkennen kann, ob auf GitHub eine neuere Version dieses Tools liegt. Heißt in
 // JEDEM Toolbox-Tool-Projekt einheitlich "VERSION_COUNTER" (nicht mehr
 // projektspezifisch benannt) - die Toolbox sucht beim Bump/Auslesen immer nach
 // genau diesem Namen, siehe generateTargetForms.js.
-const VERSION_COUNTER = 23;
+const VERSION_COUNTER = 24;
 // Eigene Aktionen (kein JobType): wirken unabhängig von der gewählten
 // "Version" auf alle Versionen eines Prozesses.
 const CANCEL_ALL_ACTION = "CANCEL_ALL";
