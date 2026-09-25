@@ -261,7 +261,7 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  * siehe dessen Kommentar für die eigentliche Zähl-Logik) - "type": "combined"
  * in toolbox.meta.json sorgt dafür, dass die Toolbox dieses Formular UND das
  * Script als EIN Eintrag gemeinsam anlegt/aktualisiert (siehe
- * ensureTargetUpToDate in projects/Toolbox/src/forms/form.ts).
+ * rolloutParts in projects/Toolbox/src/forms/form.ts).
  *
  * Im Process Studio Formular-Editor manuell anzulegende Komponenten:
  *   - Ein Button mit Custom Action "runUserLicenceCounter(form, instance, data);".
@@ -274,7 +274,7 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  * bleiben; .github/workflows/publish-bundles.yml erhöht bei jedem Publish
  * automatisch BEIDE Vorkommen gemeinsam.
  */
-const VERSION_COUNTER = 5;
+const VERSION_COUNTER = 6;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // Muss exakt dem Script-Namen in toolbox.meta.json ("scripts[].name") entsprechen - so
 // findet die Toolbox das zugehörige Script anhand seines eindeutigen Namens
