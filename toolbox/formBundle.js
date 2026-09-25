@@ -5363,10 +5363,11 @@ exports.PUBLIC_BUNDLE_REPO_BASE_URL = "https://raw.githubusercontent.com/FOM-Max
 // anpassen, sonst wird Name/Beschreibung aus dem Ordnernamen abgeleitet und
 // "form" angenommen. Formular-GUID (type "form"/"combined") wird deterministisch
 // aus dem Ordnernamen abgeleitet (siehe generateTargetForms.js), außer für
-// Tools in dessen PINNED_FORM_IDS. "combined" (Formular UND Script im selben
-// Projekt, z.B. projects/Toolbox_UserLicenceCounter) wird beim Anlegen/
-// Aktualisieren als EIN Toolbox-Eintrag behandelt - beide Bundles werden
-// gemeinsam ausgerollt (siehe ensureTargetUpToDate in src/forms/form.ts).
+// Tools in dessen PINNED_FORM_IDS. "script"/"combined" bringen ein oder mehrere
+// Scripts mit (je Datei in src/scripts/, optional beschrieben unter "scripts"
+// in toolbox.meta.json - inkl. eigener customerVariables pro Script). Alle
+// Bestandteile eines Werkzeugs werden als EIN Toolbox-Eintrag gemeinsam
+// ausgerollt (siehe ensureTargetUpToDate in src/forms/form.ts).
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.targetForms = void 0;
 // Kuratierte Liste der nachladbaren Werkzeuge (Formulare und Scripts) -
@@ -5396,7 +5397,14 @@ exports.targetForms = [
         description: "Zählt die lizenzrelevanten Benutzer (ohne technischen Benutzer und @gws.ms-Adressen) und liefert eine HTML-Tabelle mit den Details.",
         formId: "ce3a0bac-79fd-5080-8742-819797a25f19",
         bundlePath: "userLicenceCounter/formBundle.js",
-        scriptBundlePath: "userLicenceCounter/scriptBundle.js",
+        scripts: [
+            {
+                name: "User-Lizenz-Zähler",
+                description: "Zählt die lizenzrelevanten Benutzer (ohne technischen Benutzer und @gws.ms-Adressen) und liefert eine HTML-Tabelle mit den Details.",
+                bundlePath: "userLicenceCounter/scripts/script.js",
+                customerVariables: [{ "key": "baseUri", "label": "Base-URI", "encrypted": false, "description": "Adresse des Mandanten, gegen den das Script die Benutzer abfragt.", "default": "{origin}" }, { "key": "apiKey", "label": "API-Key", "encrypted": true, "description": "API-Key eines Benutzers mit Leserechten auf die Benutzerverwaltung." }],
+            },
+        ],
     },
 ];
 
@@ -5448,7 +5456,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // ausgerollt werden soll, hier um 1 erhöhen. So bleibt die Versionsnummer
 // unabhängig vom Stand auf der jeweiligen Umgebung korrekt, auch wenn dort
 // noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 43;
+const TOOLBOX_VERSION_COUNTER = 44;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5495,17 +5503,98 @@ function escapeHtml(value) {
 function hasFormPart(target) {
     return target.type !== "script";
 }
-function toolParts(target) {
-    if (target.type === "combined")
-        return ["form", "script"];
-    return [target.type];
+function scriptsOf(target) {
+    return target.type === "form" ? [] : target.scripts;
 }
-function scriptBundlePathOf(target) {
-    if (target.type === "combined")
-        return target.scriptBundlePath;
-    if (target.type === "script")
-        return target.bundlePath;
-    return undefined;
+function toolParts(target) {
+    const parts = hasFormPart(target) ? [{ kind: "form", key: "form" }] : [];
+    scriptsOf(target).forEach((script, index) => parts.push({ kind: "script", key: `script-${index}`, script }));
+    return parts;
+}
+// Beschriftung einer Statuszeile. Der Script-Name wird angezeigt, sobald er
+// zur Unterscheidung nötig ist (mehrere Scripts oder abweichend vom
+// Werkzeugnamen); zum Formular gehörende Scripts werden mit "↳" eingerückt.
+function partLabel(target, part) {
+    if (part.kind === "form")
+        return "Formular";
+    const prefix = target.type === "combined" ? "↳ " : "";
+    const showName = scriptsOf(target).length > 1 || part.script.name !== target.name;
+    return `${prefix}Script${showName ? `: ${escapeHtml(part.script.name)}` : ""}`;
+}
+// Erfolgsmeldung, die nennt, was tatsächlich ausgerollt wurde - z.B.
+// "Formular und 2 Scripts von "X" wurden angelegt."
+function describeRollout(target, verb) {
+    const scriptCount = scriptsOf(target).length;
+    const parts = [
+        hasFormPart(target) ? "Formular" : "",
+        scriptCount === 1 ? "Script" : scriptCount > 1 ? `${scriptCount} Scripts` : "",
+    ].filter((p) => p !== "");
+    if (parts.length === 1 && scriptCount <= 1)
+        return `"${target.name}" wurde ${verb}.`;
+    return `${parts.join(" und ")} von "${target.name}" wurden ${verb}.`;
+}
+function resolveDefault(spec) {
+    return (spec.default ?? "").replace(/\{origin\}/g, window.location.origin);
+}
+// Fragt die customerVariables der übergebenen Scripts in EINEM Swal-Dialog
+// ab - gruppiert nach Script, da jedes Script eigene Werte hat. Liefert
+// undefined, wenn der Dialog abgebrochen wurde.
+async function promptCustomerVariables(target, scripts) {
+    const groups = scripts
+        .map((script, scriptIndex) => {
+        const fields = script.customerVariables
+            .map((spec, varIndex) => `
+<div class="tbx-cv-field">
+  <label class="tbx-cv-label" for="tbx-cv-${scriptIndex}-${varIndex}">${escapeHtml(spec.label)}</label>
+  <input id="tbx-cv-${scriptIndex}-${varIndex}" class="swal2-input tbx-cv-input" type="${spec.encrypted ? "password" : "text"}"
+    autocomplete="${spec.encrypted ? "new-password" : "off"}" value="${escapeHtml(resolveDefault(spec))}">
+  ${spec.description ? `<div class="tbx-cv-desc">${escapeHtml(spec.description)}</div>` : ""}
+</div>`)
+            .join("");
+        return `
+<fieldset class="tbx-cv-group">
+  <legend class="tbx-cv-legend">Script: ${escapeHtml(script.name)}</legend>
+  ${fields}
+</fieldset>`;
+    })
+        .join("");
+    const result = await sweetalert2_1.default.fire({
+        title: `Konfiguration für "${escapeHtml(target.name)}"`,
+        html: `
+<style>
+  .tbx-cv-intro { text-align: left; color: #6c757d; font-size: 0.9em; margin-bottom: 12px; }
+  .tbx-cv-group { text-align: left; border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 12px 0; margin: 0 0 12px; }
+  .tbx-cv-legend { font-size: 0.95em; font-weight: 600; width: auto; padding: 0 4px; margin: 0; }
+  .tbx-cv-field { margin-bottom: 12px; }
+  .tbx-cv-label { display: block; font-weight: 600; font-size: 0.9em; margin-bottom: 4px; }
+  .tbx-cv-input.swal2-input { width: 100%; margin: 0; box-sizing: border-box; }
+  .tbx-cv-desc { color: #6c757d; font-size: 0.85em; margin-top: 4px; }
+</style>
+<div class="tbx-cv-intro">Die folgenden Scripts benötigen Werte. Verschlüsselte Werte werden nicht im Klartext gespeichert.</div>
+${groups}`,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: "Erstellen",
+        cancelButtonText: "Abbrechen",
+        preConfirm: () => {
+            const values = new Map();
+            for (const [scriptIndex, script] of scripts.entries()) {
+                const scriptValues = [];
+                for (const [varIndex, spec] of script.customerVariables.entries()) {
+                    const input = document.getElementById(`tbx-cv-${scriptIndex}-${varIndex}`);
+                    const value = input?.value.trim() ?? "";
+                    if (value === "") {
+                        sweetalert2_1.default.showValidationMessage(`Bitte "${spec.label}" für Script "${script.name}" angeben.`);
+                        return false;
+                    }
+                    scriptValues.push({ key: spec.key, value, encrypted: spec.encrypted });
+                }
+                values.set(script.name, scriptValues);
+            }
+            return values;
+        },
+    });
+    return result.isConfirmed ? result.value : undefined;
 }
 // Einheitliche Gestaltung: jeder Bereich hat dieselbe Kopfzeile (Titel links,
 // Aktionen rechts), alle Buttons sind "btn-sm" - Hauptaktion "btn-primary",
@@ -5570,7 +5659,8 @@ function renderShell() {
 }
 function renderToolBadges(target) {
     const form = `<span class="tbx-badge tbx-badge-form">Formular</span>`;
-    const script = `<span class="tbx-badge tbx-badge-script">Script</span>`;
+    const scriptCount = scriptsOf(target).length;
+    const script = `<span class="tbx-badge tbx-badge-script">${scriptCount > 1 ? `${scriptCount} Scripts` : "Script"}</span>`;
     if (target.type === "combined")
         return `${form}<span class="tbx-badge-link">+</span>${script}`;
     return target.type === "form" ? form : script;
@@ -5604,10 +5694,23 @@ function renderAvailableTools(targets) {
 <select class="form-control form-control-sm" data-role="tool-select">${options}</select>
 <div data-role="tool-details">${renderSelectedToolDetails(targets[0])}</div>`;
 }
+// Vorschau in "Werkzeug hinzufügen": dieselbe Karte wie bei den installierten
+// Werkzeugen, statt Versionsständen zeigt jede Zeile, welche Werte beim
+// Erstellen für das jeweilige Script abgefragt werden.
 function renderSelectedToolDetails(target) {
     if (!target)
         return "";
+    const parts = toolParts(target)
+        .map((part) => {
+        const specs = part.kind === "script" ? part.script.customerVariables : [];
+        const info = specs.length > 0
+            ? `fragt beim Erstellen ab: ${specs.map((s) => escapeHtml(s.label)).join(", ")}`
+            : "keine Eingaben nötig";
+        return `<li data-part="${part.key}"><span class="tbx-part-label">${partLabel(target, part)}</span> <span class="tbx-part-status tbx-status-unknown">${info}</span></li>`;
+    })
+        .join("");
     return renderToolCard(target, {
+        parts: target.type === "form" ? undefined : parts,
         hint: target.type === "combined" ? "Formular und Script gehören zusammen und werden gemeinsam angelegt." : undefined,
     });
 }
@@ -5617,13 +5720,9 @@ function renderLoadedTool(target) {
         renderButton("update", CHECKING_LABEL, "primary", { toolId: target.id, disabled: true }),
     ].join("");
     const parts = toolParts(target)
-        .map((part) => renderStatusLine(part === "form" ? "Formular" : target.type === "combined" ? "↳ Script" : "Script", part))
+        .map((part) => renderStatusLine(partLabel(target, part), part.key))
         .join("");
-    return renderToolCard(target, {
-        actions,
-        parts,
-        hint: target.type === "combined" ? "Formular und Script gehören zusammen und werden gemeinsam aktualisiert." : undefined,
-    });
+    return renderToolCard(target, { actions, parts });
 }
 function renderLoadedTools(loadedTargets) {
     if (loadedTargets.length === 0) {
@@ -5819,12 +5918,13 @@ async function refreshToolLists() {
             (0, getAllScripts_1.getAllScripts)(baseUri, NO_TOKEN),
         ]);
         // Formulare werden über ihre feste formId erkannt, Scripts (die ihre GUID
-        // serverseitig bei createScript bekommen, siehe TargetScriptEntry) über
-        // ihren eindeutigen Namen. "combined" wird wie "form" über die
-        // Formular-GUID erkannt - ensureTargetUpToDate legt bei einem
-        // "combined"-Tool ohnehin immer auch das Script mit an/aktualisiert es.
+        // serverseitig bei createScript bekommen, siehe TargetScript) über ihren
+        // eindeutigen Namen. "combined" wird wie "form" über die Formular-GUID
+        // erkannt, ein reines Script-Werkzeug gilt als installiert, sobald eines
+        // seiner Scripts existiert - fehlende Scripts zeigt die Karte dann als
+        // "fehlt" an, "Aktualisieren" legt sie nach.
         const isAlreadyLoaded = (t) => t.type === "script"
-            ? allScripts.body.some((s) => s.name === t.name)
+            ? t.scripts.some((script) => allScripts.body.some((s) => s.name === script.name))
             : allForms.body.forms.some((f) => f.id === t.formId);
         availableTargets = targetForms_1.targetForms.filter((t) => !isAlreadyLoaded(t));
         const loadedTargets = targetForms_1.targetForms.filter(isAlreadyLoaded);
@@ -5858,8 +5958,10 @@ function renderAvailableRegion() {
     }
 }
 // Legt das in der Auswahl gewählte Werkzeug an (bei "combined" Formular UND
-// Script, siehe ensureTargetUpToDate). Danach wandert es per
-// refreshToolLists in die Liste der installierten Werkzeuge.
+// Script, siehe ensureTargetUpToDate). Braucht das Script customerVariables
+// und existiert es noch nicht, werden diese vorher per Dialog abgefragt.
+// Danach wandert das Werkzeug per refreshToolLists in die Liste der
+// installierten Werkzeuge.
 async function createSelectedTool(button) {
     const select = region("available")?.querySelector('[data-role="tool-select"]');
     const target = availableTargets.find((t) => t.id === select?.value);
@@ -5872,11 +5974,24 @@ async function createSelectedTool(button) {
     if (select)
         select.disabled = true;
     try {
-        await ensureTargetUpToDate(target);
+        // Nur für Scripts fragen, die neu angelegt werden - bei einem bereits
+        // existierenden Script bleiben dessen customerVariables unangetastet.
+        let customerVariables;
+        const needsValues = scriptsOf(target).filter((s) => s.customerVariables.length > 0);
+        if (needsValues.length > 0) {
+            const existing = await (0, getAllScripts_1.getAllScripts)(window.location.origin, NO_TOKEN);
+            const newScripts = needsValues.filter((s) => !existing.body.some((e) => e.name === s.name));
+            if (newScripts.length > 0) {
+                customerVariables = await promptCustomerVariables(target, newScripts);
+                if (!customerVariables) {
+                    renderAvailableRegion();
+                    return;
+                }
+            }
+        }
+        await ensureTargetUpToDate(target, { customerVariables });
         await refreshToolLists();
-        await showSuccessAlert("Werkzeug erstellt", target.type === "combined"
-            ? `Formular und Script von "${target.name}" wurden angelegt.`
-            : `"${target.name}" wurde angelegt.`);
+        await showSuccessAlert("Werkzeug erstellt", describeRollout(target, "angelegt"));
     }
     catch (error) {
         logger.error(`Fehler beim Anlegen von "${target.name}": ${getErrorMessage(error)}`);
@@ -5918,14 +6033,11 @@ async function checkFormPart(target) {
 // zurück - die installierte Version steckt stattdessen als
 // VERSION_COUNTER-Marker in "action.description" (siehe
 // ensureTargetScriptUpToDate).
-async function checkScriptPart(target, loadScripts) {
-    const bundlePath = scriptBundlePathOf(target);
-    if (!bundlePath)
-        return { error: "Kein Script-Bundle konfiguriert." };
+async function checkScriptPart(targetScript, loadScripts) {
     try {
         const baseUri = window.location.origin;
-        const [allScripts, remote] = await Promise.all([loadScripts(), remoteVersionOf(bundlePath)]);
-        const script = allScripts.body.find((s) => s.name === target.name);
+        const [allScripts, remote] = await Promise.all([loadScripts(), remoteVersionOf(targetScript.bundlePath)]);
+        const script = allScripts.body.find((s) => s.name === targetScript.name);
         if (!script?.id)
             return { missing: true, remote };
         const versions = await (0, getScriptVersion_1.getScriptVersion)(baseUri, NO_TOKEN, script.id);
@@ -5970,10 +6082,14 @@ async function updateLoadedToolStatus(container, target, loadScripts) {
         return;
     const statuses = await Promise.all(toolParts(target).map(async (part) => ({
         part,
-        status: part === "form" && hasFormPart(target) ? await checkFormPart(target) : await checkScriptPart(target, loadScripts),
+        status: part.kind === "script"
+            ? await checkScriptPart(part.script, loadScripts)
+            : hasFormPart(target)
+                ? await checkFormPart(target)
+                : { error: "Kein Formular konfiguriert." },
     })));
     for (const { part, status } of statuses) {
-        applyStatus(card.querySelector(`li[data-part="${part}"] .tbx-part-status`), status);
+        applyStatus(card.querySelector(`li[data-part="${part.key}"] .tbx-part-status`), status);
     }
     applyUpdateButton(card.querySelector('button[data-action="update"]'), statuses.map((s) => s.status));
 }
@@ -5987,9 +6103,7 @@ async function updateLoadedTool(target, button) {
     try {
         await ensureTargetUpToDate(target);
         void refreshToolLists();
-        await showSuccessAlert("Werkzeug aktualisiert", target.type === "combined"
-            ? `Formular und Script von "${target.name}" wurden aktualisiert.`
-            : `"${target.name}" wurde aktualisiert.`);
+        await showSuccessAlert("Werkzeug aktualisiert", describeRollout(target, "aktualisiert"));
     }
     catch (error) {
         logger.error(`Fehler beim Aktualisieren von "${target.name}": ${getErrorMessage(error)}`);
@@ -6083,11 +6197,13 @@ async function ensureTargetFormUpToDate(target) {
  *    GUID serverseitig. Ein bereits angelegtes Script wird deshalb über
  *    getAllScripts() anhand seines (eindeutigen) Namens gefunden.
  *  - customerVariables (z.B. ein API-Key, den das Script für eigene Aufrufe
- *    gegen andere d.velop-APIs braucht) werden hier BEWUSST NIE gesetzt oder
- *    überschrieben - ein versehentliches Überschreiben/Leeren eines bereits
- *    gesetzten, verschlüsselten API-Keys ließe sich nicht rückgängig machen.
- *    Nach dem erstmaligen Anlegen muss der API-Key daher einmalig manuell im
- *    Process Studio Script-Editor eingetragen werden.
+ *    gegen andere d.velop-APIs braucht) werden AUSSCHLIESSLICH gesetzt, wenn
+ *    das Script in genau diesem Aufruf neu angelegt wird und Werte übergeben
+ *    wurden (beim Erstellen per Dialog abgefragt, siehe createSelectedTool).
+ *    Bei einem bereits existierenden Script - also bei jedem Aktualisieren -
+ *    werden sie NIE mitgeschickt: ein versehentliches Überschreiben/Leeren
+ *    eines bereits gesetzten, verschlüsselten API-Keys ließe sich nicht
+ *    rückgängig machen.
  *  - Die Scripting-API liefert den installierten Content über getScriptVersion
  *    NICHT zurück. Deshalb wird derselbe VERSION_COUNTER-Marker, der bereits
  *    im Content steht, zusätzlich in "action.description" eingetragen (dieses
@@ -6095,65 +6211,61 @@ async function ensureTargetFormUpToDate(target) {
  *    ihn von dort. Ein Umweg über die Release-Historie funktioniert nicht, da
  *    patchScript nicht bei jedem Aufruf eine neue Release anlegt.
  */
-async function ensureTargetScriptUpToDate(target) {
+async function ensureTargetScriptUpToDate(targetScript, customerVariables) {
     const baseUri = window.location.origin;
-    const content = await loadLatestBundle(target.bundlePath);
+    const content = await loadLatestBundle(targetScript.bundlePath);
     const versionMatch = content.match(TOOL_VERSION_COUNTER_PATTERN);
-    const description = versionMatch ? `${target.description} (VERSION_COUNTER = ${versionMatch[1]})` : target.description;
+    const description = versionMatch
+        ? `${targetScript.description} (VERSION_COUNTER = ${versionMatch[1]})`
+        : targetScript.description;
     const allScripts = await (0, getAllScripts_1.getAllScripts)(baseUri, NO_TOKEN);
-    let script = allScripts.body.find((s) => s.name === target.name);
+    let script = allScripts.body.find((s) => s.name === targetScript.name);
+    let createdNow = false;
     if (!script) {
-        logger.debug(`Script "${target.name}" existiert noch nicht, lege es neu an.`);
-        const created = await (0, createScript_1.createScript)(baseUri, NO_TOKEN, target.name);
-        script = { id: created.body.id, name: target.name };
+        logger.debug(`Script "${targetScript.name}" existiert noch nicht, lege es neu an.`);
+        const created = await (0, createScript_1.createScript)(baseUri, NO_TOKEN, targetScript.name);
+        script = { id: created.body.id, name: targetScript.name };
+        createdNow = true;
     }
     else {
-        logger.debug(`Script "${target.name}" existiert bereits, aktualisiere Content.`);
+        logger.debug(`Script "${targetScript.name}" existiert bereits, aktualisiere Content.`);
     }
     if (!script?.id) {
-        throw new Error(`Script "${target.name}" konnte nicht angelegt/gefunden werden (keine Id).`);
+        throw new Error(`Script "${targetScript.name}" konnte nicht angelegt/gefunden werden (keine Id).`);
     }
     const versions = await (0, getScriptVersion_1.getScriptVersion)(baseUri, NO_TOKEN, script.id);
     const versionId = versions.body[0]?.id;
     if (!versionId) {
-        throw new Error(`Für Script "${target.name}" wurde keine Version gefunden.`);
+        throw new Error(`Für Script "${targetScript.name}" wurde keine Version gefunden.`);
     }
     const body = {
         content,
         actionEnabled: true,
         action: {
-            display_name: { de: target.name },
+            display_name: { de: targetScript.name },
             description: { de: description },
             volatile: true,
             execution_mode: "Synchron",
             input_properties: [],
             output_properties: [],
         },
-        // customerVariables absichtlich weggelassen, siehe Kommentar an der Funktion.
     };
+    // Nur bei einem in diesem Aufruf neu angelegten Script, siehe Kommentar an
+    // der Funktion.
+    if (createdNow && customerVariables && customerVariables.length > 0) {
+        body.customerVariables = customerVariables;
+    }
     await (0, patchScript_1.patchScript)(baseUri, NO_TOKEN, script.id, versionId, body);
 }
-// Wählt je nach target.type die passende ensureTarget…UpToDate-Funktion -
+// Rollt alle Bestandteile eines Werkzeugs aus: erst das Formular (falls
+// vorhanden), dann jedes Script mit seinen eigenen customerVariables -
 // einziger Aufrufpunkt für Erstellen und Aktualisieren.
-async function ensureTargetUpToDate(target) {
-    if (target.type === "script") {
-        await ensureTargetScriptUpToDate(target);
-        return;
+async function ensureTargetUpToDate(target, options = {}) {
+    if (hasFormPart(target)) {
+        await ensureTargetFormUpToDate(target);
     }
-    await ensureTargetFormUpToDate(target);
-    if (target.type === "combined") {
-        // "combined" bringt Formular UND Script mit (siehe toolbox.meta.json,
-        // z.B. projects/Toolbox_UserLicenceCounter) - beide werden als EIN
-        // Werkzeug gemeinsam ausgerollt. ensureTargetScriptUpToDate erwartet den
-        // Script-Bundle-Pfad unter "bundlePath", bei "combined" heißt das Feld
-        // "scriptBundlePath" - daher ein synthetisches TargetScriptEntry-Objekt.
-        await ensureTargetScriptUpToDate({
-            type: "script",
-            id: target.id,
-            name: target.name,
-            description: target.description,
-            bundlePath: target.scriptBundlePath,
-        });
+    for (const script of scriptsOf(target)) {
+        await ensureTargetScriptUpToDate(script, options.customerVariables?.get(script.name));
     }
 }
 async function loadLatestBundle(bundlePath) {
