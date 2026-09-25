@@ -40,6 +40,83 @@ async function createSourceMapping(baseUri, token, repositoryId, sourceMapping) 
 
 /***/ },
 
+/***/ "../../helper/dms/getMappingContainers.ts"
+/*!************************************************!*\
+  !*** ../../helper/dms/getMappingContainers.ts ***!
+  \************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getMappingContainer = getMappingContainer;
+exports.updateMappingContainer = updateMappingContainer;
+exports.getMappingContainers = getMappingContainers;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Liest ein einzelnes Quell-Mapping inkl. seiner Zuordnungen (GET auf den
+ * self-Link aus getMappingContainers, z.B.
+ * /dms/r/<repositoryId>/mapping/container/<id>).
+ */
+async function getMappingContainer(baseUri, token, container) {
+    const href = container._links?.self?.href;
+    if (!href) {
+        throw new Error(`Für das Quell-Mapping "${container.name}" liefert die API keinen Link.`);
+    }
+    const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/hal+json, application/json",
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(new URL(href, baseUri).toString(), { method: "GET", headers });
+}
+/**
+ * Speichert ein bestehendes Quell-Mapping (PUT
+ * /dms/r/<repositoryId>/mapping/container/<id>) - wie die DMS-Oberfläche mit
+ * {"name", "id", "sourceId", "mappingItems": [...]}. mappingItems ersetzt die
+ * komplette Liste, also vorher mit getMappingContainer laden und ergänzen.
+ */
+async function updateMappingContainer(baseUri, token, repositoryId, container) {
+    if (!container.id) {
+        throw new Error(`Quell-Mapping "${container.name}" hat keine Id.`);
+    }
+    const url = `${baseUri}/dms/r/${repositoryId}/mapping/container/${container.id}`;
+    const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/hal+json, application/json",
+        "Content-Type": "application/json",
+    };
+    const body = {
+        name: container.name,
+        id: container.id,
+        sourceId: container.sourceId,
+        mappingItems: container.mappingItems ?? [],
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, { method: "PUT", headers, body: JSON.stringify(body) });
+}
+/**
+ * Liest die Quell-Mappings eines Repositorys
+ * (GET /dms/r/<repositoryId>/mapping/container) - z.B. um vor
+ * createSourceMapping zu prüfen, ob für eine Quelle schon ein Mapping existiert.
+ *
+ * @param baseUri - The base URI of the DMS API.
+ * @param token - Optional bearer token; ohne Token wird die Browser-Session genutzt.
+ * @param repositoryId - The identifier of the repository.
+ */
+async function getMappingContainers(baseUri, token, repositoryId) {
+    const url = `${baseUri}/dms/r/${repositoryId}/mapping/container`;
+    const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/hal+json, application/json",
+    };
+    const options = {
+        method: "GET",
+        headers,
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
 /***/ "../../helper/dms/getRepositories.ts"
 /*!*******************************************!*\
   !*** ../../helper/dms/getRepositories.ts ***!
@@ -62,63 +139,6 @@ async function getRepositories(baseUri, token) {
         headers,
     };
     return await (0, performHttpRequest_1.performHttpRequest)(url, options);
-}
-
-
-/***/ },
-
-/***/ "../../helper/dms/sourceMappings.ts"
-/*!******************************************!*\
-  !*** ../../helper/dms/sourceMappings.ts ***!
-  \******************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getSourceMappings = getSourceMappings;
-exports.updateSourceMapping = updateSourceMapping;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-/**
- * Liest die Quell-Mappings eines Repositorys (GET /dms/r/<repo>/m). Die Antwort
- * wird tolerant ausgewertet (Liste direkt oder unter "mappings"/"items"/
- * "value"/"_embedded"), da das Format nicht dokumentiert ist.
- */
-async function getSourceMappings(baseUri, token, repositoryId) {
-    const url = `${baseUri}/dms/r/${repositoryId}/m`;
-    const headers = {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        Accept: "application/hal+json, application/json",
-    };
-    const response = await (0, performHttpRequest_1.performHttpRequest)(url, { method: "GET", headers });
-    const body = response.body;
-    const list = Array.isArray(body) ? body
-        : body?.mappings ?? body?.items ?? body?.value ?? body?._embedded?.mappings ?? body?._embedded?.items;
-    if (!Array.isArray(list)) {
-        throw new Error("Unbekanntes Antwortformat beim Lesen der Quell-Mappings.");
-    }
-    return list;
-}
-/**
- * Aktualisiert ein bestehendes Quell-Mapping (PUT auf "_links.update"/"self",
- * sonst /dms/r/<repo>/m/<id>).
- */
-async function updateSourceMapping(baseUri, token, repositoryId, existing, sourceMapping) {
-    const href = existing._links?.update?.href ?? existing._links?.self?.href
-        ?? (existing.id ? `/dms/r/${repositoryId}/m/${existing.id}` : undefined);
-    if (!href) {
-        throw new Error(`Für das Quell-Mapping "${existing.name}" ist keine Id/kein Link bekannt.`);
-    }
-    const headers = {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        Accept: "application/json",
-        "Content-Type": "application/json",
-    };
-    const options = {
-        method: "PUT",
-        headers,
-        body: JSON.stringify({ ...sourceMapping, id: existing.id }),
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(new URL(href, baseUri).toString(), options);
 }
 
 
@@ -1309,27 +1329,28 @@ function getTenantName(hostname = window.location.hostname) {
 
 /***/ },
 
-/***/ "../../helper/webindexlayouter/getDocumentReaderWebindexForm.ts"
-/*!**********************************************************************!*\
-  !*** ../../helper/webindexlayouter/getDocumentReaderWebindexForm.ts ***!
-  \**********************************************************************/
+/***/ "../../helper/webindexlayouter/getWebindexConfigurations.ts"
+/*!******************************************************************!*\
+  !*** ../../helper/webindexlayouter/getWebindexConfigurations.ts ***!
+  \******************************************************************/
 (__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getDocumentReaderWebindexForm = getDocumentReaderWebindexForm;
+exports.getWebindexConfigurations = getWebindexConfigurations;
+exports.findWebindexConfiguration = findWebindexConfiguration;
 const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
 /**
- * Liest die aktuelle Webindex-Layout-Konfiguration des Rechnungslesers
- * (Gegenstück zu replaceDocumentReaderWebindexForm, gleiche URL per GET) -
- * z.B. als Sicherung vor dem Überschreiben.
+ * Liest die Webindex-Layout-Konfigurationen aller Apps
+ * (GET /webindexlayouter/api/v1/apps/configurations) - z.B. als Sicherung vor
+ * dem Überschreiben mit replaceDocumentReaderWebindexForm.
  *
  * @param baseUri - The base URI of the API endpoint.
- * @param token - The Bearer token used for authentication.
- * @returns Die Konfiguration (JSON-Objekt bzw. Text, je nach Content-Type).
+ * @param token - Optional bearer token; ohne Token wird die Browser-Session genutzt.
+ * @returns Die Konfigurationen (JSON, Format je nach API-Version).
  */
-async function getDocumentReaderWebindexForm(baseUri, token) {
-    const url = `${baseUri}/webindexlayouter/api/v1/apps/classcon-documentreader/configuration`;
+async function getWebindexConfigurations(baseUri, token) {
+    const url = `${baseUri}/webindexlayouter/api/v1/apps/configurations`;
     const headers = {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         Accept: "application/json",
@@ -1339,6 +1360,26 @@ async function getDocumentReaderWebindexForm(baseUri, token) {
         headers,
     };
     return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+/**
+ * Sucht in der Antwort von getWebindexConfigurations die Konfiguration einer
+ * App (Standard: Rechnungsleser "classcon-documentreader") - Liste direkt oder
+ * unter "configurations"/"apps"/"items"/"value", erkannt am Feld "name" bzw.
+ * "appId"/"id". undefined = nicht gefunden.
+ */
+function findWebindexConfiguration(configurations, appName = "classcon-documentreader") {
+    const body = configurations;
+    const list = Array.isArray(body)
+        ? body
+        : body?.configurations ?? body?.apps ?? body?.items ?? body?.value;
+    if (Array.isArray(list)) {
+        return list.find((entry) => [entry?.name, entry?.appId, entry?.id, entry?.app].includes(appName));
+    }
+    // Objekt mit den App-Namen als Schlüssel.
+    if (body && typeof body === "object" && appName in body) {
+        return body[appName];
+    }
+    return undefined;
 }
 
 
@@ -1399,7 +1440,7 @@ const getBatchProfiles_1 = __webpack_require__(/*! ../../../../helper/inbound/ge
 const createBatchProfile_1 = __webpack_require__(/*! ../../../../helper/inbound/createBatchProfile */ "../../helper/inbound/createBatchProfile.ts");
 const updateBatchProfile_1 = __webpack_require__(/*! ../../../../helper/inbound/updateBatchProfile */ "../../helper/inbound/updateBatchProfile.ts");
 const updateEmailinboundProfile_1 = __webpack_require__(/*! ../../../../helper/emailinbound/updateEmailinboundProfile */ "../../helper/emailinbound/updateEmailinboundProfile.ts");
-const sourceMappings_1 = __webpack_require__(/*! ../../../../helper/dms/sourceMappings */ "../../helper/dms/sourceMappings.ts");
+const getMappingContainers_1 = __webpack_require__(/*! ../../../../helper/dms/getMappingContainers */ "../../helper/dms/getMappingContainers.ts");
 const updateEvent_1 = __webpack_require__(/*! ../../../../helper/dmsConfig/updateEvent */ "../../helper/dmsConfig/updateEvent.ts");
 const getScriptVersion_1 = __webpack_require__(/*! ../../../../helper/scripting/getScriptVersion */ "../../helper/scripting/getScriptVersion.ts");
 const patchScript_1 = __webpack_require__(/*! ../../../../helper/scripting/patchScript */ "../../helper/scripting/patchScript.ts");
@@ -1409,7 +1450,7 @@ const getAllGroups_1 = __webpack_require__(/*! ../../../../helper/usermanagement
 const getEmailinboundProfiles_1 = __webpack_require__(/*! ../../../../helper/emailinbound/getEmailinboundProfiles */ "../../helper/emailinbound/getEmailinboundProfiles.ts");
 const createEmailinboundProfile_1 = __webpack_require__(/*! ../../../../helper/emailinbound/createEmailinboundProfile */ "../../helper/emailinbound/createEmailinboundProfile.ts");
 const replaceDocumentReaderWebindexForm_1 = __webpack_require__(/*! ../../../../helper/webindexlayouter/replaceDocumentReaderWebindexForm */ "../../helper/webindexlayouter/replaceDocumentReaderWebindexForm.ts");
-const getDocumentReaderWebindexForm_1 = __webpack_require__(/*! ../../../../helper/webindexlayouter/getDocumentReaderWebindexForm */ "../../helper/webindexlayouter/getDocumentReaderWebindexForm.ts");
+const getWebindexConfigurations_1 = __webpack_require__(/*! ../../../../helper/webindexlayouter/getWebindexConfigurations */ "../../helper/webindexlayouter/getWebindexConfigurations.ts");
 const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExport */ "../../helper/utils/tableExport.ts");
 const getRepositories_1 = __webpack_require__(/*! ../../../../helper/dms/getRepositories */ "../../helper/dms/getRepositories.ts");
 const createSourceMapping_1 = __webpack_require__(/*! ../../../../helper/dms/createSourceMapping */ "../../helper/dms/createSourceMapping.ts");
@@ -1452,10 +1493,11 @@ const scriptGutschriftenVerschieben_json_1 = __importDefault(__webpack_require__
  *
  * VERSION_COUNTER unten NICHT umbenennen, der Name ist projektübergreifend
  * fest "VERSION_COUNTER" (siehe generateTargetForms.js) -
- * .github/workflows/publish-bundles.yml erhöht ihn bei jedem Publish
- * automatisch.
+ * .github/workflows/publish-bundles.yml stempelt beim Publish den nächsten
+ * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
+ * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 3;
+const VERSION_COUNTER = 4;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -1519,7 +1561,10 @@ async function confirmWarning(title, html, confirmText) {
 // Sichert das aktuelle Layout als JSON-Datei, z.B.
 // "Ellinger_Webindex-Layout_Rechnungsleser_2026-09-26.json".
 async function downloadCurrentWebindexLayout(apiKey) {
-    const current = (await (0, getDocumentReaderWebindexForm_1.getDocumentReaderWebindexForm)(BASE_URI, apiKey)).body;
+    const configurations = (await (0, getWebindexConfigurations_1.getWebindexConfigurations)(BASE_URI, apiKey)).body;
+    // Möglichst nur die Rechnungsleser-Konfiguration sichern (gleiches Format
+    // wie beim Überschreiben), sonst die komplette Antwort.
+    const current = (0, getWebindexConfigurations_1.findWebindexConfiguration)(configurations) ?? configurations;
     const content = typeof current === "string" ? current : JSON.stringify(current, null, 2);
     if (!content || content === "{}") {
         throw new Error("Das aktuelle Webindex-Layout ist leer oder konnte nicht gelesen werden.");
@@ -1725,20 +1770,13 @@ function mailboxStep(entry) {
         },
     };
 }
-// Quell-Mapping über sourceId (sonst Name) wiederfinden. undefined = Liste
-// nicht lesbar (Format/Endpunkt unbekannt) - dann ist der Schritt "manuell".
+// Quell-Mapping über seine Quelle (sourceId) wiederfinden - der Name im DMS
+// ist nicht verlässlich (z.B. "Document Reader (d.velop document reader
+// invoice business)" statt "Rechnungsleser").
 async function findSourceMapping(apiKey) {
     const repositoryId = await getRepositoryId(apiKey);
-    try {
-        const mappings = await (0, sourceMappings_1.getSourceMappings)(BASE_URI, apiKey, repositoryId);
-        const existing = mappings.find((m) => m.sourceId === SOURCE_MAPPING.sourceId)
-            ?? mappings.find((m) => m.name === SOURCE_MAPPING.name);
-        return { repositoryId, existing };
-    }
-    catch (error) {
-        logger.warn(`Quell-Mappings konnten nicht gelesen werden: ${getErrorMessage(error)}`);
-        return undefined;
-    }
+    const containers = (await (0, getMappingContainers_1.getMappingContainers)(BASE_URI, apiKey, repositoryId)).body.containers ?? [];
+    return { repositoryId, existing: containers.find((c) => c.sourceId === SOURCE_MAPPING.sourceId) };
 }
 async function findCreditMemoWebhookEntry(apiKey, scriptId) {
     const events = (await (0, getEvents_1.getEvents)(BASE_URI, apiKey, await getRepositoryId(apiKey))).body;
@@ -1816,30 +1854,66 @@ const steps = [
     {
         id: "sourceMapping",
         title: "Quell-Mapping „Rechnungsleser“",
-        description: "Zuordnung der Rechnungsleser-Felder zu den DMS-Eigenschaften (erstes Repository) - ein vorhandenes Mapping wird aktualisiert.",
-        // Nur nachfragen, wenn die vorhandenen Mappings nicht lesbar sind (dann
-        // droht ein Duplikat).
+        description: `Zuordnung der Rechnungsleser-Felder zu den DMS-Eigenschaften (erstes Repository, Quelle ${SOURCE_MAPPING.sourceId}). Bei einem vorhandenen Mapping werden die Vorlagen-Zuordnungen aktualisiert bzw. ergänzt, weitere Zuordnungen bleiben erhalten.`,
+        // Bei einem vorhandenen Mapping vorher zeigen, welche bestehenden
+        // Zuordnungen auf ein anderes Ziel umgebogen werden (die Vorlage nutzt die
+        // Eigenschafts-IDs von gevis ECM, die im Mandanten abweichen können).
         async beforeRun(apiKey) {
-            if (await findSourceMapping(apiKey)) {
+            const { existing } = await findSourceMapping(apiKey);
+            if (!existing) {
                 return true;
             }
-            return confirmWarning("Quell-Mapping anlegen?", "Die vorhandenen Quell-Mappings konnten nicht gelesen werden - existiert „Rechnungsleser“ schon, wird es ggf. <strong>doppelt</strong> angelegt.", "Anlegen");
+            const current = (await (0, getMappingContainers_1.getMappingContainer)(BASE_URI, apiKey, existing)).body;
+            const changes = (SOURCE_MAPPING.mappingItems ?? []).flatMap((item) => {
+                const before = current.mappingItems?.find((existingItem) => existingItem.source === item.source);
+                return before && before.destination !== item.destination
+                    ? [`<li><code>${escapeHtml(item.source ?? "")}</code>: ${escapeHtml(before.destination ?? "–")} → ${escapeHtml(item.destination ?? "–")}</li>`]
+                    : [];
+            });
+            if (changes.length === 0) {
+                return true;
+            }
+            return confirmWarning("Achtung: Zuordnungen werden geändert", `Im Quell-Mapping „${escapeHtml(current.name ?? existing.name ?? "")}“ zeigen folgende Felder danach auf ein <strong>anderes Ziel</strong>:
+         <ul style="text-align:left;font-size:0.85em;margin-top:8px">${changes.join("")}</ul>
+         Neue Felder werden ergänzt, alle übrigen Zuordnungen bleiben unverändert.`, "Zuordnungen ändern");
         },
         async check(apiKey) {
-            const found = await findSourceMapping(apiKey);
-            if (!found) {
-                return { state: "manual", text: "Nicht prüfbar - vor dem Ausführen in der DMS-Konfiguration nachsehen." };
-            }
-            return found.existing ? exists("Vorhanden - Zuordnungen werden aktualisiert.") : missing("Mapping fehlt.");
+            const { existing } = await findSourceMapping(apiKey);
+            return existing
+                ? exists(`Vorhanden als „${existing.name ?? SOURCE_MAPPING.name}“ - Zuordnungen werden aktualisiert.`)
+                : missing("Mapping fehlt.");
         },
         async run(apiKey) {
-            const found = await findSourceMapping(apiKey);
-            if (found?.existing) {
-                await (0, sourceMappings_1.updateSourceMapping)(BASE_URI, apiKey, found.repositoryId, found.existing, SOURCE_MAPPING);
-                return "Quell-Mapping aktualisiert.";
+            const { repositoryId, existing } = await findSourceMapping(apiKey);
+            if (!existing) {
+                await (0, createSourceMapping_1.createSourceMapping)(BASE_URI, apiKey, repositoryId, SOURCE_MAPPING);
+                return "Quell-Mapping angelegt.";
             }
-            await (0, createSourceMapping_1.createSourceMapping)(BASE_URI, apiKey, found?.repositoryId ?? await getRepositoryId(apiKey), SOURCE_MAPPING);
-            return "Quell-Mapping angelegt.";
+            // Vollständig laden, Vorlagen-Zuordnungen je Quellfeld ersetzen bzw.
+            // anhängen, alle übrigen (mandantenspezifischen) Zuordnungen behalten.
+            const current = (await (0, getMappingContainers_1.getMappingContainer)(BASE_URI, apiKey, existing)).body;
+            const items = [...(current.mappingItems ?? [])];
+            let updated = 0;
+            let added = 0;
+            for (const item of SOURCE_MAPPING.mappingItems ?? []) {
+                const index = items.findIndex((existingItem) => existingItem.source === item.source);
+                if (index >= 0) {
+                    items[index] = { ...items[index], ...item };
+                    updated++;
+                }
+                else {
+                    items.push({ ...item });
+                    added++;
+                }
+            }
+            const id = current.id ?? existing._links?.self?.href?.split("/").pop();
+            await (0, getMappingContainers_1.updateMappingContainer)(BASE_URI, apiKey, repositoryId, {
+                name: current.name ?? existing.name,
+                id,
+                sourceId: current.sourceId ?? existing.sourceId,
+                mappingItems: items,
+            });
+            return `Quell-Mapping aktualisiert (${updated} geändert, ${added} ergänzt, ${items.length - updated - added} weitere beibehalten).`;
         },
     },
     {
