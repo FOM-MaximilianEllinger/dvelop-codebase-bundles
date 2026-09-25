@@ -1477,6 +1477,11 @@ const scriptGutschriftenVerschieben_json_1 = __importDefault(__webpack_require__
  * blieben sonst nicht erhalten) und die hinterlegten API-Keys in Script
  * (customerVariables) und Webhook.
  *
+ * Schritt 1 legt die Berechtigungsgruppe fest (neu anlegen oder vorhandene
+ * per Dropdown wählen, direkt in der Zeile des Schritts); Stapelprofile und
+ * Postfächer werden beim Anlegen/Aktualisieren für genau diese Gruppe
+ * berechtigt (siehe resolveTargetGroup).
+ *
  * Vorgeschaltet ist eine Konfigurationsseite: API-Key (eingeben oder neu
  * erstellen, wird beim "Weiter" geprüft) und ERP-Zielsystem (VEO oder gevis
  * R-Linie). Schritte, die nur für ein ERP-System gelten, tragen das in
@@ -1502,7 +1507,7 @@ const scriptGutschriftenVerschieben_json_1 = __importDefault(__webpack_require__
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 5;
+const VERSION_COUNTER = 6;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -1673,14 +1678,60 @@ function findGroupId(groups, name, id) {
     const wanted = normalizeGroupName(name);
     return groups.find((group) => (id && group.id.toLowerCase() === id.toLowerCase()) || normalizeGroupName(group.name) === wanted)?.id;
 }
-// Vom Onboarding benötigte Gruppen; "id" nur, wo sie fest vorgegeben ist.
-const REQUIRED_GROUPS = [
-    { name: GROUP_RECHNUNGSLESER_NAME, id: GROUP_RECHNUNGSLESER_ID, addCurrentUser: true },
-    { name: GROUP_FRUEHES_SCANNEN_NAME, addCurrentUser: false },
-];
-async function findMissingGroups(apiKey) {
+function findGroup(groups, name, id) {
+    const groupId = findGroupId(groups, name, id);
+    return groups.find((group) => group.id === groupId);
+}
+function newGroupBody(name, id, userMembers) {
+    return {
+        name,
+        id,
+        isGlobalGroup: false,
+        isScimProvisioned: false,
+        isTenantAdminGroup: false,
+        showChangeToGlobalGroupButton: true,
+        groupTypes: [],
+        groupMembers: [],
+        idpGroupMembers: [],
+        userMembers,
+        idpUserMembers: [],
+    };
+}
+// Berechtigungsgruppe aus Schritt 1: neu anlegen (Name frei wählbar) oder
+// eine vorhandene Gruppe verwenden. Sie wird in den Stapelprofilen und
+// Postfächern berechtigt.
+let availableGroups = [];
+let groupMode = "new";
+let newGroupName = GROUP_FRUEHES_SCANNEN_NAME;
+let selectedGroupId = "";
+// Beim Öffnen der Schritte-Seite: Gruppen laden und sinnvoll vorbelegen -
+// gibt es die Standardgruppe schon, wird sie als vorhandene Gruppe gewählt.
+async function initGroupSelection(apiKey) {
+    availableGroups = (await loadGroups(apiKey)).sort((a, b) => a.name.localeCompare(b.name, "de"));
+    if (selectedGroupId && availableGroups.some((group) => group.id === selectedGroupId)) {
+        return;
+    }
+    const standard = findGroup(availableGroups, GROUP_FRUEHES_SCANNEN_NAME);
+    if (standard) {
+        groupMode = "existing";
+        selectedGroupId = standard.id;
+    }
+}
+// Die in Schritt 1 festgelegte Gruppe (für Stapelprofile/Postfächer).
+async function resolveTargetGroup(apiKey) {
     const groups = await loadGroups(apiKey);
-    return REQUIRED_GROUPS.filter((definition) => !findGroupId(groups, definition.name, definition.id));
+    if (groupMode === "existing") {
+        const group = groups.find((g) => g.id === selectedGroupId);
+        if (!group) {
+            throw new Error("Bitte in Schritt 1 eine vorhandene Gruppe auswählen.");
+        }
+        return group;
+    }
+    const group = findGroup(groups, newGroupName);
+    if (!group) {
+        throw new Error(`Gruppe „${newGroupName}“ existiert noch nicht - bitte zuerst Schritt 1 ausführen.`);
+    }
+    return group;
 }
 function exists(text) {
     return { state: "exists", text };
@@ -1704,14 +1755,19 @@ function batchProfileStep(id, template) {
     return {
         id,
         title: `Stapelprofil „${template.name}“`,
-        description: "Eingangsverarbeitung - ein vorhandenes Profil wird mit den Einstellungen der Vorlage aktualisiert.",
+        description: "Eingangsverarbeitung, berechtigt wird die Gruppe aus Schritt 1 - ein vorhandenes Profil wird mit den Einstellungen der Vorlage aktualisiert.",
         async check(apiKey) {
             return (await findBatchProfile(apiKey, template.name))
                 ? exists("Vorhanden - Einstellungen werden aktualisiert.")
                 : missing("Profil fehlt.");
         },
         async run(apiKey) {
-            const body = template;
+            const group = await resolveTargetGroup(apiKey);
+            // Statt der Vorlagen-Berechtigung ("Alle") die Gruppe aus Schritt 1.
+            const body = {
+                ...template,
+                authorizedGroups: [{ id: group.id, displayName: group.name, elementType: 1 }],
+            };
             const existing = await findBatchProfile(apiKey, template.name);
             if (existing) {
                 await (0, updateBatchProfile_1.updateBatchProfile)(BASE_URI, apiKey, existing, body);
@@ -1722,14 +1778,14 @@ function batchProfileStep(id, template) {
         },
     };
 }
-// Ein Schritt je Postfach: anlegen bzw. aktualisieren. Beim Aktualisieren
-// bleiben zusätzlich berechtigte Gruppen/Benutzer erhalten, die Onboarding-
-// Gruppen werden ergänzt.
+// Ein Schritt je Postfach: anlegen bzw. aktualisieren. Berechtigt werden die
+// Administratoren und die Gruppe aus Schritt 1; zusätzlich berechtigte
+// Benutzer und Fehler-Empfänger eines vorhandenen Postfachs bleiben erhalten.
 function mailboxStep(entry) {
     return {
         id: `mailbox-${entry.mailbox}`,
         title: `Postfach „${entry.mailbox}“`,
-        description: `${entry.mailbox}@${SUBDOMAIN}.emailinbound… → Stapelprofil „${entry.profileName}“ - benötigt das Stapelprofil und die Gruppen.`,
+        description: `${entry.mailbox}@${SUBDOMAIN}.emailinbound… → Stapelprofil „${entry.profileName}“, berechtigt wird die Gruppe aus Schritt 1.`,
         async check(apiKey) {
             return (await findMailbox(apiKey, entry.mailbox))
                 ? exists("Vorhanden - Einstellungen werden aktualisiert.")
@@ -1741,10 +1797,7 @@ function mailboxStep(entry) {
             if (!adminGroupId) {
                 throw new Error(`Gruppe „${ADMIN_GROUP_NAME}“ nicht gefunden.`);
             }
-            const scanGroupId = findGroupId(groups, GROUP_FRUEHES_SCANNEN_NAME);
-            if (!scanGroupId) {
-                throw new Error(`Gruppe „${GROUP_FRUEHES_SCANNEN_NAME}“ nicht gefunden - bitte zuerst den Schritt „Gruppen“ ausführen.`);
-            }
+            const scanGroupId = (await resolveTargetGroup(apiKey)).id;
             const profileId = (await findBatchProfile(apiKey, entry.profileName))?.batchProfileId;
             if (!profileId) {
                 throw new Error(`Stapelprofil „${entry.profileName}“ nicht gefunden - bitte zuerst das Stapelprofil anlegen.`);
@@ -1759,7 +1812,7 @@ function mailboxStep(entry) {
                 finishImportProcess: true,
                 updated: !!existing,
                 batchnameTemplate: "%Subject%",
-                authorizedInboundGroupIds: unique([...(existing?.authorizedInboundGroupIds ?? []), adminGroupId, scanGroupId]),
+                authorizedInboundGroupIds: unique([adminGroupId, scanGroupId]),
                 authorizedInboundUserIds: existing?.authorizedInboundUserIds ?? [],
                 informOnErrorGroupIds: unique([...(existing?.informOnErrorGroupIds ?? []), adminGroupId]),
                 informOnErrorUserIds: existing?.informOnErrorUserIds ?? [],
@@ -1807,41 +1860,119 @@ function creditMemoEvent(scriptId, webhookApiKey) {
     };
 }
 const steps = [
-    batchProfileStep("profileMail", batchProfileMail_json_1.default),
-    batchProfileStep("profileScan", batchProfileScan_json_1.default),
     {
-        id: "group",
-        title: "Gruppen",
-        description: `„${GROUP_RECHNUNGSLESER_NAME}“ (der aktuelle Benutzer wird Mitglied) und „${GROUP_FRUEHES_SCANNEN_NAME}“ (für die Postfächer). Vorhandene Gruppen bleiben unverändert, damit keine Mitglieder verloren gehen.`,
+        id: "targetGroup",
+        title: "Berechtigungsgruppe",
+        description: "Gruppe, die in den Stapelprofilen und Postfächern berechtigt wird - neu anlegen oder eine vorhandene verwenden. Eine vorhandene Gruppe bleibt unverändert.",
+        renderOptions() {
+            const options = availableGroups
+                .map((group) => `<option value="${escapeHtml(group.id)}" ${group.id === selectedGroupId ? "selected" : ""}>${escapeHtml(group.name)}</option>`)
+                .join("");
+            return `
+        <div class="onb-group-options">
+          <label class="onb-group-option">
+            <input type="radio" name="onb-group-mode" value="new" data-onb-group-mode ${groupMode === "new" ? "checked" : ""}>
+            Neue Gruppe anlegen:
+            <input type="text" class="form-control form-control-sm onb-group-input" data-onb-group-name value="${escapeHtml(newGroupName)}" placeholder="Gruppenname">
+          </label>
+          <label class="onb-group-option">
+            <input type="radio" name="onb-group-mode" value="existing" data-onb-group-mode ${groupMode === "existing" ? "checked" : ""}>
+            Vorhandene Gruppe verwenden:
+            <select class="form-control form-control-sm onb-group-input" data-onb-group-select>
+              <option value="">– Gruppe auswählen –</option>${options}
+            </select>
+          </label>
+        </div>`;
+        },
+        bindOptions(row) {
+            const nameInput = row.querySelector("[data-onb-group-name]");
+            const select = row.querySelector("[data-onb-group-select]");
+            const setMode = (mode) => {
+                groupMode = mode;
+                row.querySelectorAll("[data-onb-group-mode]").forEach((radio) => (radio.checked = radio.value === mode));
+            };
+            // Auswahl geändert = Schritt 1 neu prüfen, die Folgeschritte nutzen
+            // die Gruppe erst beim Ausführen.
+            const onChange = () => {
+                const step = steps.find((s) => s.id === "targetGroup");
+                if (step && !busy)
+                    void withBusy(() => checkStep(step));
+            };
+            row.querySelectorAll("[data-onb-group-mode]").forEach((radio) => {
+                radio.addEventListener("change", () => {
+                    if (radio.checked) {
+                        setMode(radio.value);
+                        onChange();
+                    }
+                });
+            });
+            nameInput?.addEventListener("input", () => {
+                newGroupName = nameInput.value;
+                setMode("new");
+            });
+            nameInput?.addEventListener("change", onChange);
+            nameInput?.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    onChange();
+                }
+            });
+            select?.addEventListener("change", () => {
+                selectedGroupId = select.value;
+                setMode("existing");
+                onChange();
+            });
+        },
         async check(apiKey) {
-            const absent = await findMissingGroups(apiKey);
-            return absent.length === 0 ? done("Beide Gruppen vorhanden.") : missing(`Fehlt: ${absent.map((g) => g.name).join(", ")}`);
+            const groups = await loadGroups(apiKey);
+            if (groupMode === "existing") {
+                const group = groups.find((g) => g.id === selectedGroupId);
+                return group ? done(`Verwendet: „${group.name}“.`) : missing("Bitte eine vorhandene Gruppe auswählen.");
+            }
+            if (!newGroupName.trim()) {
+                return missing("Bitte einen Gruppennamen eingeben.");
+            }
+            const group = findGroup(groups, newGroupName);
+            return group
+                ? done(`„${group.name}“ existiert bereits und wird verwendet.`)
+                : missing(`„${newGroupName.trim()}“ wird angelegt.`);
         },
         async run(apiKey) {
-            const absent = await findMissingGroups(apiKey);
-            if (absent.length === 0) {
+            if (groupMode === "existing") {
+                return `Verwendet: „${(await resolveTargetGroup(apiKey)).name}“.`;
+            }
+            const name = newGroupName.trim();
+            if (!name) {
+                throw new Error("Bitte einen Gruppennamen eingeben.");
+            }
+            if (findGroup(await loadGroups(apiKey), name)) {
+                return "Bereits vorhanden - wird verwendet.";
+            }
+            await (0, createGroup_1.createGroup)(BASE_URI, apiKey, newGroupBody(name, crypto.randomUUID(), []));
+            availableGroups = (await loadGroups(apiKey)).sort((a, b) => a.name.localeCompare(b.name, "de"));
+            return `Gruppe „${name}“ angelegt.`;
+        },
+    },
+    {
+        id: "groupRechnungsleser",
+        title: `Gruppe „${GROUP_RECHNUNGSLESER_NAME}“`,
+        description: "Berechtigungsgruppe für den Rechnungsleser, der aktuelle Benutzer wird Mitglied. Eine vorhandene Gruppe bleibt unverändert, damit keine Mitglieder verloren gehen.",
+        async check(apiKey) {
+            return findGroup(await loadGroups(apiKey), GROUP_RECHNUNGSLESER_NAME, GROUP_RECHNUNGSLESER_ID)
+                ? done("Gruppe vorhanden.")
+                : missing("Gruppe fehlt.");
+        },
+        async run(apiKey) {
+            if (findGroup(await loadGroups(apiKey), GROUP_RECHNUNGSLESER_NAME, GROUP_RECHNUNGSLESER_ID)) {
                 return "Bereits vorhanden.";
             }
             const userId = await getCurrentUserId().catch(() => undefined);
-            for (const definition of absent) {
-                const group = {
-                    name: definition.name,
-                    id: definition.id ?? crypto.randomUUID(),
-                    isGlobalGroup: false,
-                    isScimProvisioned: false,
-                    isTenantAdminGroup: false,
-                    showChangeToGlobalGroupButton: true,
-                    groupTypes: [],
-                    groupMembers: [],
-                    idpGroupMembers: [],
-                    userMembers: definition.addCurrentUser && userId ? [userId] : [],
-                    idpUserMembers: [],
-                };
-                await (0, createGroup_1.createGroup)(BASE_URI, apiKey, group);
-            }
-            return `Angelegt: ${absent.map((g) => g.name).join(", ")}`;
+            await (0, createGroup_1.createGroup)(BASE_URI, apiKey, newGroupBody(GROUP_RECHNUNGSLESER_NAME, GROUP_RECHNUNGSLESER_ID, userId ? [userId] : []));
+            return "Gruppe angelegt.";
         },
     },
+    batchProfileStep("profileMail", batchProfileMail_json_1.default),
+    batchProfileStep("profileScan", batchProfileScan_json_1.default),
     ...MAILBOXES.map(mailboxStep),
     {
         id: "webindex",
@@ -2173,6 +2304,9 @@ const styles = `
   .onb-erp-desc { display: block; color: #6c757d; font-size: 0.8em; font-weight: normal; }
   .onb-summary { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 0.85em; margin-top: 6px; }
   .onb-summary strong { font-weight: 600; }
+  .onb-group-options { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .onb-group-option { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 0.85em; margin: 0; }
+  .onb-group-input { width: 280px; max-width: 100%; }
 </style>`;
 const STATE_LABELS = {
     unknown: "Nicht geprüft",
@@ -2259,7 +2393,7 @@ function renderStepsPage() {
         .map((step, index) => `
         <tr data-onb-step="${step.id}">
           <td class="onb-nr">${index + 1}</td>
-          <td><div class="onb-step-title">${escapeHtml(step.title)}</div><div class="onb-step-desc">${escapeHtml(step.description)}</div></td>
+          <td><div class="onb-step-title">${escapeHtml(step.title)}</div><div class="onb-step-desc">${escapeHtml(step.description)}</div>${step.renderOptions?.() ?? ""}</td>
           <td class="onb-status" data-onb-status></td>
           <td class="onb-action"><button type="button" class="btn btn-sm btn-outline-primary" data-onb-run="${step.id}">Ausführen</button></td>
         </tr>`)
@@ -2521,6 +2655,7 @@ async function goToSteps() {
         refreshView();
         try {
             await getRepositoryId(apiKey.trim());
+            await initGroupSelection(apiKey.trim());
             valid = true;
         }
         catch (error) {
@@ -2581,6 +2716,12 @@ function bindEvents(root) {
             button.addEventListener("click", () => void runSingle(step));
         }
     });
+    for (const step of activeSteps()) {
+        const row = root.querySelector(`tr[data-onb-step="${step.id}"]`);
+        if (row && step.bindOptions) {
+            step.bindOptions(row);
+        }
+    }
     root.querySelectorAll("button[data-onb-action]").forEach((button) => {
         button.addEventListener("click", () => {
             switch (button.dataset.onbAction) {
