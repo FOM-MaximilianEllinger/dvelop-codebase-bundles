@@ -565,21 +565,21 @@ function getLogger() {
 
 /***/ },
 
-/***/ "./src/script.ts"
-/*!***********************!*\
-  !*** ./src/script.ts ***!
-  \***********************/
+/***/ "./src/scripts/script.ts"
+/*!*******************************!*\
+  !*** ./src/scripts/script.ts ***!
+  \*******************************/
 (module, exports, __webpack_require__) {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const credentials_1 = __webpack_require__(/*! ../../../helper/utils/credentials */ "../../helper/utils/credentials.ts");
-const getUsers_1 = __webpack_require__(/*! ../../../helper/identityprovider/getUsers */ "../../helper/identityprovider/getUsers.ts");
-const getGroups_1 = __webpack_require__(/*! ../../../helper/identityprovider/getGroups */ "../../helper/identityprovider/getGroups.ts");
-const getGroup_1 = __webpack_require__(/*! ../../../helper/identityprovider/getGroup */ "../../helper/identityprovider/getGroup.ts");
-const getIdentityproviderConfig_1 = __webpack_require__(/*! ../../../helper/identityprovider/getIdentityproviderConfig */ "../../helper/identityprovider/getIdentityproviderConfig.ts");
-const logger_1 = __webpack_require__(/*! ../../../helper/utils/logger */ "../../helper/utils/logger.ts");
+const credentials_1 = __webpack_require__(/*! ../../../../helper/utils/credentials */ "../../helper/utils/credentials.ts");
+const getUsers_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getUsers */ "../../helper/identityprovider/getUsers.ts");
+const getGroups_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getGroups */ "../../helper/identityprovider/getGroups.ts");
+const getGroup_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getGroup */ "../../helper/identityprovider/getGroup.ts");
+const getIdentityproviderConfig_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getIdentityproviderConfig */ "../../helper/identityprovider/getIdentityproviderConfig.ts");
+const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 let logger = (0, logger_1.getLogger)();
 const config = {
     mode: process.platform === "linux" ? "production" : "development",
@@ -589,7 +589,7 @@ const config = {
 // Publish automatisch um 1 erhöht, damit die Toolbox (loadedTools-Grid)
 // erkennen kann, ob auf GitHub eine neuere Version dieses Tools liegt. Heißt
 // wie in jedem Toolbox-Tool-Projekt einheitlich "VERSION_COUNTER".
-const VERSION_COUNTER = 2;
+const VERSION_COUNTER = 3;
 if (config.mode === "production") {
     module.exports = async (req, res) => {
         const credentials = new credentials_1.APICredentials("", req.var("baseUri"), req.var("apiKey"), "", new Date());
@@ -738,7 +738,7 @@ module.exports = require("path");
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	let __webpack_exports__ = __webpack_require__("./src/script.ts");
+/******/ 	let __webpack_exports__ = __webpack_require__("./src/scripts/script.ts");
 /******/ 	module.exports = __webpack_exports__;
 /******/ 	
 /******/ })()
