@@ -528,7 +528,7 @@ const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExpo
  * bleiben; .github/workflows/publish-bundles.yml erhöht bei jedem Publish
  * automatisch BEIDE Vorkommen gemeinsam.
  */
-const VERSION_COUNTER = 11;
+const VERSION_COUNTER = 12;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // Muss exakt dem Script-Namen in toolbox.meta.json ("scripts[].name") entsprechen - so
 // findet die Toolbox das zugehörige Script anhand seines eindeutigen Namens

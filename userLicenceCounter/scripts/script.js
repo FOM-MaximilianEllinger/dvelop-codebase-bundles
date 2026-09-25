@@ -356,8 +356,9 @@ async function getUsers(baseUri, token, startIndex, count) {
         query.set("count", String(count));
     const queryString = query.toString();
     const url = `${baseUri}/identityprovider/scim/Users${queryString ? `?${queryString}` : ""}`;
+    // Ohne Token (Formular im Browser) über die Session des angemeldeten Benutzers.
     const headers = {
-        Authorization: `Bearer ${token}`,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         Accept: "application/json",
         "Content-Type": "application/json",
     };
@@ -645,7 +646,7 @@ let logger = (0, logger_1.getLogger)();
 // Publish automatisch um 1 erhöht, damit die Toolbox (loadedTools-Grid)
 // erkennen kann, ob auf GitHub eine neuere Version dieses Tools liegt. Heißt
 // wie in jedem Toolbox-Tool-Projekt einheitlich "VERSION_COUNTER".
-const VERSION_COUNTER = 11;
+const VERSION_COUNTER = 12;
 module.exports = async (req, res) => {
     const credentials = new credentials_1.APICredentials("", req.var("baseUri"), req.var("apiKey"), "", new Date());
     await main(credentials, req, res);
