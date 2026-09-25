@@ -5448,7 +5448,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // ausgerollt werden soll, hier um 1 erhöhen. So bleibt die Versionsnummer
 // unabhängig vom Stand auf der jeweiligen Umgebung korrekt, auch wenn dort
 // noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 41;
+const TOOLBOX_VERSION_COUNTER = 42;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5468,7 +5468,7 @@ const TOOL_VERSION_COUNTER_PATTERN = /VERSION_COUNTER\s*=\s*(\d+)/;
 // ---------------------------------------------------------------------------
 // Oberfläche
 //
-// Die komplette Toolbox-Oberfläche (Kopf mit "Toolbox aktualisieren",
+// Die komplette Toolbox-Oberfläche (Kopf mit Toolbox-Aktualisierung,
 // Werkzeugauswahl mit "Erstellen", Liste der installierten Werkzeuge mit
 // "Öffnen"/"Aktualisieren") wird von diesem Skript selbst als HTML in EINE
 // HTML-Element-Komponente mit dem Key "content" gerendert. Im Process Studio
@@ -5507,67 +5507,65 @@ function scriptBundlePathOf(target) {
         return target.bundlePath;
     return undefined;
 }
+// Einheitliche Gestaltung: jeder Bereich hat dieselbe Kopfzeile (Titel links,
+// Aktionen rechts), alle Buttons sind "btn-sm" - Hauptaktion "btn-primary",
+// Nebenaktion "btn-outline-secondary" -, jedes Werkzeug (auch die Vorschau in
+// "Werkzeug hinzufügen") wird als dieselbe Karte dargestellt, und Versionsstände
+// (Toolbox wie Werkzeuge) nutzen dieselbe Statuszeile.
 const toolboxStyles = `
 <style>
   .tbx-root { display: flex; flex-direction: column; gap: 16px; }
   .tbx-section { border: 1px solid #dee2e6; border-radius: 6px; background: #fff; }
-  .tbx-section-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border-bottom: 1px solid #dee2e6; background: #f8f9fa; border-radius: 6px 6px 0 0; }
-  .tbx-section-title { font-weight: 600; font-size: 1.05em; margin: 0; }
-  .tbx-section-body { padding: 12px; }
-  .tbx-toolbox-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .tbx-toolbox-title { font-weight: 700; font-size: 1.25em; }
-  .tbx-toolbox-version { color: #6c757d; font-size: 0.9em; margin-left: 8px; }
-  .tbx-select-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .tbx-select-row select { flex: 1 1 260px; min-width: 200px; }
+  .tbx-section-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid #dee2e6; background: #f8f9fa; border-radius: 6px 6px 0 0; }
+  .tbx-section-title { font-weight: 600; font-size: 1.05em; }
+  .tbx-section-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .tbx-actions { display: flex; gap: 6px; flex-shrink: 0; }
   .tbx-empty { color: #6c757d; font-style: italic; }
-  .tbx-tool { border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
-  .tbx-tool:last-child { margin-bottom: 0; }
+  .tbx-tool { border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 12px; background: #fff; }
   .tbx-tool-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
   .tbx-tool-name { font-weight: 600; font-size: 1.05em; }
   .tbx-tool-desc { color: #6c757d; font-size: 0.9em; margin-top: 4px; }
-  .tbx-tool-actions { display: flex; gap: 6px; flex-shrink: 0; }
   .tbx-badge { display: inline-block; font-size: 0.75em; font-weight: 600; padding: 2px 7px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
-  .tbx-badges { margin: 8px 0 4px; }
-  .tbx-badges .tbx-badge:first-child { margin-left: 0; }
   .tbx-badge-form { background: #e7f1ff; color: #0b5ed7; }
   .tbx-badge-script { background: #fff3cd; color: #997404; }
   .tbx-badge-link { color: #6c757d; font-size: 0.8em; margin-left: 4px; vertical-align: middle; }
   .tbx-parts { list-style: none; margin: 8px 0 0; padding: 0; font-size: 0.9em; }
+  .tbx-section-body > .tbx-parts { margin-top: 0; }
   .tbx-parts li { padding: 2px 0; }
   .tbx-parts-combined { border-left: 3px solid #adb5bd; padding-left: 10px; }
   .tbx-part-label { display: inline-block; min-width: 80px; font-weight: 600; }
-  .tbx-part-hint { color: #6c757d; font-size: 0.85em; margin-top: 4px; }
+  .tbx-hint { color: #6c757d; font-size: 0.85em; margin-top: 6px; }
   .tbx-status-ok { color: #198754; }
   .tbx-status-outdated { color: #b35c00; }
   .tbx-status-unknown { color: #6c757d; }
   .tbx-status-error { color: #dc3545; }
 </style>`;
+const CHECKING_LABEL = "Prüfe…";
+function renderButton(action, label, variant, options = {}) {
+    const css = variant === "primary" ? "btn-primary" : "btn-outline-secondary";
+    const toolId = options.toolId ? ` data-tool-id="${escapeHtml(options.toolId)}"` : "";
+    return `<button type="button" class="btn btn-sm ${css}" data-action="${action}"${toolId}${options.disabled ? " disabled" : ""}>${label}</button>`;
+}
+function renderSection(title, actions, regionName, body) {
+    return `
+  <div class="tbx-section">
+    <div class="tbx-section-header">
+      <span class="tbx-section-title">${title}</span>
+      <div class="tbx-actions">${actions}</div>
+    </div>
+    <div class="tbx-section-body" data-region="${regionName}">${body}</div>
+  </div>`;
+}
+function renderStatusLine(label, statusRole) {
+    return `<li data-part="${statusRole}"><span class="tbx-part-label">${label}</span> <span class="tbx-part-status tbx-status-unknown">wird geprüft…</span></li>`;
+}
 function renderShell() {
+    const loading = `<div class="tbx-empty">Werkzeuge werden geladen…</div>`;
     return `${toolboxStyles}
 <div class="tbx-root" data-tbx-root>
-  <div class="tbx-section">
-    <div class="tbx-section-body tbx-toolbox-header">
-      <div>
-        <span class="tbx-toolbox-title">Toolbox</span>
-        <span class="tbx-toolbox-version">Version ${TOOLBOX_VERSION_COUNTER}</span>
-      </div>
-      <button type="button" class="btn btn-sm btn-outline-primary" data-action="update-toolbox" disabled>Prüfe…</button>
-    </div>
-  </div>
-
-  <div class="tbx-section">
-    <div class="tbx-section-header"><h5 class="tbx-section-title">Werkzeug hinzufügen</h5></div>
-    <div class="tbx-section-body" data-region="available">
-      <div class="tbx-empty">Werkzeuge werden geladen…</div>
-    </div>
-  </div>
-
-  <div class="tbx-section">
-    <div class="tbx-section-header"><h5 class="tbx-section-title">Installierte Werkzeuge</h5></div>
-    <div class="tbx-section-body" data-region="loaded">
-      <div class="tbx-empty">Werkzeuge werden geladen…</div>
-    </div>
-  </div>
+  ${renderSection("Toolbox", renderButton("update-toolbox", CHECKING_LABEL, "primary", { disabled: true }), "toolbox", `<ul class="tbx-parts">${renderStatusLine("Formular", "toolbox")}</ul>`)}
+  ${renderSection("Werkzeug hinzufügen", renderButton("create", "Erstellen", "primary", { disabled: true }), "available", loading)}
+  ${renderSection("Installierte Werkzeuge", "", "loaded", loading)}
 </div>`;
 }
 function renderToolBadges(target) {
@@ -5577,6 +5575,24 @@ function renderToolBadges(target) {
         return `${form}<span class="tbx-badge-link">+</span>${script}`;
     return target.type === "form" ? form : script;
 }
+// Gemeinsame Werkzeug-Karte für die Vorschau in "Werkzeug hinzufügen" und die
+// Liste "Installierte Werkzeuge" - nur Aktionen, Statuszeilen und Hinweis
+// unterscheiden sich.
+function renderToolCard(target, options) {
+    const combined = target.type === "combined";
+    return `
+<div class="tbx-tool" data-tool-id="${escapeHtml(target.id)}">
+  <div class="tbx-tool-header">
+    <div>
+      <span class="tbx-tool-name">${escapeHtml(target.name)}</span>${renderToolBadges(target)}
+      ${target.description ? `<div class="tbx-tool-desc">${escapeHtml(target.description)}</div>` : ""}
+    </div>
+    ${options.actions ? `<div class="tbx-actions">${options.actions}</div>` : ""}
+  </div>
+  ${options.parts ? `<ul class="tbx-parts${combined ? " tbx-parts-combined" : ""}">${options.parts}</ul>` : ""}
+  ${options.hint ? `<div class="tbx-hint">${options.hint}</div>` : ""}
+</div>`;
+}
 function renderAvailableTools(targets) {
     if (targets.length === 0) {
         return `<div class="tbx-empty">Alle verfügbaren Werkzeuge sind bereits installiert.</div>`;
@@ -5585,61 +5601,57 @@ function renderAvailableTools(targets) {
         .map((t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`)
         .join("");
     return `
-<div class="tbx-select-row">
-  <select class="form-control" data-role="tool-select">${options}</select>
-  <button type="button" class="btn btn-primary" data-action="create">Erstellen</button>
-</div>
+<select class="form-control form-control-sm" data-role="tool-select">${options}</select>
 <div data-role="tool-details">${renderSelectedToolDetails(targets[0])}</div>`;
 }
 function renderSelectedToolDetails(target) {
     if (!target)
         return "";
-    const combinedHint = target.type === "combined"
-        ? `<div class="tbx-part-hint">Legt Formular und zugehöriges Script gemeinsam an.</div>`
-        : "";
-    return `
-<div class="tbx-tool-desc">
-  <div class="tbx-badges">${renderToolBadges(target)}</div>
-  ${target.description ? `<div>${escapeHtml(target.description)}</div>` : ""}
-  ${combinedHint}
-</div>`;
-}
-function renderToolPart(target, part) {
-    const label = part === "form" ? "Formular" : target.type === "combined" ? "↳ Script" : "Script";
-    return `<li data-part="${part}"><span class="tbx-part-label">${label}</span> <span class="tbx-part-status tbx-status-unknown">wird geprüft…</span></li>`;
+    return renderToolCard(target, {
+        hint: target.type === "combined" ? "Formular und Script gehören zusammen und werden gemeinsam angelegt." : undefined,
+    });
 }
 function renderLoadedTool(target) {
-    const id = escapeHtml(target.id);
-    const openButton = hasFormPart(target)
-        ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-action="open" data-tool-id="${id}">Öffnen</button>`
-        : "";
-    const combined = target.type === "combined";
-    const hint = combined
-        ? `<div class="tbx-part-hint">Formular und Script gehören zusammen und werden gemeinsam aktualisiert.</div>`
-        : "";
-    return `
-<div class="tbx-tool" data-tool-id="${id}">
-  <div class="tbx-tool-header">
-    <div>
-      <span class="tbx-tool-name">${escapeHtml(target.name)}</span>${renderToolBadges(target)}
-      ${target.description ? `<div class="tbx-tool-desc">${escapeHtml(target.description)}</div>` : ""}
-    </div>
-    <div class="tbx-tool-actions">
-      ${openButton}
-      <button type="button" class="btn btn-sm btn-primary" data-action="update" data-tool-id="${id}" disabled>Prüfe…</button>
-    </div>
-  </div>
-  <ul class="tbx-parts${combined ? " tbx-parts-combined" : ""}">
-    ${toolParts(target).map((part) => renderToolPart(target, part)).join("")}
-  </ul>
-  ${hint}
-</div>`;
+    const actions = [
+        hasFormPart(target) ? renderButton("open", "Öffnen", "secondary", { toolId: target.id }) : "",
+        renderButton("update", CHECKING_LABEL, "primary", { toolId: target.id, disabled: true }),
+    ].join("");
+    const parts = toolParts(target)
+        .map((part) => renderStatusLine(part === "form" ? "Formular" : target.type === "combined" ? "↳ Script" : "Script", part))
+        .join("");
+    return renderToolCard(target, {
+        actions,
+        parts,
+        hint: target.type === "combined" ? "Formular und Script gehören zusammen und werden gemeinsam aktualisiert." : undefined,
+    });
 }
 function renderLoadedTools(loadedTargets) {
     if (loadedTargets.length === 0) {
         return `<div class="tbx-empty">Noch keine Werkzeuge installiert.</div>`;
     }
     return loadedTargets.map(renderLoadedTool).join("");
+}
+// Setzt Statuszeile (Text + Farbe) und den zugehörigen Aktualisieren-Button
+// einheitlich für Toolbox und Werkzeuge.
+function applyStatus(statusElement, status) {
+    if (!statusElement)
+        return;
+    const { text, css } = describePartStatus(status);
+    statusElement.textContent = text;
+    statusElement.className = `tbx-part-status ${css}`;
+}
+function applyUpdateButton(button, statuses) {
+    if (!button)
+        return;
+    const remoteVersions = statuses.map((s) => s.remote).filter((v) => v !== undefined);
+    const latest = remoteVersions.length > 0 ? Math.max(...remoteVersions) : undefined;
+    const actionable = statuses.some((s) => s.error || isPartOutdated(s));
+    button.disabled = !actionable;
+    button.textContent = !actionable
+        ? "Aktuell"
+        : latest !== undefined
+            ? `Aktualisieren (Version ${latest})`
+            : "Aktualisieren";
 }
 function region(name) {
     return mountedRoot?.querySelector(`[data-region="${name}"]`) ?? null;
@@ -5730,38 +5742,28 @@ function bindToolboxEvents(root) {
 // ---------------------------------------------------------------------------
 // Toolbox selbst
 // ---------------------------------------------------------------------------
-// Lädt das aktuell auf GitHub veröffentlichte Toolbox-Bundle und aktiviert
-// "Toolbox aktualisieren" nur, wenn die dort enthaltene Version neuer ist als
-// die hier im Browser laufende (TOOLBOX_VERSION_COUNTER).
+// Vergleicht die hier im Browser laufende Toolbox-Version
+// (TOOLBOX_VERSION_COUNTER) mit dem auf GitHub veröffentlichten Bundle und
+// zeigt das Ergebnis in derselben Statuszeile/demselben Button-Verhalten wie
+// bei den Werkzeugen an.
 async function checkToolboxVersion() {
-    const button = mountedRoot?.querySelector('button[data-action="update-toolbox"]');
-    if (!button)
-        return;
+    const section = region("toolbox")?.closest(".tbx-section") ?? null;
+    const statusElement = section?.querySelector('li[data-part="toolbox"] .tbx-part-status') ?? null;
+    const button = section?.querySelector('button[data-action="update-toolbox"]') ?? null;
+    let status;
     try {
         const remoteBundleContent = await loadLatestBundle(TOOLBOX_BUNDLE_PATH);
         const match = remoteBundleContent.match(VERSION_COUNTER_PATTERN);
-        if (!match) {
-            logger.warn("Version im veröffentlichten Toolbox-Bundle konnte nicht ermittelt werden.");
-            button.textContent = "Toolbox aktualisieren";
-            button.disabled = false;
-            return;
-        }
-        const remoteVersion = parseInt(match[1], 10);
-        logger.info(`Veröffentlichte Toolbox-Version auf GitHub: ${remoteVersion}, lokale Version: ${TOOLBOX_VERSION_COUNTER}.`);
-        if (remoteVersion > TOOLBOX_VERSION_COUNTER) {
-            button.textContent = `Toolbox aktualisieren (Version ${remoteVersion})`;
-            button.disabled = false;
-        }
-        else {
-            button.textContent = "Toolbox ist aktuell";
-            button.disabled = true;
-        }
+        status = match
+            ? { installed: TOOLBOX_VERSION_COUNTER, remote: parseInt(match[1], 10) }
+            : { error: "Veröffentlichte Version nicht ermittelbar." };
     }
     catch (error) {
         logger.error(`Fehler beim Prüfen auf eine neue Toolbox-Version: ${getErrorMessage(error)}`);
-        button.textContent = "Toolbox aktualisieren";
-        button.disabled = false;
+        status = { error: getErrorMessage(error) };
     }
+    applyStatus(statusElement, status);
+    applyUpdateButton(button, [status]);
 }
 /**
  * Aktualisiert das Toolbox-Formular selbst: lädt sein eigenes Bundle aus dem
@@ -5771,7 +5773,7 @@ async function checkToolboxVersion() {
  * die Seite nach erfolgreichem Patch automatisch neu geladen.
  */
 async function updateToolbox(button) {
-    const previousLabel = button.textContent ?? "Toolbox aktualisieren";
+    const previousLabel = button.textContent ?? "Aktualisieren";
     button.disabled = true;
     button.textContent = "Aktualisiere…";
     try {
@@ -5828,9 +5830,7 @@ async function refreshToolLists() {
         const loadedTargets = targetForms_1.targetForms.filter(isAlreadyLoaded);
         logger.debug(`refreshToolLists: verfügbar=[${availableTargets.map((t) => t.name).join(", ")}], ` +
             `installiert=[${loadedTargets.map((t) => t.name).join(", ")}]`);
-        const available = region("available");
-        if (available)
-            available.innerHTML = renderAvailableTools(availableTargets);
+        renderAvailableRegion();
         await populateLoadedTools(loadedTargets, () => Promise.resolve(allScripts));
     }
     catch (error) {
@@ -5838,13 +5838,23 @@ async function refreshToolLists() {
         // Fallback: Auswahl zeigt sicherheitshalber alle kuratierten Werkzeuge an,
         // statt eines, das eigentlich schon geladen ist, dauerhaft zu verstecken.
         availableTargets = [...targetForms_1.targetForms];
-        const available = region("available");
-        if (available)
-            available.innerHTML = renderAvailableTools(availableTargets);
+        renderAvailableRegion();
         const loaded = region("loaded");
         if (loaded) {
             loaded.innerHTML = `<div class="tbx-status-error">Installierte Werkzeuge konnten nicht ermittelt werden: ${escapeHtml(getErrorMessage(error))}</div>`;
         }
+    }
+}
+// Rendert Auswahl + Vorschau und setzt den "Erstellen"-Button in der
+// Kopfzeile passend (deaktiviert, wenn nichts mehr hinzugefügt werden kann).
+function renderAvailableRegion() {
+    const available = region("available");
+    if (available)
+        available.innerHTML = renderAvailableTools(availableTargets);
+    const createButton = available?.closest(".tbx-section")?.querySelector('button[data-action="create"]');
+    if (createButton) {
+        createButton.textContent = "Erstellen";
+        createButton.disabled = availableTargets.length === 0;
     }
 }
 // Legt das in der Auswahl gewählte Werkzeug an (bei "combined" Formular UND
@@ -5871,10 +5881,7 @@ async function createSelectedTool(button) {
     catch (error) {
         logger.error(`Fehler beim Anlegen von "${target.name}": ${getErrorMessage(error)}`);
         await showErrorAlert(`Fehler beim Anlegen von "${target.name}"`, error);
-        button.disabled = false;
-        button.textContent = "Erstellen";
-        if (select)
-            select.disabled = false;
+        renderAvailableRegion();
     }
 }
 // Befüllt "Installierte Werkzeuge": jedes Werkzeug bekommt eine eigene Karte
@@ -5966,28 +5973,9 @@ async function updateLoadedToolStatus(container, target, loadScripts) {
         status: part === "form" && hasFormPart(target) ? await checkFormPart(target) : await checkScriptPart(target, loadScripts),
     })));
     for (const { part, status } of statuses) {
-        const statusElement = card.querySelector(`li[data-part="${part}"] .tbx-part-status`);
-        if (!statusElement)
-            continue;
-        const { text, css } = describePartStatus(status);
-        statusElement.textContent = text;
-        statusElement.className = `tbx-part-status ${css}`;
+        applyStatus(card.querySelector(`li[data-part="${part}"] .tbx-part-status`), status);
     }
-    const updateButton = card.querySelector('button[data-action="update"]');
-    if (!updateButton)
-        return;
-    const remoteVersions = statuses.map((s) => s.status.remote).filter((v) => v !== undefined);
-    const latest = remoteVersions.length > 0 ? Math.max(...remoteVersions) : undefined;
-    const anyError = statuses.some((s) => s.status.error);
-    const outdated = statuses.some((s) => isPartOutdated(s.status));
-    if (outdated || anyError) {
-        updateButton.disabled = false;
-        updateButton.textContent = latest !== undefined ? `Aktualisieren (Version ${latest})` : "Aktualisieren";
-    }
-    else {
-        updateButton.disabled = true;
-        updateButton.textContent = "Aktuell";
-    }
+    applyUpdateButton(card.querySelector('button[data-action="update"]'), statuses.map((s) => s.status));
 }
 // Patcht das Werkzeug in dforms/Scripting (bei "combined" Formular UND
 // Script gemeinsam, siehe ensureTargetUpToDate) und baut danach nur die
