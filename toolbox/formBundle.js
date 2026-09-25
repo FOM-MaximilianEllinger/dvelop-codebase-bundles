@@ -5162,85 +5162,6 @@ async function getAllScripts(baseUri, token) {
 
 /***/ },
 
-/***/ "../../helper/scripting/getScriptRelease.ts"
-/*!**************************************************!*\
-  !*** ../../helper/scripting/getScriptRelease.ts ***!
-  \**************************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getScriptRelease = getScriptRelease;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-/**
- * Liest eine konkrete Release-Ressource eines Scripts - anders als
- * getScriptVersion (die Versions-Liste) enthält die Release-Ressource den
- * tatsächlichen Content der zum Release-Zeitpunkt aktiven Version sowie
- * deren versionId, releasedBy und releasedAt.
- *
- * @param baseUri - The base URI of the API endpoint.
- * @param token - The authorization token to access the API.
- * @param scriptId - The unique identifier of the script.
- * @param releaseId - The unique identifier of the release to retrieve.
- * @returns A promise that resolves to the API response containing the release details.
- */
-async function getScriptRelease(baseUri, token, scriptId, releaseId) {
-    const url = `${baseUri}/scripting/script/${scriptId}/release/${releaseId}`;
-    const headers = {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-    };
-    const options = {
-        method: "GET",
-        headers,
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
-}
-
-
-/***/ },
-
-/***/ "../../helper/scripting/getScriptReleases.ts"
-/*!***************************************************!*\
-  !*** ../../helper/scripting/getScriptReleases.ts ***!
-  \***************************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getScriptReleases = getScriptReleases;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-/**
- * Liest die Release-Historie eines Scripts (Liste bereits erstellter
- * Releases plus den aktuellen, noch unreleaseden Draft-Stand) - anders als
- * getScriptRelease (Details einer EINEN Release) liefert dieser Endpunkt pro
- * Eintrag nur Metadaten (id, user, releaseDate), keinen Content.
- *
- * @param baseUri - The base URI of the API endpoint.
- * @param token - The authorization token to access the API.
- * @param scriptId - The unique identifier of the script.
- * @returns A promise that resolves to the API response containing the release history.
- */
-async function getScriptReleases(baseUri, token, scriptId) {
-    const url = `${baseUri}/scripting/script/${scriptId}/release`;
-    const headers = {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-    };
-    const options = {
-        method: "GET",
-        headers,
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
-}
-
-
-/***/ },
-
 /***/ "../../helper/scripting/getScriptVersion.ts"
 /*!**************************************************!*\
   !*** ../../helper/scripting/getScriptVersion.ts ***!
@@ -5498,8 +5419,6 @@ const getAllScripts_1 = __webpack_require__(/*! ../../../../helper/scripting/get
 const createScript_1 = __webpack_require__(/*! ../../../../helper/scripting/createScript */ "../../helper/scripting/createScript.ts");
 const getScriptVersion_1 = __webpack_require__(/*! ../../../../helper/scripting/getScriptVersion */ "../../helper/scripting/getScriptVersion.ts");
 const patchScript_1 = __webpack_require__(/*! ../../../../helper/scripting/patchScript */ "../../helper/scripting/patchScript.ts");
-const getScriptReleases_1 = __webpack_require__(/*! ../../../../helper/scripting/getScriptReleases */ "../../helper/scripting/getScriptReleases.ts");
-const getScriptRelease_1 = __webpack_require__(/*! ../../../../helper/scripting/getScriptRelease */ "../../helper/scripting/getScriptRelease.ts");
 const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 const targetForms_1 = __webpack_require__(/*! ../config/targetForms */ "./src/config/targetForms.ts");
 const publicBundleRepo_1 = __webpack_require__(/*! ../config/publicBundleRepo */ "./src/config/publicBundleRepo.ts");
@@ -5523,7 +5442,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 39;
+const TOOLBOX_VERSION_COUNTER = 40;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5787,10 +5706,19 @@ function labelLoadedToolRowButtons(grid, loadedTargets) {
 // beschriftet + (de)aktiviert den übergebenen Button entsprechend - analog zu
 // enableUpdateButtonIfNewerVersionAvailable für den Toolbox-eigenen
 // Update-Button. Für Scripts (target.type === "script") liefert
-// getScriptVersion den installierten Content nicht zurück - stattdessen wird
-// die neueste Release-Ressource (getScriptReleases + getScriptRelease)
-// gelesen, die den tatsächlich zuletzt gepatchten Content enthält (siehe
-// Kommentar an ensureTargetScriptUpToDate).
+// getScriptVersion den installierten CONTENT nicht zurück - als Ersatz wird
+// derselbe VERSION_COUNTER-Marker gelesen, den ensureTargetScriptUpToDate bei
+// jedem Patch zusätzlich in "action.description" einträgt (dieses Feld liefert
+// getScriptVersion zurück).
+//
+// Ursprünglich stand hier ein Vergleich über die Release-Historie
+// (getScriptReleases/getScriptRelease, die den echten Content zurückliefert) -
+// das war ein Fehlschluss: patchScript patcht nur die Draft-Version, legt aber
+// NICHT bei jedem Aufruf automatisch eine neue Release an (die einzige bis
+// dahin beobachtete Release stammte vermutlich aus einem manuellen Klick im
+// Process-Studio-Editor, nicht aus unserem Patch) - der Vergleich griff daher
+// nie und der Button blieb dauerhaft aktiv. Die Draft-Version selbst wird bei
+// jedem Patch garantiert aktualisiert, der Marker dort ist daher zuverlässig.
 async function labelLoadedToolRowButton(updateButton, target) {
     try {
         if (target.type === "script") {
@@ -5805,20 +5733,14 @@ async function labelLoadedToolRowButton(updateButton, target) {
             let installedVersion;
             const script = allScripts.body.find((s) => s.name === target.name);
             if (script?.id) {
-                const releases = await (0, getScriptReleases_1.getScriptReleases)(baseUri, NO_TOKEN, script.id);
-                // Neueste Release anhand releaseDate bestimmen statt Array-Reihenfolge
-                // zu vertrauen (in der bisher einzigen bekannten Antwort gab es nur
-                // einen Eintrag, die Sortierung der API ist nicht dokumentiert).
-                const newestRelease = (releases.body.versions ?? []).reduce((newest, entry) => !newest || (entry.releaseDate ?? "") > (newest.releaseDate ?? "") ? entry : newest, undefined);
-                if (newestRelease?.id) {
-                    const release = await (0, getScriptRelease_1.getScriptRelease)(baseUri, NO_TOKEN, script.id, newestRelease.id);
-                    const installedMatch = release.body.content?.match(TOOL_VERSION_COUNTER_PATTERN);
-                    installedVersion = installedMatch ? parseInt(installedMatch[1], 10) : undefined;
-                }
+                const versions = await (0, getScriptVersion_1.getScriptVersion)(baseUri, NO_TOKEN, script.id);
+                const installedMatch = versions.body[0]?.action?.description?.de?.match(TOOL_VERSION_COUNTER_PATTERN);
+                installedVersion = installedMatch ? parseInt(installedMatch[1], 10) : undefined;
             }
             // Bleibt aktiv, wenn die installierte Version (noch) nicht ermittelbar
-            // ist (z.B. ein Script ohne jede Release-Historie) - sicherer Default
-            // wie beim Formular-Zweig unten.
+            // ist (z.B. ein Script, das vor Einführung des Markers zuletzt
+            // aktualisiert wurde) - sicherer Default wie beim Formular-Zweig unten;
+            // der nächste Klick trägt den Marker nach.
             updateButton.component.disabled = remoteVersion !== undefined && installedVersion !== undefined && remoteVersion <= installedVersion;
             updateButton.redraw();
             return;
@@ -6020,18 +5942,22 @@ async function ensureTargetFormUpToDate(target) {
  *  - Anders als bei Formularen (customJs, per getForm zurücklesbar) liefert
  *    die Scripting-API den installierten Content über getScriptVersion NICHT
  *    zurück - ein direkter Versionsvergleich wie bei Formularen ist über die
- *    Version selbst nicht möglich. Jedes patchScript legt aber automatisch
- *    einen neuen Eintrag in der Release-Historie an (bestätigt: releaseDate
- *    und draft.lastModifiedAt liegen nach einem Patch nur Sekunden
- *    auseinander), dessen Release-Ressource den tatsächlich zu diesem
- *    Zeitpunkt aktiven Content enthält - labelLoadedToolRowButton nutzt genau
- *    das (getScriptReleases + getScriptRelease), um die installierte Version
- *    zu bestimmen, statt sich auf einen separat gepflegten Marker zu
- *    verlassen.
+ *    Version selbst nicht möglich. Ein Umweg über die Release-Historie
+ *    (getScriptReleases/getScriptRelease) wurde ausprobiert und wieder
+ *    verworfen: patchScript legt NICHT bei jedem Aufruf automatisch eine neue
+ *    Release an, der Vergleich griff daher nie und der Update-Button blieb
+ *    dauerhaft aktiv. Stattdessen wird derselbe VERSION_COUNTER-Marker, der
+ *    bereits im Content steht, zusätzlich in "action.description" eingetragen
+ *    (dieses Feld liefert getScriptVersion zuverlässig zurück, da es Teil
+ *    derselben Draft-Version ist, die hier gepatcht wird) -
+ *    labelLoadedToolRowButton liest ihn von dort, um die installierte Version
+ *    zu bestimmen.
  */
 async function ensureTargetScriptUpToDate(target) {
     const baseUri = window.location.origin;
     const content = await loadLatestBundle(target.bundlePath);
+    const versionMatch = content.match(TOOL_VERSION_COUNTER_PATTERN);
+    const description = versionMatch ? `${target.description} (VERSION_COUNTER = ${versionMatch[1]})` : target.description;
     const allScripts = await (0, getAllScripts_1.getAllScripts)(baseUri, NO_TOKEN);
     let script = allScripts.body.find((s) => s.name === target.name);
     if (!script) {
@@ -6055,7 +5981,7 @@ async function ensureTargetScriptUpToDate(target) {
         actionEnabled: true,
         action: {
             display_name: { de: target.name },
-            description: { de: target.description },
+            description: { de: description },
             volatile: true,
             execution_mode: "Synchron",
             input_properties: [],
