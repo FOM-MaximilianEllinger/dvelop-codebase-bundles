@@ -1,0 +1,14 @@
+{
+  "display": "form",
+  "components": [
+    {
+      "type": "htmlelement",
+      "tag": "div",
+      "key": "result",
+      "label": "Stapel",
+      "input": false,
+      "tableView": false,
+      "content": "<p>Stapel werden geladen…</p>"
+    }
+  ]
+}
