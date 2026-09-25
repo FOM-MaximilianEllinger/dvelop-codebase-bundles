@@ -209,6 +209,247 @@ function getLogger() {
 }
 
 
+/***/ },
+
+/***/ "../../helper/utils/tableExport.ts"
+/*!*****************************************!*\
+  !*** ../../helper/utils/tableExport.ts ***!
+  \*****************************************/
+(__unused_webpack_module, exports) {
+
+
+/**
+ * Export einer einfachen Tabelle (Kopfzeile + Zeilen) als CSV oder Excel
+ * (.xlsx) direkt im Browser - ohne externe Bibliothek. Eine .xlsx-Datei ist
+ * ein ZIP-Archiv aus wenigen XML-Dateien; hier wird es unkomprimiert
+ * ("stored") erzeugt, was Excel/LibreOffice problemlos öffnen.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.toCsv = toCsv;
+exports.toXlsx = toXlsx;
+exports.downloadBlob = downloadBlob;
+// ---------------------------------------------------------------- CSV
+/**
+ * CSV im von deutschem Excel erwarteten Format: Semikolon als Trennzeichen,
+ * CRLF als Zeilenende und UTF-8-BOM, damit Umlaute korrekt erkannt werden.
+ */
+function toCsv(table, separator = ";") {
+    const escapeCell = (cell) => {
+        const text = cell === null || cell === undefined ? "" : String(cell);
+        return /["\r\n]/.test(text) || text.includes(separator)
+            ? `"${text.replace(/"/g, '""')}"`
+            : text;
+    };
+    const lines = [table.headers, ...table.rows].map((row) => row.map(escapeCell).join(separator));
+    return new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+}
+// ---------------------------------------------------------------- XLSX
+function escapeXml(value) {
+    return value
+        // In XML 1.0 unzulässige Steuerzeichen entfernen, sonst meldet Excel eine beschädigte Datei.
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+function columnName(index) {
+    let name = "";
+    for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) {
+        name = String.fromCharCode(65 + ((n - 1) % 26)) + name;
+    }
+    return name;
+}
+function xlsxCell(cell, ref, style) {
+    const s = style ? ` s="${style}"` : "";
+    if (typeof cell === "number" && Number.isFinite(cell)) {
+        return `<c r="${ref}"${s}><v>${cell}</v></c>`;
+    }
+    if (typeof cell === "boolean") {
+        return `<c r="${ref}"${s} t="b"><v>${cell ? 1 : 0}</v></c>`;
+    }
+    const text = cell === null || cell === undefined ? "" : String(cell);
+    return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`;
+}
+function sheetXml(table) {
+    const allRows = [table.headers, ...table.rows];
+    const columnCount = Math.max(1, ...allRows.map((row) => row.length));
+    const lastRef = `${columnName(columnCount - 1)}${allRows.length}`;
+    // Spaltenbreite grob nach längstem Inhalt (in Zeichen), begrenzt auf 10..60.
+    const cols = Array.from({ length: columnCount }, (_, c) => {
+        const longest = Math.max(...allRows.map((row) => String(row[c] ?? "").length));
+        const width = Math.min(60, Math.max(10, longest + 2));
+        return `<col min="${c + 1}" max="${c + 1}" width="${width}" customWidth="1"/>`;
+    }).join("");
+    const rowsXml = allRows
+        .map((row, r) => {
+        const cells = row.map((cell, c) => xlsxCell(cell, `${columnName(c)}${r + 1}`, r === 0 ? 1 : 0)).join("");
+        return `<row r="${r + 1}">${cells}</row>`;
+    })
+        .join("");
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<cols>${cols}</cols>
+<sheetData>${rowsXml}</sheetData>
+<autoFilter ref="A1:${lastRef}"/>
+</worksheet>`;
+}
+function xlsxFiles(table, sheetName) {
+    // Excel erlaubt max. 31 Zeichen und keine der Zeichen []:*?/\ im Blattnamen.
+    const safeSheetName = escapeXml(sheetName.replace(/[\[\]:*?\/\\]/g, " ").slice(0, 31) || "Tabelle1");
+    return [
+        {
+            name: "[Content_Types].xml",
+            content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`,
+        },
+        {
+            name: "_rels/.rels",
+            content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`,
+        },
+        {
+            name: "xl/workbook.xml",
+            content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="${safeSheetName}" sheetId="1" r:id="rId1"/></sheets>
+<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${safeSheetName.replace(/'/g, "''")}'!$A$1:$${columnName(Math.max(1, table.headers.length) - 1)}$${table.rows.length + 1}</definedName></definedNames>
+</workbook>`,
+        },
+        {
+            name: "xl/_rels/workbook.xml.rels",
+            content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`,
+        },
+        {
+            // Stil 0 = Standard, Stil 1 = fett mit grauem Hintergrund (Kopfzeile).
+            name: "xl/styles.xml",
+            content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
+<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE9ECEF"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs>
+<cellStyles count="1"><cellStyle name="Standard" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`,
+        },
+        { name: "xl/worksheets/sheet1.xml", content: sheetXml(table) },
+    ];
+}
+const CRC_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) {
+            c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        }
+        table[n] = c >>> 0;
+    }
+    return table;
+})();
+function crc32(data) {
+    let crc = 0xffffffff;
+    for (let i = 0; i < data.length; i++) {
+        crc = CRC_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+}
+// Minimales ZIP ohne Kompression (Methode 0 "stored").
+function createZip(files) {
+    const encoder = new TextEncoder();
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+    for (const file of files) {
+        const name = encoder.encode(file.name);
+        const data = encoder.encode(file.content);
+        const crc = crc32(data);
+        const local = new Uint8Array(30 + name.length);
+        const lv = new DataView(local.buffer);
+        lv.setUint32(0, 0x04034b50, true); // Local file header signature
+        lv.setUint16(4, 20, true); // Version needed
+        lv.setUint16(6, 0x0800, true); // Flags: Dateinamen in UTF-8
+        lv.setUint16(8, 0, true); // Methode: stored
+        lv.setUint16(10, 0, true); // Uhrzeit
+        lv.setUint16(12, 0x21, true); // Datum 01.01.1980
+        lv.setUint32(14, crc, true);
+        lv.setUint32(18, data.length, true); // Komprimierte Größe
+        lv.setUint32(22, data.length, true); // Originalgröße
+        lv.setUint16(26, name.length, true);
+        lv.setUint16(28, 0, true); // Extra-Feld
+        local.set(name, 30);
+        const central = new Uint8Array(46 + name.length);
+        const cv = new DataView(central.buffer);
+        cv.setUint32(0, 0x02014b50, true); // Central directory signature
+        cv.setUint16(4, 20, true); // Version made by
+        cv.setUint16(6, 20, true); // Version needed
+        cv.setUint16(8, 0x0800, true);
+        cv.setUint16(10, 0, true);
+        cv.setUint16(12, 0, true);
+        cv.setUint16(14, 0x21, true);
+        cv.setUint32(16, crc, true);
+        cv.setUint32(20, data.length, true);
+        cv.setUint32(24, data.length, true);
+        cv.setUint16(28, name.length, true);
+        cv.setUint32(42, offset, true); // Offset des Local Headers
+        central.set(name, 46);
+        localParts.push(local, data);
+        centralParts.push(central);
+        offset += local.length + data.length;
+    }
+    const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+    const end = new Uint8Array(22);
+    const ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true); // End of central directory signature
+    ev.setUint16(8, files.length, true);
+    ev.setUint16(10, files.length, true);
+    ev.setUint32(12, centralSize, true);
+    ev.setUint32(16, offset, true);
+    const parts = [...localParts, ...centralParts, end];
+    const zip = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+    let position = 0;
+    for (const part of parts) {
+        zip.set(part, position);
+        position += part.length;
+    }
+    return zip;
+}
+/** Excel-Datei (.xlsx) mit einem Blatt, fetter Kopfzeile, fixierter erster Zeile und Autofilter. */
+function toXlsx(table, sheetName = "Tabelle1") {
+    // .buffer statt des Uint8Array selbst: neuere TS-DOM-Typen lassen
+    // Uint8Array<ArrayBufferLike> nicht als BlobPart zu (der Puffer ist exakt so groß wie das ZIP).
+    return new Blob([createZip(xlsxFiles(table, sheetName)).buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+}
+// ---------------------------------------------------------------- Download
+/** Startet im Browser den Download eines Blobs unter dem angegebenen Dateinamen. */
+function downloadBlob(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+
 /***/ }
 
 /******/ 	});
@@ -256,6 +497,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const getAllScripts_1 = __webpack_require__(/*! ../../../../helper/scripting/getAllScripts */ "../../helper/scripting/getAllScripts.ts");
 const callScriptEndpoint_1 = __webpack_require__(/*! ../../../../helper/scripting/callScriptEndpoint */ "../../helper/scripting/callScriptEndpoint.ts");
 const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
+const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExport */ "../../helper/utils/tableExport.ts");
 /**
  * Formular-Gegenstück zum User-Lizenz-Zähler-Script (src/scripts/script.ts,
  * siehe dessen Kommentar für die eigentliche Zähl-Logik) - "type": "combined"
@@ -277,7 +519,7 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  * bleiben; .github/workflows/publish-bundles.yml erhöht bei jedem Publish
  * automatisch BEIDE Vorkommen gemeinsam.
  */
-const VERSION_COUNTER = 8;
+const VERSION_COUNTER = 9;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // Muss exakt dem Script-Namen in toolbox.meta.json ("scripts[].name") entsprechen - so
 // findet die Toolbox das zugehörige Script anhand seines eindeutigen Namens
@@ -286,6 +528,9 @@ const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const SCRIPT_NAME = "User-Lizenz-Zähler";
 // Komponenten-Key aus src/forms/form.json.
 const resultKey = "result";
+// Zuletzt angezeigte (sortierte) Benutzer - Index = data-index der
+// Tabellenzeile, damit der Export genau die aktuell sichtbaren Zeilen nimmt.
+let displayedUsers = [];
 // Werte des Filter-Selects, jeweils mit dem data-Attribut der Tabellenzeile,
 // das für die Kategorie "1" sein muss (leer = kein Kategorie-Filter).
 const CATEGORY_FILTERS = [
@@ -308,6 +553,7 @@ const styles = `
   .ulc-controls { display: flex; gap: 6px; flex-wrap: wrap; }
   .ulc-category { width: auto; }
   .ulc-filter { max-width: 220px; }
+  .ulc-export { white-space: nowrap; }
   .ulc-badge { display: inline-block; font-size: 0.75em; font-weight: 600; padding: 2px 7px; border-radius: 10px; margin-right: 4px; white-space: nowrap; }
   .ulc-badge-paid { background: #d1e7dd; color: #0f5132; }
   .ulc-badge-technical { background: #e2e3e5; color: #41464b; }
@@ -384,7 +630,7 @@ function renderUserRow(user, index) {
     const search = [user.fullName, user.userName, user.email, user.id].join(" ").toLowerCase();
     const flag = (value) => (value ? "1" : "0");
     return `
-      <tr data-search="${escapeHtml(search)}" data-paid="${flag(user.paid)}" data-technical="${flag(user.technical)}" data-gws="${flag(user.gwsDomain)}">
+      <tr data-index="${index}" data-search="${escapeHtml(search)}" data-paid="${flag(user.paid)}" data-technical="${flag(user.technical)}" data-gws="${flag(user.gwsDomain)}">
         <td class="ulc-nr" data-ulc-nr>${index + 1}</td>
         <td>${renderValue(user.fullName, "ulc-name")}</td>
         <td>${renderValue(user.userName)}</td>
@@ -400,6 +646,7 @@ function renderResult(result) {
     // Bezahlte Benutzer zuerst, innerhalb davon nach Name sortiert.
     const users = [...result.users].sort((a, b) => Number(b.paid) - Number(a.paid) ||
         (a.fullName || a.userName).localeCompare(b.fullName || b.userName, "de"));
+    displayedUsers = users;
     const rows = users.length
         ? users.map(renderUserRow).join("")
         : `<tr><td colspan="6" class="ulc-muted">Keine Benutzer gefunden.</td></tr>`;
@@ -423,6 +670,8 @@ function renderResult(result) {
       <div class="ulc-controls">
         <select class="form-control form-control-sm ulc-category" aria-label="Benutzer filtern">${options}</select>
         <input type="search" class="form-control form-control-sm ulc-filter" placeholder="Suchen…" aria-label="Benutzer suchen">
+        <button type="button" class="btn btn-sm btn-outline-secondary ulc-export" data-export="xlsx" title="Angezeigte Benutzer als Excel-Datei exportieren">Excel</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary ulc-export" data-export="csv" title="Angezeigte Benutzer als CSV-Datei exportieren">CSV</button>
       </div>
     </div>
     <div class="ulc-body">
@@ -464,8 +713,47 @@ function applyFilters(section) {
         counter.textContent = `${visible} von ${rows.length} Benutzern angezeigt`;
     }
 }
-// Filter per Event-Delegation: die Content-Komponente wird bei jedem
-// redraw() neu gerendert, ein direkt am <input>/<select> hängender Listener
+function yesNo(value) {
+    return value ? "Ja" : "Nein";
+}
+// Nimmt genau die aktuell sichtbaren Zeilen (Kategorie-Filter + Suche) in der
+// angezeigten Reihenfolge und Nummerierung.
+function buildExportTable(section) {
+    const visibleRows = Array.from(section.querySelectorAll("tr[data-index]"))
+        .filter((row) => row.style.display !== "none");
+    return {
+        headers: ["Nr.", "Name", "Benutzername", "E-Mail", "Bezahlt", "Technisch", "@gws.ms", "ID"],
+        rows: visibleRows
+            .map((row) => displayedUsers[Number(row.dataset.index)])
+            .filter((user) => !!user)
+            .map((user, index) => [
+            index + 1,
+            user.fullName,
+            user.userName,
+            user.email,
+            yesNo(user.paid),
+            yesNo(user.technical),
+            yesNo(user.gwsDomain),
+            user.id,
+        ]),
+    };
+}
+function exportUsers(section, format) {
+    const table = buildExportTable(section);
+    const category = section.querySelector(".ulc-category")?.value ?? "all";
+    const categoryLabel = CATEGORY_FILTERS.find((filter) => filter.value === category)?.label ?? "Benutzer";
+    const date = new Date().toISOString().slice(0, 10);
+    const baseName = `${categoryLabel.replace(/[^\wäöüÄÖÜß-]+/g, "_")}_${date}`;
+    if (format === "csv") {
+        (0, tableExport_1.downloadBlob)((0, tableExport_1.toCsv)(table), `${baseName}.csv`);
+    }
+    else {
+        (0, tableExport_1.downloadBlob)((0, tableExport_1.toXlsx)(table, categoryLabel), `${baseName}.xlsx`);
+    }
+    logger.debug(`${table.rows.length} Benutzer als ${format.toUpperCase()} exportiert.`);
+}
+// Filter und Export per Event-Delegation: die Content-Komponente wird bei
+// jedem redraw() neu gerendert, ein direkt am <input>/<select>/<button> hängender Listener
 // ginge dabei verloren.
 function registerFilter(form) {
     const root = form.element ?? document;
@@ -481,6 +769,15 @@ function registerFilter(form) {
     };
     root.addEventListener("input", onFilterChange);
     root.addEventListener("change", onFilterChange);
+    root.addEventListener("click", (event) => {
+        const target = event.target;
+        const button = target instanceof HTMLElement ? target.closest("button[data-export]") : null;
+        const section = button?.closest(".ulc-section");
+        if (!button || !section) {
+            return;
+        }
+        exportUsers(section, button.dataset.export === "csv" ? "csv" : "xlsx");
+    });
 }
 /**
  * Sucht die Script-Id per Name (siehe SCRIPT_NAME), ruft sie per
