@@ -581,33 +581,16 @@ const getGroup_1 = __webpack_require__(/*! ../../../../helper/identityprovider/g
 const getIdentityproviderConfig_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getIdentityproviderConfig */ "../../helper/identityprovider/getIdentityproviderConfig.ts");
 const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 let logger = (0, logger_1.getLogger)();
-const config = {
-    mode: process.platform === "linux" ? "production" : "development",
-};
 // Eigener Versionszähler, analog zu TOOLBOX_VERSION_COUNTER in
 // projects/Toolbox/src/form.ts: wird von publish-bundles.yml bei jedem
 // Publish automatisch um 1 erhöht, damit die Toolbox (loadedTools-Grid)
 // erkennen kann, ob auf GitHub eine neuere Version dieses Tools liegt. Heißt
 // wie in jedem Toolbox-Tool-Projekt einheitlich "VERSION_COUNTER".
-const VERSION_COUNTER = 3;
-if (config.mode === "production") {
-    module.exports = async (req, res) => {
-        const credentials = new credentials_1.APICredentials("", req.var("baseUri"), req.var("apiKey"), "", new Date());
-        await main(credentials, req, res);
-    };
-}
-else {
-    // DEVELOPMENT
-    (async () => {
-        const credentials = await credentials_1.APICredentials.findByName("rv-ebe");
-        if (!credentials) {
-            throw new Error(`Credentials not found for rv-ebe`);
-        }
-        await main(credentials, null, null);
-    })().catch((err) => {
-        console.error("Error in development mode:", err);
-    });
-}
+const VERSION_COUNTER = 4;
+module.exports = async (req, res) => {
+    const credentials = new credentials_1.APICredentials("", req.var("baseUri"), req.var("apiKey"), "", new Date());
+    await main(credentials, req, res);
+};
 async function main(credentials, req, res) {
     try {
         logger.debug("Start");
@@ -628,12 +611,8 @@ async function main(credentials, req, res) {
         logger.debug(JSON.stringify(filteredUsers));
         logger.debug(userTableHtml);
         logger.debug(`Anzahl der Benutzer: ${filteredUsers?.length || 0}`);
-        if (config.mode === "production") {
-            res.status(200).set("Content-Type", "text/plain").send(userTableHtml);
-        }
-        {
-            logger.info("End");
-        }
+        res.status(200).set("Content-Type", "text/plain").send(userTableHtml);
+        logger.info("End");
     }
     catch (error) {
         logger.error(`Error: ${error}`);
