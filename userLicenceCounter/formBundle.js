@@ -274,9 +274,9 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  * bleiben; .github/workflows/publish-bundles.yml erhöht bei jedem Publish
  * automatisch BEIDE Vorkommen gemeinsam.
  */
-const VERSION_COUNTER = 4;
+const VERSION_COUNTER = 5;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
-// Muss exakt dem Anzeigenamen in toolbox.meta.json ("name") entsprechen - so
+// Muss exakt dem Script-Namen in toolbox.meta.json ("scripts[].name") entsprechen - so
 // findet die Toolbox das zugehörige Script anhand seines eindeutigen Namens
 // (siehe ensureTargetScriptUpToDate/getAllScripts, Scripts vergeben ihre GUID
 // serverseitig, es gibt keine feste Id wie bei Formularen).
