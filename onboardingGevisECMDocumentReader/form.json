@@ -1,0 +1,14 @@
+{
+  "display": "form",
+  "components": [
+    {
+      "type": "htmlelement",
+      "tag": "div",
+      "key": "result",
+      "label": "Onboarding",
+      "input": false,
+      "tableView": false,
+      "content": "<p>Onboarding wird geladen…</p>"
+    }
+  ]
+}
