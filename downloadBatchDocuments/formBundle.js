@@ -180,6 +180,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.toCsv = toCsv;
 exports.toXlsx = toXlsx;
 exports.downloadBlob = downloadBlob;
+exports.getTenantName = getTenantName;
 // ---------------------------------------------------------------- CSV
 /**
  * CSV im von deutschem Excel erwarteten Format: Semikolon als Trennzeichen,
@@ -399,6 +400,14 @@ function downloadBlob(blob, fileName) {
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+/**
+ * Mandantenname für Dateinamen, abgeleitet aus der ersten Stelle des
+ * Hostnamens, z.B. "ellinger.d-velop.cloud" -> "Ellinger".
+ */
+function getTenantName(hostname = window.location.hostname) {
+    const label = hostname.split(".")[0] ?? "";
+    return label ? label.charAt(0).toUpperCase() + label.slice(1) : "";
 }
 
 
@@ -31111,7 +31120,7 @@ const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExpo
  * .github/workflows/publish-bundles.yml erhöht ihn bei jedem Publish
  * automatisch.
  */
-const VERSION_COUNTER = 2;
+const VERSION_COUNTER = 3;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const GET_HEADERS = { Accept: "application/json" };
@@ -31279,7 +31288,7 @@ async function mergeBatch(batch, onProgress) {
 }
 function toFileName(batch) {
     const base = (batch.name || batch.id || "Stapel").replace(/[\\/:*?"<>|]+/g, "_").trim();
-    return `${base || "Stapel"}.pdf`;
+    return `${[(0, tableExport_1.getTenantName)(), base || "Stapel"].filter(Boolean).join("_")}.pdf`;
 }
 // ---------------------------------------------------------------------------
 // Darstellung
@@ -31461,37 +31470,35 @@ async function downloadBatch(button) {
         button.textContent = label;
     }
 }
-// Listener direkt an der eigenen Wurzel (wird bei jedem mountContent neu
-// erzeugt, daher keine doppelten Listener).
+// Listener direkt an Suchfeld/Buttons (werden bei jedem mountContent mit dem
+// Inhalt neu erzeugt, daher keine doppelten Listener). Bewusst ohne
+// "instanceof HTMLElement": dforms führt das Bundle ggf. in einem anderen
+// Fenster-Kontext aus, dann ist instanceof immer false (gleiches Vorgehen wie
+// bindToolboxEvents in projects/Toolbox/src/forms/form.ts).
 function bindEvents(root) {
-    const onFilterChange = (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLElement) || !target.matches(".dbd-filter")) {
-            return;
-        }
-        const section = target.closest(".dbd-section");
-        if (section) {
-            applyFilter(section);
-        }
-    };
-    root.addEventListener("input", onFilterChange);
-    root.addEventListener("keyup", onFilterChange);
-    // Enter im Suchfeld darf das Formular nicht absenden.
-    root.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" && event.target instanceof HTMLInputElement && event.target.matches(".dbd-filter")) {
-            event.preventDefault();
-        }
+    const section = root.querySelector(".dbd-section");
+    const search = section?.querySelector(".dbd-filter");
+    if (section && search) {
+        const onFilterChange = () => applyFilter(section);
+        search.addEventListener("input", onFilterChange);
+        search.addEventListener("keyup", onFilterChange);
+        search.addEventListener("search", onFilterChange);
+        // Enter im Suchfeld darf das Formular nicht absenden.
+        search.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+            }
+        });
+    }
+    root.querySelectorAll("button[data-dbd-download]").forEach((button) => {
+        button.addEventListener("click", () => downloadBatch(button));
     });
-    root.addEventListener("click", (event) => {
-        const target = event.target instanceof HTMLElement ? event.target : null;
-        const downloadButton = target?.closest("button[data-dbd-download]");
-        if (downloadButton) {
-            downloadBatch(downloadButton);
-            return;
-        }
-        if (target?.closest("button[data-dbd-reload]") && currentForm) {
-            loadBatches(currentForm);
-        }
+    root.querySelectorAll("button[data-dbd-reload]").forEach((button) => {
+        button.addEventListener("click", () => {
+            if (currentForm) {
+                loadBatches(currentForm);
+            }
+        });
     });
 }
 async function loadBatches(form) {
