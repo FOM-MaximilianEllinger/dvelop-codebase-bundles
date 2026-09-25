@@ -5359,11 +5359,14 @@ exports.PUBLIC_BUNDLE_REPO_BASE_URL = "https://raw.githubusercontent.com/FOM-Max
 // sie ohnehin zuerst neu erzeugt.
 // Erfasst automatisch jeden projects/Toolbox_*-Ordner (außer Toolbox_Template*)
 // als Tool. Anzeigename/Beschreibung optional über <projekt>/toolbox.meta.json
-// ({"name": "...", "description": "...", "type": "form"|"script"}) anpassen,
-// sonst wird Name/Beschreibung aus dem Ordnernamen abgeleitet und "form"
-// angenommen. Formular-GUID (nur type "form") wird deterministisch aus dem
-// Ordnernamen abgeleitet (siehe generateTargetForms.js), außer für Tools in
-// dessen PINNED_FORM_IDS.
+// ({"name": "...", "description": "...", "type": "form"|"script"|"combined"})
+// anpassen, sonst wird Name/Beschreibung aus dem Ordnernamen abgeleitet und
+// "form" angenommen. Formular-GUID (type "form"/"combined") wird deterministisch
+// aus dem Ordnernamen abgeleitet (siehe generateTargetForms.js), außer für
+// Tools in dessen PINNED_FORM_IDS. "combined" (Formular UND Script im selben
+// Projekt, z.B. projects/Toolbox_UserLicenceCounter) wird beim Anlegen/
+// Aktualisieren als EIN Toolbox-Eintrag behandelt - beide Bundles werden
+// gemeinsam ausgerollt (siehe ensureTargetUpToDate in src/forms/form.ts).
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.targetForms = void 0;
 // Kuratierte Liste der nachladbaren Werkzeuge (Formulare und Scripts) -
@@ -5387,11 +5390,13 @@ exports.targetForms = [
         formDefinitionPath: "processAdministration/form.json",
     },
     {
-        type: "script",
+        type: "combined",
         id: "userLicenceCounter",
         name: "User-Lizenz-Zähler",
         description: "Zählt die lizenzrelevanten Benutzer (ohne technischen Benutzer und @gws.ms-Adressen) und liefert eine HTML-Tabelle mit den Details.",
-        bundlePath: "userLicenceCounter/scriptBundle.js",
+        formId: "ce3a0bac-79fd-5080-8742-819797a25f19",
+        bundlePath: "userLicenceCounter/formBundle.js",
+        scriptBundlePath: "userLicenceCounter/scriptBundle.js",
     },
 ];
 
@@ -5442,7 +5447,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 40;
+const TOOLBOX_VERSION_COUNTER = 41;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5507,11 +5512,11 @@ function populateAvailableForms(form, availableTargets) {
 // Lädt einmalig die vollständige dforms-Formularliste und teilt die
 // kuratierten targetForms (config/targetForms.ts) danach auf: Werkzeuge, die
 // dort noch NICHT existieren, landen im availableForms-Dropdown; Werkzeuge,
-// die schon existieren, im loadedTools-Grid (siehe populateLoadedTools) -
+// die schon existieren, in der loadedTools-Liste (siehe populateLoadedTools) -
 // ein bereits geladenes Werkzeug taucht also nicht mehr im Dropdown auf.
-// Wird beim Formular-Init sowie nach jedem createOrUpdate erneut aufgerufen,
-// damit ein frisch angelegtes Werkzeug direkt vom Dropdown ins Grid wandert,
-// ohne dass die Seite neu geladen werden muss.
+// Wird beim Formular-Init sowie nach jedem Anlegen/Aktualisieren erneut
+// aufgerufen, damit ein frisch angelegtes Werkzeug direkt vom Dropdown in die
+// Liste wandert, ohne dass die Seite neu geladen werden muss.
 async function refreshToolLists(form) {
     try {
         const baseUri = window.location.origin;
@@ -5523,13 +5528,17 @@ async function refreshToolLists(form) {
         // rausgefiltert wird): zeigt, ob ein Tool überhaupt als "schon angelegt"
         // erkannt wird.
         logger.warn(`refreshToolLists: ${allForms.body.forms.length} Formulare, ${allScripts.body.length} Scripts in dforms gefunden. ` +
-            `targetForms: ${targetForms_1.targetForms.map((t) => t.type === "form" ? `${t.name}=${t.formId}` : `${t.name}(script)`).join(", ")}`);
+            `targetForms: ${targetForms_1.targetForms.map((t) => t.type === "script" ? `${t.name}(script)` : `${t.name}=${t.formId}${t.type === "combined" ? "+script" : ""}`).join(", ")}`);
         // Formulare werden über ihre feste formId erkannt, Scripts (die ihre GUID
         // serverseitig bei createScript bekommen, siehe TargetScriptEntry) über
-        // ihren eindeutigen Namen.
-        const isAlreadyLoaded = (t) => t.type === "form"
-            ? allForms.body.forms.some((f) => f.id === t.formId)
-            : allScripts.body.some((s) => s.name === t.name);
+        // ihren eindeutigen Namen. "combined" wird wie "form" über die
+        // Formular-GUID erkannt (stabilere Identität als der Script-Name) -
+        // ensureTargetUpToDate legt bei einem "combined"-Tool ohnehin immer auch
+        // das Script mit an/aktualisiert es, ein separater Script-Check hier wäre
+        // redundant.
+        const isAlreadyLoaded = (t) => t.type === "script"
+            ? allScripts.body.some((s) => s.name === t.name)
+            : allForms.body.forms.some((f) => f.id === t.formId);
         const availableTargets = targetForms_1.targetForms.filter((t) => !isAlreadyLoaded(t));
         const loadedTargets = targetForms_1.targetForms.filter(isAlreadyLoaded);
         logger.warn(`refreshToolLists: verfügbar=[${availableTargets.map((t) => t.name).join(", ")}], ` +
@@ -5608,267 +5617,301 @@ async function enableUpdateButtonIfNewerVersionAvailable(updateButton) {
         logger.error(`Fehler beim Prüfen auf eine neue Toolbox-Version: ${getErrorMessage(error)}`);
     }
 }
+// Key der HTML-Element-Komponente im Process Studio Formular-Editor, in die
+// die Liste der bereits angelegten Werkzeuge gerendert wird (früher ein
+// DataGrid mit Custom-Action-Buttons - jetzt baut dieses Skript Name,
+// Öffnen- und Aktualisieren-Knopf komplett selbst als HTML auf, die Buttons
+// brauchen im Formular-Editor also keine Custom Action mehr).
 const loadedToolsKey = "loadedTools";
-const loadedToolNameKey = "loadedTool";
-const loadedToolUpdateButtonKey = "updateTool";
-// Tatsächlicher Formio-Component-Key des "öffnen"-Buttons im Process Studio
-// Formular-Editor (nicht "openForm" - der Anzeigename dort ist "Formular
-// öffnen", der Key wurde daraus automatisch generiert).
-const loadedToolOpenButtonKey = "formularOffnen";
-// Befüllt das DataGrid "loadedTools" mit den übergebenen (in dforms bereits
-// existierenden) targetForms-Einträgen - siehe refreshToolLists, das die
-// kuratierte Liste (config/targetForms.ts) entsprechend aufteilt. Pro Zeile
-// zeigt der Update-Button "updateTool" die aktuell auf GitHub veröffentlichte
-// Version dieses Tools (per TOOL_VERSION_COUNTER_PATTERN aus dessen Bundle
-// ausgelesen, analog zu TOOLBOX_VERSION_COUNTER/VERSION_COUNTER_PATTERN). Der
-// Klick auf den Button ruft (per im Formular-Editor konfigurierter
-// Custom-Action, siehe window.updateTool weiter unten)
-// "updateTool(form, instance, data);" auf.
-//
-// Die Komponente "loadedTools" muss im Formular-Editor "Initialize Empty"
-// aktiviert haben, sonst zeigt Formio ohne Daten automatisch eine leere
-// Platzhalter-Zeile an. Mit "Initialize Empty" startet das Grid mit 0 Zeilen,
-// und nur wenn hier tatsächlich bereits angelegte Werkzeuge übergeben werden,
-// wird das Grid befüllt - andernfalls bleibt es unangetastet leer.
+function escapeHtml(value) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+function hasFormPart(target) {
+    return target.type !== "script";
+}
+function toolParts(target) {
+    if (target.type === "combined")
+        return ["form", "script"];
+    return [target.type];
+}
+function scriptBundlePathOf(target) {
+    if (target.type === "combined")
+        return target.scriptBundlePath;
+    if (target.type === "script")
+        return target.bundlePath;
+    return undefined;
+}
+const loadedToolsStyles = `
+<style>
+  .tbx-empty { color: #6c757d; font-style: italic; }
+  .tbx-tool { border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
+  .tbx-tool-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .tbx-tool-name { font-weight: 600; font-size: 1.05em; }
+  .tbx-tool-desc { color: #6c757d; font-size: 0.9em; margin-top: 2px; }
+  .tbx-tool-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .tbx-badge { display: inline-block; font-size: 0.75em; font-weight: 600; padding: 2px 7px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
+  .tbx-badge-form { background: #e7f1ff; color: #0b5ed7; }
+  .tbx-badge-script { background: #fff3cd; color: #997404; }
+  .tbx-badge-link { color: #6c757d; font-size: 0.8em; margin-left: 4px; vertical-align: middle; }
+  .tbx-parts { list-style: none; margin: 8px 0 0; padding: 0; font-size: 0.9em; }
+  .tbx-parts li { padding: 2px 0; }
+  .tbx-parts-combined { border-left: 3px solid #adb5bd; padding-left: 10px; }
+  .tbx-part-label { display: inline-block; min-width: 80px; font-weight: 600; }
+  .tbx-part-hint { color: #6c757d; font-size: 0.85em; margin-top: 4px; }
+  .tbx-status-ok { color: #198754; }
+  .tbx-status-outdated { color: #b35c00; }
+  .tbx-status-unknown { color: #6c757d; }
+  .tbx-status-error { color: #dc3545; }
+</style>`;
+function renderToolBadges(target) {
+    const form = `<span class="tbx-badge tbx-badge-form">Formular</span>`;
+    const script = `<span class="tbx-badge tbx-badge-script">Script</span>`;
+    if (target.type === "combined")
+        return `${form}<span class="tbx-badge-link">+</span>${script}`;
+    return target.type === "form" ? form : script;
+}
+function renderToolPart(target, part) {
+    const label = part === "form" ? "Formular" : target.type === "combined" ? "↳ Script" : "Script";
+    return `<li data-part="${part}"><span class="tbx-part-label">${label}</span> <span class="tbx-part-status tbx-status-unknown">wird geprüft…</span></li>`;
+}
+function renderLoadedTool(target) {
+    const id = escapeHtml(target.id);
+    const openButton = hasFormPart(target)
+        ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-action="open" data-tool-id="${id}">Öffnen</button>`
+        : "";
+    const combined = target.type === "combined";
+    const hint = combined
+        ? `<div class="tbx-part-hint">Formular und Script gehören zusammen und werden gemeinsam aktualisiert.</div>`
+        : "";
+    return `
+<div class="tbx-tool" data-tool-id="${id}">
+  <div class="tbx-tool-header">
+    <div>
+      <span class="tbx-tool-name">${escapeHtml(target.name)}</span>${renderToolBadges(target)}
+      ${target.description ? `<div class="tbx-tool-desc">${escapeHtml(target.description)}</div>` : ""}
+    </div>
+    <div class="tbx-tool-actions">
+      ${openButton}
+      <button type="button" class="btn btn-sm btn-primary" data-action="update" data-tool-id="${id}" disabled>Prüfe…</button>
+    </div>
+  </div>
+  <ul class="tbx-parts${combined ? " tbx-parts-combined" : ""}">
+    ${toolParts(target).map((part) => renderToolPart(target, part)).join("")}
+  </ul>
+  ${hint}
+</div>`;
+}
+function renderLoadedTools(loadedTargets) {
+    if (loadedTargets.length === 0) {
+        return `${loadedToolsStyles}<div class="tbx-empty">Noch keine Werkzeuge geladen.</div>`;
+    }
+    return loadedToolsStyles + loadedTargets.map(renderLoadedTool).join("");
+}
+// Die HTML-Element-Komponente legt ihren Inhalt in ein Kind-Element mit
+// ref="html" - dort hinein wird gerendert, damit Formio's eigene Hülle
+// (Label etc.) erhalten bleibt.
+function getLoadedToolsHost(component) {
+    return component.refs?.html ?? component.element?.querySelector?.('[ref="html"]') ?? component.element ?? undefined;
+}
+// Ein einziger Klick-Listener pro Host-Element (Event-Delegation), damit
+// erneutes Rendern nach refreshToolLists keine zusätzlichen Listener
+// anhängt.
+function bindLoadedToolsActions(form, host) {
+    const marker = host;
+    if (marker.__tbxBound)
+        return;
+    marker.__tbxBound = true;
+    host.addEventListener("click", (event) => {
+        const button = event.target?.closest?.("button[data-action]");
+        if (!button || button.disabled)
+            return;
+        const target = targetForms_1.targetForms.find((t) => t.id === button.dataset.toolId);
+        if (!target) {
+            logger.error(`Kein Werkzeug mit id "${button.dataset.toolId}" in der kuratierten Liste gefunden.`);
+            return;
+        }
+        if (button.dataset.action === "open")
+            void openLoadedTool(target, button);
+        if (button.dataset.action === "update")
+            void updateLoadedTool(form, target, button);
+    });
+}
+// Befüllt die HTML-Element-Komponente "loadedTools" mit den übergebenen (in
+// dforms bereits existierenden) targetForms-Einträgen - siehe
+// refreshToolLists, das die kuratierte Liste (config/targetForms.ts)
+// entsprechend aufteilt. Jedes Werkzeug bekommt eine eigene Karte mit Name,
+// Öffnen- (nur mit Formular) und Aktualisieren-Knopf; bei "combined"-Tools
+// (Formular + zugehöriges Script, siehe toolbox.meta.json) zeigt die Karte
+// beide Bestandteile gemeinsam mit jeweils eigenem Versionsstand an.
 async function populateLoadedTools(form, loadedTargets) {
-    const grid = form.getComponent(loadedToolsKey);
-    if (!grid) {
+    const component = form.getComponent(loadedToolsKey);
+    if (!component) {
         logger.warn(`Komponente "${loadedToolsKey}" nicht im Formular gefunden.`);
         return;
     }
-    if (loadedTargets.length === 0) {
-        logger.warn(`populateLoadedTools: keine bereits angelegten Werkzeuge übergeben, "${loadedToolsKey}" bleibt leer.`);
+    const host = getLoadedToolsHost(component);
+    if (!host) {
+        logger.warn(`Komponente "${loadedToolsKey}" hat (noch) kein gerendertes Element.`);
         return;
     }
-    logger.warn(`populateLoadedTools: befülle "${loadedToolsKey}" mit ${loadedTargets.length} Zeile(n): ${loadedTargets.map((t) => t.name).join(", ")}`);
-    grid.setValue(loadedTargets.map((t) => ({ [loadedToolNameKey]: t.name })));
-    // grid.redraw() alleine hat das DataGrid nach einem programmatischen setValue()
-    // zuvor nicht sichtbar neu gezeichnet (Daten waren laut Diagnose-Logs korrekt
-    // gesetzt, UI blieb aber leer) - rebuild() erzwingt einen kompletten Neuaufbau
-    // der Zeilen-Komponenten aus den aktuellen Daten.
-    if (typeof grid.rebuild === "function") {
-        await grid.rebuild();
-    }
-    else {
-        grid.redraw();
-    }
-    labelLoadedToolRowButtons(grid, loadedTargets);
+    bindLoadedToolsActions(form, host);
+    host.innerHTML = renderLoadedTools(loadedTargets);
+    // Script-Liste nur einmal für alle Karten laden (Scripts werden über ihren
+    // Namen gefunden, siehe TargetScriptEntry).
+    let scriptsPromise;
+    const loadScripts = () => (scriptsPromise ?? (scriptsPromise = (0, getAllScripts_1.getAllScripts)(window.location.origin, NO_TOKEN)));
+    await Promise.all(loadedTargets.map((target) => updateLoadedToolStatus(host, target, loadScripts)));
 }
-// Beschriftet pro Zeile den Update-Button mit der aktuell veröffentlichten
-// Version des jeweiligen Tools. Läuft über ALLE Nested-Components des Grids
-// per everyComponent() (Standard-Formio-API, unabhängig von der internen
-// Zeilen-Datenstruktur - ein direkter Zugriff über einen Zeilenindex, z.B.
-// grid.rows[i], hat sich als nicht zuverlässig herausgestellt) und ordnet
-// jeden gefundenen "updateTool"-Button anhand des Anzeigenamens in dessen
-// Zeilendaten (component.data, Komponente "loadedTool") dem passenden Eintrag
-// aus loadedTargets zu. Es gibt in der loadedTools-Zeile bewusst kein eigenes
-// (verstecktes) Id-Feld: Formio's DataGrid entfernt beim internen Normalisieren
-// jeden Schlüssel, der keiner echten Zeilen-Komponente entspricht - ein zuvor
-// per grid.setValue() zusätzlich mitgegebenes "targetId" kam nie in den
-// Zeilendaten an. Der Anzeigename ("loadedTool") ist eine echte, persistente
-// Komponente und bleibt daher zuverlässig erhalten; er muss unter den
-// targetForms-Einträgen (config/targetForms.ts) eindeutig sein.
-function labelLoadedToolRowButtons(grid, loadedTargets) {
-    if (typeof grid.everyComponent !== "function") {
-        logger.warn(`"${loadedToolsKey}" unterstützt everyComponent() nicht, Versions-Beschriftung wird übersprungen.`);
-        return;
-    }
-    grid.everyComponent((component) => {
-        const key = component.component?.key;
-        if (key !== loadedToolUpdateButtonKey && key !== loadedToolOpenButtonKey)
-            return;
-        const toolName = component.data?.[loadedToolNameKey];
-        const target = loadedTargets.find((t) => t.name === toolName);
-        if (!target) {
-            logger.warn(`Zu Button "${key}" konnte kein passendes Werkzeug (Name "${toolName}") gefunden werden.`);
-            return;
-        }
-        if (key === loadedToolOpenButtonKey) {
-            // Scripts laufen server-seitig und haben keine Seite zum Öffnen (anders
-            // als Formulare, die per "view"-Link direkt angezeigt werden können) -
-            // der Button ergibt für sie keinen Sinn.
-            component.component.hidden = target.type === "script";
-            component.redraw();
-            return;
-        }
-        // Sicherer Default, bis die (asynchrone) Versionsprüfung unten fertig ist -
-        // sonst wäre der Button kurzzeitig klickbar, bevor bekannt ist, ob
-        // überhaupt eine neuere Version existiert.
-        component.component.disabled = true;
-        component.redraw();
-        void labelLoadedToolRowButton(component, target);
-    });
+async function remoteVersionOf(bundlePath) {
+    const content = await loadLatestBundle(bundlePath);
+    const match = content.match(TOOL_VERSION_COUNTER_PATTERN);
+    return match ? parseInt(match[1], 10) : undefined;
 }
-// Ermittelt sowohl die aktuell in dforms installierte Version dieses Tools
-// (aus dessen eigenem customJs, per getForm - das Tool läuft nicht mehr inline
-// im Toolbox-Kontext, es gibt also keine lokale Konstante dafür) als auch die
-// zuletzt auf GitHub veröffentlichte Version (per loadLatestBundle) und
-// beschriftet + (de)aktiviert den übergebenen Button entsprechend - analog zu
-// enableUpdateButtonIfNewerVersionAvailable für den Toolbox-eigenen
-// Update-Button. Für Scripts (target.type === "script") liefert
-// getScriptVersion den installierten CONTENT nicht zurück - als Ersatz wird
-// derselbe VERSION_COUNTER-Marker gelesen, den ensureTargetScriptUpToDate bei
-// jedem Patch zusätzlich in "action.description" einträgt (dieses Feld liefert
-// getScriptVersion zurück).
-//
-// Ursprünglich stand hier ein Vergleich über die Release-Historie
-// (getScriptReleases/getScriptRelease, die den echten Content zurückliefert) -
-// das war ein Fehlschluss: patchScript patcht nur die Draft-Version, legt aber
-// NICHT bei jedem Aufruf automatisch eine neue Release an (die einzige bis
-// dahin beobachtete Release stammte vermutlich aus einem manuellen Klick im
-// Process-Studio-Editor, nicht aus unserem Patch) - der Vergleich griff daher
-// nie und der Button blieb dauerhaft aktiv. Die Draft-Version selbst wird bei
-// jedem Patch garantiert aktualisiert, der Marker dort ist daher zuverlässig.
-async function labelLoadedToolRowButton(updateButton, target) {
+async function checkFormPart(target) {
     try {
-        if (target.type === "script") {
-            const baseUri = window.location.origin;
-            const [allScripts, remoteBundleContent] = await Promise.all([
-                (0, getAllScripts_1.getAllScripts)(baseUri, NO_TOKEN),
-                loadLatestBundle(target.bundlePath),
-            ]);
-            const remoteMatch = remoteBundleContent.match(TOOL_VERSION_COUNTER_PATTERN);
-            const remoteVersion = remoteMatch ? parseInt(remoteMatch[1], 10) : undefined;
-            updateButton.label = remoteVersion !== undefined ? `Aktualisieren (Version ${remoteVersion})` : "Aktualisieren";
-            let installedVersion;
-            const script = allScripts.body.find((s) => s.name === target.name);
-            if (script?.id) {
-                const versions = await (0, getScriptVersion_1.getScriptVersion)(baseUri, NO_TOKEN, script.id);
-                const installedMatch = versions.body[0]?.action?.description?.de?.match(TOOL_VERSION_COUNTER_PATTERN);
-                installedVersion = installedMatch ? parseInt(installedMatch[1], 10) : undefined;
-            }
-            // Bleibt aktiv, wenn die installierte Version (noch) nicht ermittelbar
-            // ist (z.B. ein Script, das vor Einführung des Markers zuletzt
-            // aktualisiert wurde) - sicherer Default wie beim Formular-Zweig unten;
-            // der nächste Klick trägt den Marker nach.
-            updateButton.component.disabled = remoteVersion !== undefined && installedVersion !== undefined && remoteVersion <= installedVersion;
-            updateButton.redraw();
-            return;
-        }
-        const baseUri = window.location.origin;
-        const [existing, remoteBundleContent] = await Promise.all([
-            (0, getForm_1.getForm)(baseUri, NO_TOKEN, target.formId),
-            loadLatestBundle(target.bundlePath),
+        const [existing, remote] = await Promise.all([
+            (0, getForm_1.getForm)(window.location.origin, NO_TOKEN, target.formId),
+            remoteVersionOf(target.bundlePath),
         ]);
-        const remoteMatch = remoteBundleContent.match(TOOL_VERSION_COUNTER_PATTERN);
-        if (!remoteMatch) {
-            logger.warn(`Version im veröffentlichten Bundle von "${target.name}" konnte nicht ermittelt werden.`);
-            updateButton.label = "Aktualisieren";
-            updateButton.component.disabled = false;
-            updateButton.redraw();
-            return;
-        }
-        const installedMatch = existing.body.definition.customJs?.match(TOOL_VERSION_COUNTER_PATTERN);
-        const remoteVersion = parseInt(remoteMatch[1], 10);
-        const installedVersion = installedMatch ? parseInt(installedMatch[1], 10) : undefined;
-        updateButton.label = `Aktualisieren (Version ${remoteVersion})`;
-        // Kein Update nötig, wenn die installierte Version bereits >= der
-        // veröffentlichten ist. Ist die installierte Version nicht ermittelbar
-        // (z.B. Editor-Schema ohne unseren Versionskommentar), sicherheitshalber
-        // aktiv lassen statt ein mögliches Update zu blockieren.
-        updateButton.component.disabled = installedVersion !== undefined && remoteVersion <= installedVersion;
+        const match = existing.body.definition.customJs?.match(TOOL_VERSION_COUNTER_PATTERN);
+        return { installed: match ? parseInt(match[1], 10) : undefined, remote };
     }
     catch (error) {
-        logger.error(`Fehler beim Ermitteln der Version von "${target.name}": ${getErrorMessage(error)}`);
-        updateButton.label = "Aktualisieren";
-        updateButton.component.disabled = false;
+        return { error: getErrorMessage(error) };
     }
-    updateButton.redraw();
 }
-// Ermittelt den Anzeigenamen (Komponente "loadedTool") der loadedTools-Zeile,
-// in der ein Button (openForm/updateTool) sitzt. Der "data"-Parameter, den
-// dforms Custom-Actions für Buttons innerhalb eines DataGrids übergibt, ist
-// dabei NICHT die Zeilendaten, sondern der Inhalt des gesamten Grids (Array
-// aller Zeilen) - per Diagnose bestätigt. instance.data zeigt dagegen
-// zuverlässig auf genau die Zeile, in der die Button-Instanz sitzt (Formio
-// hält für Komponenten innerhalb eines DataGrids deren .data-Property immer
-// auf den lokalen Zeilenkontext, siehe auch component.data in
-// labelLoadedToolRowButtons oben).
-function getLoadedToolNameFromRowButton(instance, data) {
-    return instance?.data?.[loadedToolNameKey] ?? data?.[loadedToolNameKey];
+// Scripts liefern ihren installierten Content über getScriptVersion nicht
+// zurück - die installierte Version steckt stattdessen als
+// VERSION_COUNTER-Marker in "action.description" (siehe
+// ensureTargetScriptUpToDate).
+async function checkScriptPart(target, loadScripts) {
+    const bundlePath = scriptBundlePathOf(target);
+    if (!bundlePath)
+        return { error: "Kein Script-Bundle konfiguriert." };
+    try {
+        const baseUri = window.location.origin;
+        const [allScripts, remote] = await Promise.all([loadScripts(), remoteVersionOf(bundlePath)]);
+        const script = allScripts.body.find((s) => s.name === target.name);
+        if (!script?.id)
+            return { missing: true, remote };
+        const versions = await (0, getScriptVersion_1.getScriptVersion)(baseUri, NO_TOKEN, script.id);
+        const match = versions.body[0]?.action?.description?.de?.match(TOOL_VERSION_COUNTER_PATTERN);
+        return { installed: match ? parseInt(match[1], 10) : undefined, remote };
+    }
+    catch (error) {
+        return { error: getErrorMessage(error) };
+    }
 }
-/**
- * Custom-Action des Update-Buttons "updateTool" innerhalb einer loadedTools-Zeile
- * (im Process Studio Formular-Editor als "updateTool(form, instance, data);"
- * konfiguriert - analog zu createOrUpdate/updateForm oben). Patcht nur dieses
- * eine Ziel-Formular in dforms (per ensureTargetFormUpToDate), ohne es hier zu
- * mounten - dafür weiterhin das availableForms-Dropdown + createOrUpdate nutzen.
- */
-async function updateTool(form, instance, data) {
-    const toolName = getLoadedToolNameFromRowButton(instance, data);
-    const target = targetForms_1.targetForms.find((t) => t.name === toolName);
-    if (!target) {
-        logger.error(`Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
-        await showErrorAlert("Werkzeug konnte nicht aktualisiert werden", `Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
+function isPartOutdated(status) {
+    if (status.error)
+        return false;
+    if (status.missing)
+        return true;
+    if (status.remote === undefined)
+        return false;
+    // Installierte Version nicht ermittelbar: sicherheitshalber als
+    // aktualisierbar behandeln, statt ein mögliches Update zu blockieren.
+    return status.installed === undefined || status.remote > status.installed;
+}
+function describePartStatus(status) {
+    if (status.error)
+        return { text: `Fehler: ${status.error}`, css: "tbx-status-error" };
+    if (status.missing) {
+        return { text: `fehlt${status.remote !== undefined ? ` – Version ${status.remote} verfügbar` : ""}`, css: "tbx-status-outdated" };
+    }
+    if (status.installed === undefined) {
+        return {
+            text: `Version unbekannt${status.remote !== undefined ? ` – Version ${status.remote} verfügbar` : ""}`,
+            css: "tbx-status-unknown",
+        };
+    }
+    if (status.remote !== undefined && status.remote > status.installed) {
+        return { text: `Version ${status.installed} – Version ${status.remote} verfügbar`, css: "tbx-status-outdated" };
+    }
+    return { text: `Version ${status.installed} – aktuell`, css: "tbx-status-ok" };
+}
+async function updateLoadedToolStatus(host, target, loadScripts) {
+    const card = host.querySelector(`.tbx-tool[data-tool-id="${CSS.escape(target.id)}"]`);
+    if (!card)
         return;
+    const statuses = await Promise.all(toolParts(target).map(async (part) => ({
+        part,
+        status: part === "form" && hasFormPart(target) ? await checkFormPart(target) : await checkScriptPart(target, loadScripts),
+    })));
+    for (const { part, status } of statuses) {
+        const statusElement = card.querySelector(`li[data-part="${part}"] .tbx-part-status`);
+        if (!statusElement)
+            continue;
+        const { text, css } = describePartStatus(status);
+        statusElement.textContent = text;
+        statusElement.className = `tbx-part-status ${css}`;
     }
-    instance.component.disabled = true;
-    instance.redraw();
+    const updateButton = card.querySelector('button[data-action="update"]');
+    if (!updateButton)
+        return;
+    const remoteVersions = statuses.map((s) => s.status.remote).filter((v) => v !== undefined);
+    const latest = remoteVersions.length > 0 ? Math.max(...remoteVersions) : undefined;
+    const anyError = statuses.some((s) => s.status.error);
+    const outdated = statuses.some((s) => isPartOutdated(s.status));
+    if (outdated || anyError) {
+        updateButton.disabled = false;
+        updateButton.textContent = latest !== undefined ? `Aktualisieren (Version ${latest})` : "Aktualisieren";
+    }
+    else {
+        updateButton.disabled = true;
+        updateButton.textContent = "Aktuell";
+    }
+}
+// Patcht das Werkzeug in dforms/Scripting (bei "combined" Formular UND
+// Script gemeinsam, siehe ensureTargetUpToDate) und baut danach nur die
+// Werkzeug-Listen neu auf - kein Neuladen der ganzen Toolbox-Seite.
+async function updateLoadedTool(form, target, button) {
+    const previousLabel = button.textContent ?? "Aktualisieren";
+    button.disabled = true;
+    button.textContent = "Aktualisiere…";
     try {
         await ensureTargetUpToDate(target);
-        // Nur das loadedTools-Grid neu abgleichen (baut u.a. diesen Button neu auf,
-        // siehe populateLoadedTools/labelLoadedToolRowButtons) - kein
-        // window.location.reload() mehr, das die komplette Toolbox-Seite neu
-        // geladen hätte.
         void refreshToolLists(form);
-        await showSuccessAlert("Werkzeug aktualisiert", `"${target.name}" wurde aktualisiert.`);
+        await showSuccessAlert("Werkzeug aktualisiert", target.type === "combined"
+            ? `Formular und Script von "${target.name}" wurden aktualisiert.`
+            : `"${target.name}" wurde aktualisiert.`);
     }
     catch (error) {
         logger.error(`Fehler beim Aktualisieren von "${target.name}": ${getErrorMessage(error)}`);
         await showErrorAlert(`Fehler beim Aktualisieren von "${target.name}"`, error);
-        // Nur im Fehlerfall zurücksetzen - im Erfolgsfall baut refreshToolLists das
-        // Grid (und damit auch diese Button-Instance) ohnehin neu auf, ein Zugriff
-        // auf die dann veraltete "instance" hier wäre wirkungslos.
-        instance.component.disabled = false;
-        instance.redraw();
+        button.disabled = false;
+        button.textContent = previousLabel;
     }
 }
-window.updateTool = updateTool;
-/**
- * Custom-Action des Buttons "openForm" innerhalb einer loadedTools-Zeile
- * (im Process Studio Formular-Editor als "openForm(form, instance, data);"
- * konfiguriert - analog zu updateTool oben). Nur für Formulare relevant
- * (target.type === "form") - für Scripts blendet labelLoadedToolRowButtons
- * diesen Button bereits aus, da Scripts keine Seite zum Öffnen haben.
- */
-async function openForm(form, instance, data) {
-    const toolName = instance._data.loadedTool;
-    const target = targetForms_1.targetForms.find((t) => t.name === toolName);
-    if (!target || target.type !== "form") {
-        logger.error(`Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
-        await showErrorAlert("Formular konnte nicht geöffnet werden", `Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
+// Öffnet das Formular eines Werkzeugs (nur "form"/"combined" - reine Scripts
+// haben keine Seite und bekommen keinen Öffnen-Knopf) in einem neuen Tab.
+async function openLoadedTool(target, button) {
+    if (!hasFormPart(target))
         return;
-    }
-    const baseUri = window.location.origin;
-    const allForms = await (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN);
-    const targetForm = allForms.body.forms.find((f) => f.id === target.formId);
-    if (!targetForm) {
-        logger.error(`Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
-        await showErrorAlert("Formular konnte nicht geöffnet werden", `Kein Formular mit Namen "${toolName}" in der kuratierten Liste gefunden.`);
-        return;
-    }
-    instance.component.disabled = true;
-    instance.redraw();
+    button.disabled = true;
     try {
-        // targetForm kommt bereits aus der frisch geladenen allForms-Liste (siehe
-        // oben) und enthält den "view"-Link direkt - kein zweiter getForm-Aufruf
-        // nötig, um an die URL zu kommen.
-        const viewHref = targetForm._links?.view?.href;
+        const baseUri = window.location.origin;
+        const allForms = await (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN);
+        const targetForm = allForms.body.forms.find((f) => f.id === target.formId);
+        const viewHref = targetForm?._links?.view?.href;
         if (!viewHref) {
-            throw new Error(`dforms hat für Formular "${toolName}" keinen "view"-Link geliefert.`);
+            throw new Error(`dforms hat für Formular "${target.name}" keinen "view"-Link geliefert.`);
         }
         window.open(new URL(viewHref, baseUri).toString(), "_blank", "noopener,noreferrer");
     }
     catch (error) {
-        logger.error(`Fehler beim Öffnen von "${toolName}": ${getErrorMessage(error)}`);
-        await showErrorAlert(`Fehler beim Öffnen von "${toolName}"`, error);
+        logger.error(`Fehler beim Öffnen von "${target.name}": ${getErrorMessage(error)}`);
+        await showErrorAlert(`Fehler beim Öffnen von "${target.name}"`, error);
     }
     finally {
-        instance.component.disabled = false;
-        instance.redraw();
+        button.disabled = false;
     }
 }
-window.openForm = openForm;
 /**
  * Holt zuerst den aktuellen Bundle-Inhalt (customJs) des Ziel-Projekts direkt aus dem
  * öffentlichen Artefakt-Repo (kein Auth nötig, dasselbe Repo, in das
@@ -5950,7 +5993,7 @@ async function ensureTargetFormUpToDate(target) {
  *    bereits im Content steht, zusätzlich in "action.description" eingetragen
  *    (dieses Feld liefert getScriptVersion zuverlässig zurück, da es Teil
  *    derselben Draft-Version ist, die hier gepatcht wird) -
- *    labelLoadedToolRowButton liest ihn von dort, um die installierte Version
+ *    checkScriptPart liest ihn von dort, um die installierte Version
  *    zu bestimmen.
  */
 async function ensureTargetScriptUpToDate(target) {
@@ -6001,6 +6044,22 @@ async function ensureTargetUpToDate(target) {
         return;
     }
     await ensureTargetFormUpToDate(target);
+    if (target.type === "combined") {
+        // "combined" bringt Formular UND Script mit (siehe toolbox.meta.json,
+        // z.B. projects/Toolbox_UserLicenceCounter) - beide werden als EIN
+        // Toolbox-Eintrag gemeinsam ausgerollt. ensureTargetScriptUpToDate
+        // erwartet den Script-Bundle-Pfad unter "bundlePath" (wie bei einem
+        // reinen Script), bei "combined" heißt das Feld dafür "scriptBundlePath" -
+        // daher hier ein synthetisches TargetScriptEntry-Objekt statt target
+        // direkt durchzureichen.
+        await ensureTargetScriptUpToDate({
+            type: "script",
+            id: target.id,
+            name: target.name,
+            description: target.description,
+            bundlePath: target.scriptBundlePath,
+        });
+    }
 }
 async function loadLatestBundle(bundlePath) {
     const url = `${publicBundleRepo_1.PUBLIC_BUNDLE_REPO_BASE_URL}/${bundlePath}`;
