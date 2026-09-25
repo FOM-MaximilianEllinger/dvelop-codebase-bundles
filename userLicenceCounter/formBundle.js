@@ -519,7 +519,7 @@ const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExpo
  * bleiben; .github/workflows/publish-bundles.yml erhöht bei jedem Publish
  * automatisch BEIDE Vorkommen gemeinsam.
  */
-const VERSION_COUNTER = 9;
+const VERSION_COUNTER = 10;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // Muss exakt dem Script-Namen in toolbox.meta.json ("scripts[].name") entsprechen - so
 // findet die Toolbox das zugehörige Script anhand seines eindeutigen Namens
@@ -536,8 +536,8 @@ let displayedUsers = [];
 const CATEGORY_FILTERS = [
     { value: "all", label: "Alle Benutzer", attribute: "" },
     { value: "paid", label: "Bezahlte Benutzer", attribute: "paid" },
-    { value: "technical", label: "Technische Benutzer", attribute: "technical" },
-    { value: "gws", label: "@gws.ms-Benutzer", attribute: "gws" },
+    { value: "technical", label: "API-Benutzer", attribute: "technical" },
+    { value: "gws", label: "Administrative Benutzer", attribute: "gws" },
 ];
 // Gleiche Optik wie die Toolbox (projects/Toolbox/src/forms/form.ts,
 // toolboxStyles): Karte mit grauer Kopfzeile, Bootstrap-Tabelle darunter.
@@ -582,14 +582,34 @@ function escapeHtml(value) {
 function getErrorMessage(error) {
     return error instanceof Error ? error.message : String(error);
 }
-function showResult(form, content) {
-    const resultComponent = form.getComponent(resultKey);
-    if (!resultComponent) {
-        logger.warn(`Komponente "${resultKey}" nicht im Formular gefunden.`);
+// Aktueller Inhalt und die Wurzel, in die er zuletzt gerendert wurde.
+let currentContent = "";
+let mountedRoot;
+// Wie in der Toolbox (projects/Toolbox/src/forms/form.ts, getContentHost):
+// direkt in das Kind-Element ref="html" der HTML-Element-Komponente rendern
+// statt component.content + redraw() - so bleiben Formio's Hülle erhalten und
+// Suchfeld/Select/Buttons bekommen ihre Listener an genau diesem Inhalt.
+function getContentHost(form) {
+    const component = form.getComponent?.(resultKey);
+    if (!component)
+        return undefined;
+    return component.refs?.html ?? component.element?.querySelector?.('[ref="html"]') ?? component.element ?? undefined;
+}
+function mountContent(form) {
+    const host = getContentHost(form);
+    if (!host) {
+        logger.warn(`Komponente "${resultKey}" nicht im Formular gefunden (oder noch nicht gerendert).`);
         return;
     }
-    resultComponent.component.content = `${styles}${content}`;
-    resultComponent.redraw();
+    host.innerHTML = `${styles}<div data-ulc-root>${currentContent}</div>`;
+    mountedRoot = host.querySelector("[data-ulc-root]") ?? undefined;
+    if (mountedRoot) {
+        bindEvents(mountedRoot);
+    }
+}
+function showResult(form, content) {
+    currentContent = content;
+    mountContent(form);
 }
 function renderLoading() {
     return `
@@ -614,10 +634,10 @@ function renderTypeBadges(user) {
         badges.push(`<span class="ulc-badge ulc-badge-paid">Bezahlt</span>`);
     }
     if (user.technical) {
-        badges.push(`<span class="ulc-badge ulc-badge-technical">Technisch</span>`);
+        badges.push(`<span class="ulc-badge ulc-badge-technical">API-Benutzer</span>`);
     }
     if (user.gwsDomain) {
-        badges.push(`<span class="ulc-badge ulc-badge-gws">@gws.ms</span>`);
+        badges.push(`<span class="ulc-badge ulc-badge-gws">Administrativ</span>`);
     }
     return badges.join("");
 }
@@ -661,11 +681,11 @@ function renderResult(result) {
         <span class="ulc-title">Benutzer</span>
         <div class="ulc-stats">
           ${renderStat("Bezahlt", result.paid, "ulc-stat-paid")}
-          ${renderStat("Technisch", result.technical)}
-          ${renderStat("@gws.ms", result.gwsDomain)}
+          ${renderStat("API-Benutzer", result.technical)}
+          ${renderStat("Administrativ", result.gwsDomain)}
           ${renderStat("Gesamt", result.total)}
         </div>
-        <div class="ulc-hint">Bezahlt = weder technischer Benutzer noch @gws.ms-Adresse</div>
+        <div class="ulc-hint">Bezahlt = weder API-Benutzer noch administrativer Benutzer (@gws.ms)</div>
       </div>
       <div class="ulc-controls">
         <select class="form-control form-control-sm ulc-category" aria-label="Benutzer filtern">${options}</select>
@@ -722,7 +742,7 @@ function buildExportTable(section) {
     const visibleRows = Array.from(section.querySelectorAll("tr[data-index]"))
         .filter((row) => row.style.display !== "none");
     return {
-        headers: ["Nr.", "Name", "Benutzername", "E-Mail", "Bezahlt", "Technisch", "@gws.ms", "ID"],
+        headers: ["Nr.", "Name", "Benutzername", "E-Mail", "Bezahlt", "API-Benutzer", "Administrativ", "ID"],
         rows: visibleRows
             .map((row) => displayedUsers[Number(row.dataset.index)])
             .filter((user) => !!user)
@@ -752,11 +772,10 @@ function exportUsers(section, format) {
     }
     logger.debug(`${table.rows.length} Benutzer als ${format.toUpperCase()} exportiert.`);
 }
-// Filter und Export per Event-Delegation: die Content-Komponente wird bei
-// jedem redraw() neu gerendert, ein direkt am <input>/<select>/<button> hängender Listener
-// ginge dabei verloren.
-function registerFilter(form) {
-    const root = form.element ?? document;
+// Listener direkt an der eigenen Wurzel (wird bei jedem mountContent neu
+// erzeugt, daher keine doppelten Listener). Delegation innerhalb der Wurzel,
+// weil Tabelle/Controls beim Wechsel Laden -> Ergebnis ausgetauscht werden.
+function bindEvents(root) {
     const onFilterChange = (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement) || !target.matches(".ulc-filter, .ulc-category")) {
@@ -769,6 +788,13 @@ function registerFilter(form) {
     };
     root.addEventListener("input", onFilterChange);
     root.addEventListener("change", onFilterChange);
+    root.addEventListener("keyup", onFilterChange);
+    // Enter im Suchfeld darf das Formular nicht absenden.
+    root.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && event.target instanceof HTMLInputElement && event.target.matches(".ulc-filter")) {
+            event.preventDefault();
+        }
+    });
     root.addEventListener("click", (event) => {
         const target = event.target;
         const button = target instanceof HTMLElement ? target.closest("button[data-export]") : null;
@@ -810,7 +836,13 @@ async function runUserLicenceCounter(form) {
 }
 window.formInit = function (form, data) {
     logger.debug("User-Lizenz-Zähler-Formular initialisiert.");
-    registerFilter(form);
+    // Zeichnet Formio die Komponente neu (oder war sie beim Init noch nicht
+    // gerendert), ist unser Inhalt weg - dann einfach erneut einhängen.
+    form.on?.("render", () => {
+        if (currentContent && !mountedRoot?.isConnected) {
+            mountContent(form);
+        }
+    });
     runUserLicenceCounter(form);
 };
 
