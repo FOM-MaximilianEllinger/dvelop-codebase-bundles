@@ -5401,6 +5401,15 @@ exports.targetForms = [
     },
     {
         type: "form",
+        id: "onboardingGevisECMDocumentReader",
+        name: "Onboarding gevis ECM Rechnungsleser",
+        description: "Richtet den Rechnungsleser für gevis ECM in einem Mandanten ein: Stapelprofile, Postfächer, Gruppe, Webindex-Layout, Quell-Mapping sowie Script und Webhook zum Verschieben von Gutschriften.",
+        formId: "15a5e3f1-8025-4501-a811-ff37e3851aee",
+        bundlePath: "onboardingGevisECMDocumentReader/formBundle.js",
+        formDefinitionPath: "onboardingGevisECMDocumentReader/form.json",
+    },
+    {
+        type: "form",
         id: "orderConfirmationCleanup",
         name: "Bereinigung Auftragsbestätigungsleser",
         description: "Listet die Stapel des Auftragsbestätigungslesers mit Filter nach Name und Datum und löscht bzw. klassifiziert markierte Stapel erneut.",
@@ -5420,15 +5429,15 @@ exports.targetForms = [
     {
         type: "combined",
         id: "userLicenceCounter",
-        name: "User-Lizenz-Zähler",
-        description: "Zählt die lizenzrelevanten Benutzer (ohne technischen Benutzer und @gws.ms-Adressen) und liefert eine HTML-Tabelle mit den Details.",
+        name: "Benutzer-Lizenzübersicht",
+        description: "Zeigt alle Benutzer des Mandanten mit Kennzeichnung als bezahlter, API- oder administrativer Benutzer – mit Filter, Suche und Export als CSV/Excel.",
         formId: "ce3a0bac-79fd-5080-8742-819797a25f19",
         bundlePath: "userLicenceCounter/formBundle.js",
         formDefinitionPath: "userLicenceCounter/form.json",
         scripts: [
             {
                 name: "User-Lizenz-Zähler",
-                description: "Zählt die lizenzrelevanten Benutzer (ohne technischen Benutzer und @gws.ms-Adressen) und liefert eine HTML-Tabelle mit den Details.",
+                description: "Zeigt alle Benutzer des Mandanten mit Kennzeichnung als bezahlter, API- oder administrativer Benutzer – mit Filter, Suche und Export als CSV/Excel.",
                 bundlePath: "userLicenceCounter/scripts/script.js",
                 customerVariables: [{ "key": "baseUri", "label": "Base-URI", "encrypted": false, "description": "Adresse des Mandanten, gegen den das Script die Benutzer abfragt.", "default": "{origin}" }, { "key": "apiKey", "label": "API-Key", "encrypted": true, "description": "API-Key eines Benutzers mit Leserechten auf die Benutzerverwaltung." }],
             },
@@ -5484,7 +5493,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // ausgerollt werden soll, hier um 1 erhöhen. So bleibt die Versionsnummer
 // unabhängig vom Stand auf der jeweiligen Umgebung korrekt, auch wenn dort
 // noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 48;
+const TOOLBOX_VERSION_COUNTER = 49;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
