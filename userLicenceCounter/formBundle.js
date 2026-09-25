@@ -525,10 +525,11 @@ const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExpo
  * VERSION_COUNTER unten NICHT umbenennen, der Name ist projektübergreifend
  * fest "VERSION_COUNTER" (siehe generateTargetForms.js) - muss bei einem
  * "combined"-Tool synchron zum VERSION_COUNTER in src/scripts/script.ts
- * bleiben; .github/workflows/publish-bundles.yml erhöht bei jedem Publish
- * automatisch BEIDE Vorkommen gemeinsam.
+ * bleiben; .github/workflows/publish-bundles.yml stempelt beim Publish in
+ * BEIDE Bundles denselben nächsten Stand (nur ins veröffentlichte Bundle - der
+ * Wert hier ist ein Platzhalter und wird nicht hochgezählt).
  */
-const VERSION_COUNTER = 12;
+const VERSION_COUNTER = 13;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // Muss exakt dem Script-Namen in toolbox.meta.json ("scripts[].name") entsprechen - so
 // findet die Toolbox das zugehörige Script anhand seines eindeutigen Namens

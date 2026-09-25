@@ -642,11 +642,12 @@ const getIdentityproviderConfig_1 = __webpack_require__(/*! ../../../../helper/i
 const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 let logger = (0, logger_1.getLogger)();
 // Eigener Versionszähler, analog zu TOOLBOX_VERSION_COUNTER in
-// projects/Toolbox/src/form.ts: wird von publish-bundles.yml bei jedem
-// Publish automatisch um 1 erhöht, damit die Toolbox (loadedTools-Grid)
+// projects/Toolbox/src/form.ts: publish-bundles.yml stempelt bei jedem
+// Publish den nächsten Stand ins veröffentlichte Bundle (der Wert hier ist nur
+// ein Platzhalter und wird nicht hochgezählt), damit die Toolbox (loadedTools-Grid)
 // erkennen kann, ob auf GitHub eine neuere Version dieses Tools liegt. Heißt
 // wie in jedem Toolbox-Tool-Projekt einheitlich "VERSION_COUNTER".
-const VERSION_COUNTER = 12;
+const VERSION_COUNTER = 13;
 module.exports = async (req, res) => {
     const credentials = new credentials_1.APICredentials("", req.var("baseUri"), req.var("apiKey"), "", new Date());
     await main(credentials, req, res);
