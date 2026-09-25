@@ -445,20 +445,20 @@ var __webpack_exports__ = {};
 // This entry needs to be wrapped in an IIFE because it needs to be isolated against other modules in the chunk.
 (() => {
 var exports = __webpack_exports__;
-/*!***********************!*\
-  !*** ./src/script.ts ***!
-  \***********************/
+/*!***************************!*\
+  !*** ./src/forms/form.ts ***!
+  \***************************/
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const logger_1 = __webpack_require__(/*! ../../../helper/utils/logger */ "../../helper/utils/logger.ts");
-const getAllJobs_1 = __webpack_require__(/*! ../../../helper/process/getAllJobs */ "../../helper/process/getAllJobs.ts");
-const getAllProcesses_1 = __webpack_require__(/*! ../../../helper/process/getAllProcesses */ "../../helper/process/getAllProcesses.ts");
-const getProcessVersions_1 = __webpack_require__(/*! ../../../helper/process/getProcessVersions */ "../../helper/process/getProcessVersions.ts");
-const getActiveInstanceCount_1 = __webpack_require__(/*! ../../../helper/process/getActiveInstanceCount */ "../../helper/process/getActiveInstanceCount.ts");
-const cancelProcessInstances_1 = __webpack_require__(/*! ../../../helper/process/cancelProcessInstances */ "../../helper/process/cancelProcessInstances.ts");
-const migrateProcessInstances_1 = __webpack_require__(/*! ../../../helper/process/migrateProcessInstances */ "../../helper/process/migrateProcessInstances.ts");
-const retryProcessInstances_1 = __webpack_require__(/*! ../../../helper/process/retryProcessInstances */ "../../helper/process/retryProcessInstances.ts");
-const deleteProcessVersion_1 = __webpack_require__(/*! ../../../helper/process/deleteProcessVersion */ "../../helper/process/deleteProcessVersion.ts");
+const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
+const getAllJobs_1 = __webpack_require__(/*! ../../../../helper/process/getAllJobs */ "../../helper/process/getAllJobs.ts");
+const getAllProcesses_1 = __webpack_require__(/*! ../../../../helper/process/getAllProcesses */ "../../helper/process/getAllProcesses.ts");
+const getProcessVersions_1 = __webpack_require__(/*! ../../../../helper/process/getProcessVersions */ "../../helper/process/getProcessVersions.ts");
+const getActiveInstanceCount_1 = __webpack_require__(/*! ../../../../helper/process/getActiveInstanceCount */ "../../helper/process/getActiveInstanceCount.ts");
+const cancelProcessInstances_1 = __webpack_require__(/*! ../../../../helper/process/cancelProcessInstances */ "../../helper/process/cancelProcessInstances.ts");
+const migrateProcessInstances_1 = __webpack_require__(/*! ../../../../helper/process/migrateProcessInstances */ "../../helper/process/migrateProcessInstances.ts");
+const retryProcessInstances_1 = __webpack_require__(/*! ../../../../helper/process/retryProcessInstances */ "../../helper/process/retryProcessInstances.ts");
+const deleteProcessVersion_1 = __webpack_require__(/*! ../../../../helper/process/deleteProcessVersion */ "../../helper/process/deleteProcessVersion.ts");
 // Lädt SweetAlert2 bei Bedarf nach, analog zu deleteBadgesFromDocumentReaderForm/src/form.ts.
 function loadSweetAlert() {
     return new Promise((resolve) => {
@@ -484,7 +484,7 @@ const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
 // JEDEM Toolbox-Tool-Projekt einheitlich "VERSION_COUNTER" (nicht mehr
 // projektspezifisch benannt) - die Toolbox sucht beim Bump/Auslesen immer nach
 // genau diesem Namen, siehe generateTargetForms.js.
-const VERSION_COUNTER = 22;
+const VERSION_COUNTER = 23;
 // Eigene Aktionen (kein JobType): wirken unabhängig von der gewählten
 // "Version" auf alle Versionen eines Prozesses.
 const CANCEL_ALL_ACTION = "CANCEL_ALL";
