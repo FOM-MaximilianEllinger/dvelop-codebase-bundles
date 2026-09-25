@@ -1,0 +1,24 @@
+{
+  "display": "form",
+  "components": [
+    {
+      "type": "button",
+      "key": "run",
+      "label": "Benutzer zählen",
+      "input": true,
+      "tableView": false,
+      "action": "event",
+      "event": "runUserLicenceCounter",
+      "theme": "primary"
+    },
+    {
+      "type": "htmlelement",
+      "tag": "div",
+      "key": "result",
+      "label": "Ergebnis",
+      "input": false,
+      "tableView": false,
+      "content": "<p>Auf „Benutzer zählen“ klicken, um die lizenzrelevanten Benutzer zu ermitteln.</p>"
+    }
+  ]
+}

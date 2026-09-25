@@ -263,10 +263,10 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  * Script als EIN Eintrag gemeinsam anlegt/aktualisiert (siehe
  * rolloutParts in projects/Toolbox/src/forms/form.ts).
  *
- * Im Process Studio Formular-Editor manuell anzulegende Komponenten:
- *   - Ein Button mit Custom Action "runUserLicenceCounter(form, instance, data);".
- *   - Eine Content-Komponente mit Key "result" (zeigt die vom Script
- *     gelieferte HTML-Tabelle bzw. eine Fehlermeldung an).
+ * Das Feld-Layout (Button "run", Content-Komponente "result") liegt als Code
+ * in src/forms/form.json und wird von der Toolbox bei jedem Anlegen/
+ * Aktualisieren mit ausgerollt - im Process Studio Formular-Editor muss nichts
+ * angelegt werden (Änderungen dort werden beim nächsten Update überschrieben).
  *
  * VERSION_COUNTER unten NICHT umbenennen, der Name ist projektübergreifend
  * fest "VERSION_COUNTER" (siehe generateTargetForms.js) - muss bei einem
@@ -274,13 +274,15 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  * bleiben; .github/workflows/publish-bundles.yml erhöht bei jedem Publish
  * automatisch BEIDE Vorkommen gemeinsam.
  */
-const VERSION_COUNTER = 6;
+const VERSION_COUNTER = 7;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // Muss exakt dem Script-Namen in toolbox.meta.json ("scripts[].name") entsprechen - so
 // findet die Toolbox das zugehörige Script anhand seines eindeutigen Namens
 // (siehe ensureTargetScriptUpToDate/getAllScripts, Scripts vergeben ihre GUID
 // serverseitig, es gibt keine feste Id wie bei Formularen).
 const SCRIPT_NAME = "User-Lizenz-Zähler";
+// Komponenten-Keys aus src/forms/form.json.
+const runKey = "run";
 const resultKey = "result";
 function getErrorMessage(error) {
     return error instanceof Error ? error.message : String(error);
@@ -294,19 +296,26 @@ function showResult(form, content) {
     resultComponent.component.content = content;
     resultComponent.redraw();
 }
+function setRunDisabled(form, disabled) {
+    const runComponent = form.getComponent(runKey);
+    if (!runComponent) {
+        return;
+    }
+    runComponent.component.disabled = disabled;
+    runComponent.redraw();
+}
 /**
- * Custom-Action des Buttons, der das User-Lizenz-Zähler-Script direkt
- * aufruft (im Process Studio Formular-Editor als
- * "runUserLicenceCounter(form, instance, data);" konfiguriert). Sucht die
- * Script-Id per Name (siehe SCRIPT_NAME), ruft sie per callScriptEndpoint
- * auf und zeigt die zurückgelieferte HTML-Tabelle in der Content-Komponente
- * "result" an - dieselbe Browser-Session (window.location.origin) wie bei
- * allen anderen dforms/Scripting-Aufrufen der Toolbox-Familie, ein
- * API-Key ist dafür nicht nötig.
+ * Klick auf den Button "run" (form.json: action "event", event
+ * "runUserLicenceCounter"). Sucht die Script-Id per Name (siehe SCRIPT_NAME),
+ * ruft sie per callScriptEndpoint auf und zeigt die zurückgelieferte
+ * HTML-Tabelle in der Content-Komponente "result" an - dieselbe
+ * Browser-Session (window.location.origin) wie bei allen anderen
+ * dforms/Scripting-Aufrufen der Toolbox-Familie, ein API-Key ist dafür nicht
+ * nötig.
  */
-async function runUserLicenceCounter(form, instance, data) {
-    instance.component.disabled = true;
-    instance.redraw();
+async function runUserLicenceCounter(form) {
+    setRunDisabled(form, true);
+    showResult(form, "<p>Zähle Benutzer…</p>");
     try {
         const baseUri = window.location.origin;
         const allScripts = await (0, getAllScripts_1.getAllScripts)(baseUri, "");
@@ -319,18 +328,18 @@ async function runUserLicenceCounter(form, instance, data) {
     }
     catch (error) {
         logger.error(`Fehler beim Ausführen von "${SCRIPT_NAME}": ${getErrorMessage(error)}`);
-        showResult(form, `Fehler: ${getErrorMessage(error)}`);
+        showResult(form, `<p>Fehler: ${getErrorMessage(error)}</p>`);
     }
     finally {
-        instance.component.disabled = false;
-        instance.redraw();
+        setRunDisabled(form, false);
     }
 }
-window.runUserLicenceCounter = runUserLicenceCounter;
-function onInitialization(form, instance, data) {
+window.formInit = function (form, data) {
     logger.debug("User-Lizenz-Zähler-Formular initialisiert.");
-}
-window.onInitialization = onInitialization;
+    form.on("runUserLicenceCounter", () => {
+        runUserLicenceCounter(form);
+    });
+};
 
 })();
 
