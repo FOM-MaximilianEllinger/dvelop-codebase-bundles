@@ -192,13 +192,13 @@ var __webpack_exports__ = {};
 // This entry needs to be wrapped in an IIFE because it needs to be isolated against other modules in the chunk.
 (() => {
 var exports = __webpack_exports__;
-/*!*********************!*\
-  !*** ./src/form.ts ***!
-  \*********************/
+/*!***************************!*\
+  !*** ./src/forms/form.ts ***!
+  \***************************/
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const logger_1 = __webpack_require__(/*! ../../../helper/utils/logger */ "../../helper/utils/logger.ts");
-const performHttpRequest_1 = __webpack_require__(/*! ../../../helper/performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
+const performHttpRequest_1 = __webpack_require__(/*! ../../../../helper/performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // Eigener Versionszähler, analog zu TOOLBOX_VERSION_COUNTER in
 // projects/Toolbox/src/form.ts: wird von publish-bundles.yml bei jedem
@@ -207,7 +207,7 @@ const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // JEDEM Toolbox-Tool-Projekt einheitlich "VERSION_COUNTER" (nicht mehr
 // projektspezifisch benannt) - die Toolbox sucht beim Bump/Auslesen immer nach
 // genau diesem Namen, siehe generateTargetForms.js.
-const VERSION_COUNTER = 9;
+const VERSION_COUNTER = 10;
 const BASE_URI = window.location.origin;
 const GET_HEADERS = { 'Accept': 'application/json' };
 function loadBootstrap() {
