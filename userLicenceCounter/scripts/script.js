@@ -124,6 +124,57 @@ module.exports.parse = parse
 
 /***/ },
 
+/***/ "../../helper/identityprovider/getAllUsers.ts"
+/*!****************************************************!*\
+  !*** ../../helper/identityprovider/getAllUsers.ts ***!
+  \****************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getAllUsers = getAllUsers;
+const getUsers_1 = __webpack_require__(/*! ./getUsers */ "../../helper/identityprovider/getUsers.ts");
+const PAGE_SIZE = 100;
+// Schutz vor Endlosschleifen, falls die API totalResults/startIndex nicht wie
+// erwartet liefert (100 * 1000 = 100.000 Benutzer).
+const MAX_PAGES = 1000;
+/**
+ * Fetches ALL users from the identity provider (SCIM). getUsers alone returns
+ * only the API's default page; this pages through with startIndex/count until
+ * totalResults is reached or a page comes back empty.
+ *
+ * @param baseUri - The base URI of the identity provider API.
+ * @param token - The authorization token to access the API.
+ * @returns All users, duplicates (same id on several pages) removed.
+ */
+async function getAllUsers(baseUri, token) {
+    const usersById = new Map();
+    const usersWithoutId = [];
+    let startIndex = 1;
+    for (let page = 0; page < MAX_PAGES; page++) {
+        const response = await (0, getUsers_1.getUsers)(baseUri, token, startIndex, PAGE_SIZE);
+        const resources = response.body.resources ?? [];
+        for (const user of resources) {
+            if (user.id) {
+                usersById.set(user.id, user);
+            }
+            else {
+                usersWithoutId.push(user);
+            }
+        }
+        const total = response.body.totalResults;
+        startIndex += resources.length;
+        if (resources.length === 0 || (total !== undefined && startIndex > total)) {
+            break;
+        }
+    }
+    return [...usersById.values(), ...usersWithoutId];
+}
+
+
+/***/ },
+
 /***/ "../../helper/identityprovider/getGroup.ts"
 /*!*************************************************!*\
   !*** ../../helper/identityprovider/getGroup.ts ***!
@@ -291,12 +342,20 @@ const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/perfo
  *
  * @param baseUri - The base URI of the identity provider API.
  * @param token - The authorization token to access the API.
+ * @param startIndex - Optional (SCIM, 1-based): first result of the page. Without it the API returns only its default page - see getAllUsers for all users.
+ * @param count - Optional (SCIM): maximum number of results of the page.
  * @returns A promise that resolves to an `ApiResponse` containing the list of users.
  *
  * @template GetUsers - The type representing the structure of the user data returned by the API.
  */
-async function getUsers(baseUri, token) {
-    const url = `${baseUri}/identityprovider/scim/Users`;
+async function getUsers(baseUri, token, startIndex, count) {
+    const query = new URLSearchParams();
+    if (startIndex !== undefined)
+        query.set("startIndex", String(startIndex));
+    if (count !== undefined)
+        query.set("count", String(count));
+    const queryString = query.toString();
+    const url = `${baseUri}/identityprovider/scim/Users${queryString ? `?${queryString}` : ""}`;
     const headers = {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
@@ -575,7 +634,7 @@ function getLogger() {
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const credentials_1 = __webpack_require__(/*! ../../../../helper/utils/credentials */ "../../helper/utils/credentials.ts");
-const getUsers_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getUsers */ "../../helper/identityprovider/getUsers.ts");
+const getAllUsers_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getAllUsers */ "../../helper/identityprovider/getAllUsers.ts");
 const getGroups_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getGroups */ "../../helper/identityprovider/getGroups.ts");
 const getGroup_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getGroup */ "../../helper/identityprovider/getGroup.ts");
 const getIdentityproviderConfig_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getIdentityproviderConfig */ "../../helper/identityprovider/getIdentityproviderConfig.ts");
@@ -586,7 +645,7 @@ let logger = (0, logger_1.getLogger)();
 // Publish automatisch um 1 erhöht, damit die Toolbox (loadedTools-Grid)
 // erkennen kann, ob auf GitHub eine neuere Version dieses Tools liegt. Heißt
 // wie in jedem Toolbox-Tool-Projekt einheitlich "VERSION_COUNTER".
-const VERSION_COUNTER = 7;
+const VERSION_COUNTER = 8;
 module.exports = async (req, res) => {
     const credentials = new credentials_1.APICredentials("", req.var("baseUri"), req.var("apiKey"), "", new Date());
     await main(credentials, req, res);
@@ -596,63 +655,64 @@ async function main(credentials, req, res) {
         logger.debug("Start");
         let identityProviderConfig = await (0, getIdentityproviderConfig_1.getIdentityproviderConfig)(credentials.baseUri, credentials.apiKey);
         logger.debug(JSON.stringify(identityProviderConfig));
-        let groups = await (0, getGroups_1.getGroups)(credentials.baseUri, credentials.apiKey);
-        let technicalUserGroupId = groups.body.resources?.find((group) => group.displayName ===
-            identityProviderConfig.body.provider?.[0]?.technicalUserGroup)?.id ?? null;
-        let technicalUserGroup = technicalUserGroupId
-            ? await (0, getGroup_1.getGroup)(credentials.baseUri, credentials.apiKey, technicalUserGroupId)
-            : null;
-        let users = await (0, getUsers_1.getUsers)(credentials.baseUri, credentials.apiKey);
-        let filteredUsers = users.body.resources?.filter((user) => {
-            return (user.id !== technicalUserGroup?.body.members?.[0]?.value &&
-                !user.userName.includes("@gws.ms"));
-        });
-        const userTableHtml = generateUserTable(filteredUsers || []);
-        logger.debug(JSON.stringify(filteredUsers));
-        logger.debug(userTableHtml);
-        logger.debug(`Anzahl der Benutzer: ${filteredUsers?.length || 0}`);
-        res.status(200).set("Content-Type", "text/plain").send(userTableHtml);
+        // Technische Benutzer = ALLE Mitglieder der in der Identityprovider-
+        // Konfiguration hinterlegten technischen Benutzergruppe(n).
+        const technicalGroupNames = new Set((identityProviderConfig.body.provider ?? [])
+            .map((provider) => provider?.technicalUserGroup)
+            .filter((name) => !!name));
+        const groups = await (0, getGroups_1.getGroups)(credentials.baseUri, credentials.apiKey);
+        const technicalGroupIds = (groups.body.resources ?? [])
+            .filter((group) => group.id && group.displayName && technicalGroupNames.has(group.displayName))
+            .map((group) => group.id);
+        const technicalUserIds = new Set();
+        for (const groupId of technicalGroupIds) {
+            const group = await (0, getGroup_1.getGroup)(credentials.baseUri, credentials.apiKey, groupId);
+            for (const member of group.body.members ?? []) {
+                if (member.value) {
+                    technicalUserIds.add(member.value);
+                }
+            }
+        }
+        if (technicalGroupNames.size > 0 && technicalGroupIds.length === 0) {
+            logger.warn(`Technische Benutzergruppe(n) ${[...technicalGroupNames].join(", ")} nicht gefunden.`);
+        }
+        const users = (await (0, getAllUsers_1.getAllUsers)(credentials.baseUri, credentials.apiKey))
+            .map((user) => toLicencedUser(user, technicalUserIds));
+        const result = {
+            total: users.length,
+            paid: users.filter((user) => user.paid).length,
+            technical: users.filter((user) => user.technical).length,
+            gwsDomain: users.filter((user) => user.gwsDomain).length,
+            users,
+        };
+        logger.debug(JSON.stringify(result));
+        logger.debug(`Benutzer gesamt: ${result.total}, davon bezahlt: ${result.paid}`);
+        res.status(200).set("Content-Type", "application/json").send(JSON.stringify(result));
         logger.info("End");
     }
     catch (error) {
         logger.error(`Error: ${error}`);
-        res.status(500).send("Internal Server Error");
+        res
+            .status(500)
+            .set("Content-Type", "application/json")
+            .send(JSON.stringify({ error: String(error) }));
     }
 }
-function generateUserTable(users) {
-    // Kopfzeile der Tabelle
-    let html = `<table border="1">
-      <thead>
-        <tr>
-          <th>Nr.</th>
-          <th>ID</th>
-          <th>Username</th>
-          <th>Name</th>
-          <th>Email</th>
-        </tr>
-      </thead>
-      <tbody>`;
-    // Benutzerzeilen hinzufügen
-    users.forEach((user, index) => {
-        const userName = user.userName || "Unbekannt";
-        const fullName = `${user.name?.givenName || ""} ${user.name?.familyName || ""}`.trim() ||
-            "Unbekannt";
-        const email = user.emails?.[0]?.value || "Keine E-Mail";
-        html += `
-      <tr>
-        <td>${index + 1}</td>
-        <td>${user.id}</td>
-        <td>${userName}</td>
-        <td>${fullName}</td>
-        <td>${email}</td>
-      </tr>`;
-    });
-    // Abschluss der Tabelle
-    html += `
-      </tbody>
-    </table>
-  `;
-    return html;
+const GWS_DOMAIN = "@gws.ms";
+function toLicencedUser(user, technicalUserIds) {
+    const email = user.emails?.[0]?.value ?? "";
+    const userName = user.userName ?? "";
+    const technical = !!user.id && technicalUserIds.has(user.id);
+    const gwsDomain = (email || userName).toLowerCase().endsWith(GWS_DOMAIN);
+    return {
+        id: user.id ?? "",
+        userName,
+        fullName: `${user.name?.givenName ?? ""} ${user.name?.familyName ?? ""}`.trim() || user.displayName || "",
+        email,
+        technical,
+        gwsDomain,
+        paid: !technical && !gwsDomain,
+    };
 }
 
 

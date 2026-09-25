@@ -263,10 +263,13 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  * Script als EIN Eintrag gemeinsam anlegt/aktualisiert (siehe
  * rolloutParts in projects/Toolbox/src/forms/form.ts).
  *
- * Das Feld-Layout (Button "run", Content-Komponente "result") liegt als Code
- * in src/forms/form.json und wird von der Toolbox bei jedem Anlegen/
+ * Das Feld-Layout (nur die Content-Komponente "result") liegt als Code in
+ * src/forms/form.json und wird von der Toolbox bei jedem Anlegen/
  * Aktualisieren mit ausgerollt - im Process Studio Formular-Editor muss nichts
  * angelegt werden (Änderungen dort werden beim nächsten Update überschrieben).
+ * Die Zählung startet direkt beim Laden des Formulars, das Script liefert ALLE
+ * Benutzer als Daten (JSON, mit Kennzeichen technisch/@gws.ms/bezahlt), die
+ * Darstellung inkl. Filter passiert hier.
  *
  * VERSION_COUNTER unten NICHT umbenennen, der Name ist projektübergreifend
  * fest "VERSION_COUNTER" (siehe generateTargetForms.js) - muss bei einem
@@ -274,16 +277,62 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  * bleiben; .github/workflows/publish-bundles.yml erhöht bei jedem Publish
  * automatisch BEIDE Vorkommen gemeinsam.
  */
-const VERSION_COUNTER = 7;
+const VERSION_COUNTER = 8;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // Muss exakt dem Script-Namen in toolbox.meta.json ("scripts[].name") entsprechen - so
 // findet die Toolbox das zugehörige Script anhand seines eindeutigen Namens
 // (siehe ensureTargetScriptUpToDate/getAllScripts, Scripts vergeben ihre GUID
 // serverseitig, es gibt keine feste Id wie bei Formularen).
 const SCRIPT_NAME = "User-Lizenz-Zähler";
-// Komponenten-Keys aus src/forms/form.json.
-const runKey = "run";
+// Komponenten-Key aus src/forms/form.json.
 const resultKey = "result";
+// Werte des Filter-Selects, jeweils mit dem data-Attribut der Tabellenzeile,
+// das für die Kategorie "1" sein muss (leer = kein Kategorie-Filter).
+const CATEGORY_FILTERS = [
+    { value: "all", label: "Alle Benutzer", attribute: "" },
+    { value: "paid", label: "Bezahlte Benutzer", attribute: "paid" },
+    { value: "technical", label: "Technische Benutzer", attribute: "technical" },
+    { value: "gws", label: "@gws.ms-Benutzer", attribute: "gws" },
+];
+// Gleiche Optik wie die Toolbox (projects/Toolbox/src/forms/form.ts,
+// toolboxStyles): Karte mit grauer Kopfzeile, Bootstrap-Tabelle darunter.
+const styles = `
+<style>
+  .ulc-section { border: 1px solid #dee2e6; border-radius: 6px; background: #fff; }
+  .ulc-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border-bottom: 1px solid #dee2e6; background: #f8f9fa; border-radius: 6px 6px 0 0; }
+  .ulc-title { font-weight: 600; font-size: 1.05em; }
+  .ulc-stats { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .ulc-stat { font-size: 0.8em; font-weight: 600; padding: 2px 9px; border-radius: 10px; background: #e9ecef; color: #495057; }
+  .ulc-stat strong { font-weight: 700; }
+  .ulc-stat-paid { background: #d1e7dd; color: #0f5132; font-size: 0.9em; }
+  .ulc-controls { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ulc-category { width: auto; }
+  .ulc-filter { max-width: 220px; }
+  .ulc-badge { display: inline-block; font-size: 0.75em; font-weight: 600; padding: 2px 7px; border-radius: 10px; margin-right: 4px; white-space: nowrap; }
+  .ulc-badge-paid { background: #d1e7dd; color: #0f5132; }
+  .ulc-badge-technical { background: #e2e3e5; color: #41464b; }
+  .ulc-badge-gws { background: #fff3cd; color: #997404; }
+  .ulc-body { padding: 12px; }
+  .ulc-table-wrap { max-height: 65vh; overflow: auto; border: 1px solid #dee2e6; border-radius: 6px; }
+  .ulc-table { margin: 0; font-size: 0.9em; }
+  .ulc-table thead th { position: sticky; top: 0; background: #f8f9fa; border-bottom: 1px solid #dee2e6; white-space: nowrap; }
+  .ulc-table td { vertical-align: middle; }
+  .ulc-nr { color: #6c757d; width: 3em; text-align: right; }
+  .ulc-name { font-weight: 600; }
+  .ulc-id { color: #6c757d; font-family: monospace; font-size: 0.85em; }
+  .ulc-muted { color: #adb5bd; font-style: italic; }
+  .ulc-footer { color: #6c757d; font-size: 0.85em; margin-top: 8px; }
+  .ulc-loading { display: flex; align-items: center; gap: 10px; color: #6c757d; padding: 12px; }
+  .ulc-error { color: #842029; background: #f8d7da; border: 1px solid #f5c2c7; border-radius: 6px; padding: 10px 12px; }
+</style>`;
+function escapeHtml(value) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
 function getErrorMessage(error) {
     return error instanceof Error ? error.message : String(error);
 }
@@ -293,29 +342,155 @@ function showResult(form, content) {
         logger.warn(`Komponente "${resultKey}" nicht im Formular gefunden.`);
         return;
     }
-    resultComponent.component.content = content;
+    resultComponent.component.content = `${styles}${content}`;
     resultComponent.redraw();
 }
-function setRunDisabled(form, disabled) {
-    const runComponent = form.getComponent(runKey);
-    if (!runComponent) {
-        return;
+function renderLoading() {
+    return `
+  <div class="ulc-section">
+    <div class="ulc-loading">
+      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+      Benutzer werden geladen…
+    </div>
+  </div>`;
+}
+function renderError(message) {
+    return `<div class="ulc-error"><strong>Zählung fehlgeschlagen:</strong> ${escapeHtml(message)}</div>`;
+}
+function renderValue(value, className = "") {
+    return value
+        ? `<span class="${className}">${escapeHtml(value)}</span>`
+        : `<span class="ulc-muted">–</span>`;
+}
+function renderTypeBadges(user) {
+    const badges = [];
+    if (user.paid) {
+        badges.push(`<span class="ulc-badge ulc-badge-paid">Bezahlt</span>`);
     }
-    runComponent.component.disabled = disabled;
-    runComponent.redraw();
+    if (user.technical) {
+        badges.push(`<span class="ulc-badge ulc-badge-technical">Technisch</span>`);
+    }
+    if (user.gwsDomain) {
+        badges.push(`<span class="ulc-badge ulc-badge-gws">@gws.ms</span>`);
+    }
+    return badges.join("");
+}
+function renderUserRow(user, index) {
+    const email = user.email
+        ? `<a href="mailto:${escapeHtml(user.email)}">${escapeHtml(user.email)}</a>`
+        : renderValue("");
+    // data-search: alles, wonach das Suchfeld filtern kann, in Kleinbuchstaben.
+    // data-paid/-technical/-gws: für den Kategorie-Filter (siehe CATEGORY_FILTERS).
+    const search = [user.fullName, user.userName, user.email, user.id].join(" ").toLowerCase();
+    const flag = (value) => (value ? "1" : "0");
+    return `
+      <tr data-search="${escapeHtml(search)}" data-paid="${flag(user.paid)}" data-technical="${flag(user.technical)}" data-gws="${flag(user.gwsDomain)}">
+        <td class="ulc-nr" data-ulc-nr>${index + 1}</td>
+        <td>${renderValue(user.fullName, "ulc-name")}</td>
+        <td>${renderValue(user.userName)}</td>
+        <td>${email}</td>
+        <td>${renderTypeBadges(user)}</td>
+        <td>${renderValue(user.id, "ulc-id")}</td>
+      </tr>`;
+}
+function renderStat(label, value, className = "") {
+    return `<span class="ulc-stat ${className}">${label}: <strong>${value}</strong></span>`;
+}
+function renderResult(result) {
+    // Bezahlte Benutzer zuerst, innerhalb davon nach Name sortiert.
+    const users = [...result.users].sort((a, b) => Number(b.paid) - Number(a.paid) ||
+        (a.fullName || a.userName).localeCompare(b.fullName || b.userName, "de"));
+    const rows = users.length
+        ? users.map(renderUserRow).join("")
+        : `<tr><td colspan="6" class="ulc-muted">Keine Benutzer gefunden.</td></tr>`;
+    const options = CATEGORY_FILTERS
+        .map((filter) => `<option value="${filter.value}">${filter.label}</option>`)
+        .join("");
+    const countedAt = new Date().toLocaleString("de-DE");
+    return `
+  <div class="ulc-section">
+    <div class="ulc-header">
+      <div>
+        <span class="ulc-title">Benutzer</span>
+        <div class="ulc-stats">
+          ${renderStat("Bezahlt", result.paid, "ulc-stat-paid")}
+          ${renderStat("Technisch", result.technical)}
+          ${renderStat("@gws.ms", result.gwsDomain)}
+          ${renderStat("Gesamt", result.total)}
+        </div>
+        <div class="ulc-hint">Bezahlt = weder technischer Benutzer noch @gws.ms-Adresse</div>
+      </div>
+      <div class="ulc-controls">
+        <select class="form-control form-control-sm ulc-category" aria-label="Benutzer filtern">${options}</select>
+        <input type="search" class="form-control form-control-sm ulc-filter" placeholder="Suchen…" aria-label="Benutzer suchen">
+      </div>
+    </div>
+    <div class="ulc-body">
+      <div class="ulc-table-wrap">
+        <table class="table table-sm table-hover table-striped ulc-table">
+          <thead>
+            <tr><th class="ulc-nr">Nr.</th><th>Name</th><th>Benutzername</th><th>E-Mail</th><th>Typ</th><th>ID</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="ulc-footer"><span data-ulc-visible>${users.length} von ${users.length} Benutzern angezeigt</span> · Stand ${escapeHtml(countedAt)}</div>
+    </div>
+  </div>`;
+}
+// Blendet Zeilen nach Kategorie (Select) UND Suchbegriff aus und nummeriert
+// die sichtbaren Zeilen neu durch.
+function applyFilters(section) {
+    const category = section.querySelector(".ulc-category")?.value ?? "all";
+    const attribute = CATEGORY_FILTERS.find((filter) => filter.value === category)?.attribute ?? "";
+    const term = section.querySelector(".ulc-filter")?.value.trim().toLowerCase() ?? "";
+    const rows = Array.from(section.querySelectorAll("tr[data-search]"));
+    let visible = 0;
+    for (const row of rows) {
+        const matchesCategory = !attribute || row.dataset[attribute] === "1";
+        const matchesTerm = !term || (row.dataset.search ?? "").includes(term);
+        const match = matchesCategory && matchesTerm;
+        row.style.display = match ? "" : "none";
+        if (match) {
+            visible++;
+            const nr = row.querySelector("[data-ulc-nr]");
+            if (nr) {
+                nr.textContent = String(visible);
+            }
+        }
+    }
+    const counter = section.querySelector("[data-ulc-visible]");
+    if (counter) {
+        counter.textContent = `${visible} von ${rows.length} Benutzern angezeigt`;
+    }
+}
+// Filter per Event-Delegation: die Content-Komponente wird bei jedem
+// redraw() neu gerendert, ein direkt am <input>/<select> hängender Listener
+// ginge dabei verloren.
+function registerFilter(form) {
+    const root = form.element ?? document;
+    const onFilterChange = (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement) || !target.matches(".ulc-filter, .ulc-category")) {
+            return;
+        }
+        const section = target.closest(".ulc-section");
+        if (section) {
+            applyFilters(section);
+        }
+    };
+    root.addEventListener("input", onFilterChange);
+    root.addEventListener("change", onFilterChange);
 }
 /**
- * Klick auf den Button "run" (form.json: action "event", event
- * "runUserLicenceCounter"). Sucht die Script-Id per Name (siehe SCRIPT_NAME),
- * ruft sie per callScriptEndpoint auf und zeigt die zurückgelieferte
- * HTML-Tabelle in der Content-Komponente "result" an - dieselbe
- * Browser-Session (window.location.origin) wie bei allen anderen
- * dforms/Scripting-Aufrufen der Toolbox-Familie, ein API-Key ist dafür nicht
- * nötig.
+ * Sucht die Script-Id per Name (siehe SCRIPT_NAME), ruft sie per
+ * callScriptEndpoint auf und stellt das Ergebnis in der Content-Komponente
+ * "result" dar - dieselbe Browser-Session (window.location.origin) wie bei
+ * allen anderen dforms/Scripting-Aufrufen der Toolbox-Familie, ein API-Key
+ * ist dafür nicht nötig.
  */
 async function runUserLicenceCounter(form) {
-    setRunDisabled(form, true);
-    showResult(form, "<p>Zähle Benutzer…</p>");
+    showResult(form, renderLoading());
     try {
         const baseUri = window.location.origin;
         const allScripts = await (0, getAllScripts_1.getAllScripts)(baseUri, "");
@@ -324,21 +499,22 @@ async function runUserLicenceCounter(form) {
             throw new Error(`Script "${SCRIPT_NAME}" wurde nicht gefunden - wurde es bereits über die Toolbox angelegt?`);
         }
         const response = await (0, callScriptEndpoint_1.callScriptEndpoint)(baseUri, script.id, "POST", { "Content-Type": "application/json" }, {});
-        showResult(form, response.body);
+        if (typeof response.body === "string" || !Array.isArray(response.body?.users) || typeof response.body.paid !== "number") {
+            // Ältere Script-Version (fertiges HTML bzw. noch ohne Typ-Kennzeichen) - Formular
+            // und Script sollten über die Toolbox gemeinsam aktualisiert werden.
+            throw new Error(`Unerwartete Antwort von Script "${SCRIPT_NAME}" - bitte das Script über die Toolbox aktualisieren.`);
+        }
+        showResult(form, renderResult(response.body));
     }
     catch (error) {
         logger.error(`Fehler beim Ausführen von "${SCRIPT_NAME}": ${getErrorMessage(error)}`);
-        showResult(form, `<p>Fehler: ${getErrorMessage(error)}</p>`);
-    }
-    finally {
-        setRunDisabled(form, false);
+        showResult(form, renderError(getErrorMessage(error)));
     }
 }
 window.formInit = function (form, data) {
     logger.debug("User-Lizenz-Zähler-Formular initialisiert.");
-    form.on("runUserLicenceCounter", () => {
-        runUserLicenceCounter(form);
-    });
+    registerFilter(form);
+    runUserLicenceCounter(form);
 };
 
 })();
