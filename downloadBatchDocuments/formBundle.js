@@ -31117,10 +31117,11 @@ const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExpo
  *
  * VERSION_COUNTER unten NICHT umbenennen, der Name ist projektübergreifend
  * fest "VERSION_COUNTER" (siehe generateTargetForms.js) -
- * .github/workflows/publish-bundles.yml erhöht ihn bei jedem Publish
- * automatisch.
+ * .github/workflows/publish-bundles.yml stempelt beim Publish den nächsten
+ * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
+ * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 3;
+const VERSION_COUNTER = 4;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const GET_HEADERS = { Accept: "application/json" };

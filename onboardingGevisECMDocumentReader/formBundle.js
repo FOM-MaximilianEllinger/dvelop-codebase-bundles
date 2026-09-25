@@ -1477,6 +1477,11 @@ const scriptGutschriftenVerschieben_json_1 = __importDefault(__webpack_require__
  * blieben sonst nicht erhalten) und die hinterlegten API-Keys in Script
  * (customerVariables) und Webhook.
  *
+ * Vorgeschaltet ist eine Konfigurationsseite: API-Key (eingeben oder neu
+ * erstellen, wird beim "Weiter" geprüft) und ERP-Zielsystem (VEO oder gevis
+ * R-Linie). Schritte, die nur für ein ERP-System gelten, tragen das in
+ * Step.erp ein und erscheinen nur bei passender Auswahl.
+ *
  * Alle Aufrufe laufen mit dem im Formular eingegebenen (oder hier neu
  * erstellten) API-Key - der wird außerdem beim Neuanlegen im Gutschriften-
  * Script und im Webhook hinterlegt. Der Key wird nirgends im Formular
@@ -1497,7 +1502,7 @@ const scriptGutschriftenVerschieben_json_1 = __importDefault(__webpack_require__
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 4;
+const VERSION_COUNTER = 5;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -1977,17 +1982,24 @@ const steps = [
         },
     },
 ];
-// ---------------------------------------------------------------------------
-// Benutzer / API-Key
-// ---------------------------------------------------------------------------
+const ERP_OPTIONS = [
+    { value: "veo", label: "VEO", description: "gevis ECM mit ERP-System VEO" },
+    { value: "gevisR", label: "gevis R-Linie", description: "gevis ECM mit ERP-System gevis R-Linie" },
+];
+let page = "config";
 let apiKey = "";
+let erpSystem = "";
 let currentUserId;
 const statuses = new Map(steps.map((step) => [step.id, { state: "unknown", text: "" }]));
 let busy = false;
-let message = {
-    kind: "info",
-    text: "Bitte einen API-Key eingeben oder neu erstellen und dann „Status prüfen“ klicken.",
-};
+let message;
+function erpLabel(value) {
+    return ERP_OPTIONS.find((option) => option.value === value)?.label ?? "";
+}
+// Schritte, die für das gewählte ERP-System gelten.
+function activeSteps() {
+    return steps.filter((step) => !step.erp || (erpSystem !== "" && step.erp.includes(erpSystem)));
+}
 function getCookie(name) {
     return document.cookie
         .split("; ")
@@ -2148,6 +2160,19 @@ const styles = `
   .onb-badge-error { background: #f8d7da; color: #842029; }
   .onb-action { text-align: right; white-space: nowrap; }
   .onb-actions { display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .onb-config { max-width: 640px; }
+  .onb-config-block { margin-bottom: 18px; }
+  .onb-config-title { font-weight: 600; margin-bottom: 2px; }
+  .onb-config-desc { color: #6c757d; font-size: 0.85em; margin-bottom: 6px; }
+  .onb-erp-options { display: flex; gap: 10px; flex-wrap: wrap; }
+  .onb-erp { display: flex; gap: 8px; align-items: flex-start; border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 12px; cursor: pointer; min-width: 220px; margin: 0; }
+  .onb-erp:hover { border-color: #86b7fe; }
+  .onb-erp-selected { border-color: #0d6efd; background: #f1f6ff; }
+  .onb-erp input { margin-top: 3px; }
+  .onb-erp-label { font-weight: 600; }
+  .onb-erp-desc { display: block; color: #6c757d; font-size: 0.8em; font-weight: normal; }
+  .onb-summary { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 0.85em; margin-top: 6px; }
+  .onb-summary strong { font-weight: 600; }
 </style>`;
 const STATE_LABELS = {
     unknown: "Nicht geprüft",
@@ -2192,7 +2217,45 @@ function getContentHost(form) {
     return component.refs?.html ?? component.element?.querySelector?.('[ref="html"]') ?? component.element ?? undefined;
 }
 function renderShell() {
-    const rows = steps
+    return page === "config" ? renderConfigPage() : renderStepsPage();
+}
+function renderConfigPage() {
+    const options = ERP_OPTIONS
+        .map((option) => `
+          <label class="onb-erp ${erpSystem === option.value ? "onb-erp-selected" : ""}">
+            <input type="radio" name="onb-erp" value="${option.value}" data-onb-erp ${erpSystem === option.value ? "checked" : ""}>
+            <span class="onb-erp-label">${escapeHtml(option.label)}<span class="onb-erp-desc">${escapeHtml(option.description)}</span></span>
+          </label>`)
+        .join("");
+    return `
+  <div class="onb-section">
+    <div class="onb-header">
+      <div class="onb-title">Onboarding gevis ECM Rechnungsleser – Konfiguration</div>
+      <div class="onb-hint">Mandant <strong>${escapeHtml(SUBDOMAIN)}</strong> · Schritt 1 von 2: Grundeinstellungen für das Onboarding.</div>
+    </div>
+    <div class="onb-body onb-config">
+      <div class="onb-config-block">
+        <div class="onb-config-title">API-Key</div>
+        <div class="onb-config-desc">Mit diesem Key wird eingerichtet; er wird außerdem im Gutschriften-Script und im Webhook hinterlegt.</div>
+        <div class="onb-key">
+          <input id="onb-api-key" type="password" autocomplete="off" class="form-control form-control-sm onb-key-input" data-onb-key placeholder="API-Key eingeben…" aria-label="API-Key" value="${escapeHtml(apiKey)}">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-onb-action="create-key" title="Legt für einen Benutzer einen neuen API-Key an">Neuen API-Key erstellen</button>
+        </div>
+      </div>
+      <div class="onb-config-block">
+        <div class="onb-config-title">ERP-Zielsystem</div>
+        <div class="onb-config-desc">An welches ERP-System übergibt der Rechnungsleser?</div>
+        <div class="onb-erp-options">${options}</div>
+      </div>
+      <div data-onb-message></div>
+      <div class="onb-actions">
+        <button type="button" class="btn btn-sm btn-primary" data-onb-action="next">Weiter</button>
+      </div>
+    </div>
+  </div>`;
+}
+function renderStepsPage() {
+    const rows = activeSteps()
         .map((step, index) => `
         <tr data-onb-step="${step.id}">
           <td class="onb-nr">${index + 1}</td>
@@ -2205,15 +2268,15 @@ function renderShell() {
   <div class="onb-section">
     <div class="onb-header">
       <div class="onb-title">Onboarding gevis ECM Rechnungsleser</div>
-      <div class="onb-hint">Mandant <strong>${escapeHtml(SUBDOMAIN)}</strong> · Fehlendes wird angelegt, Vorhandenes auf die Vorlage aktualisiert - einzeln oder gesammelt.</div>
+      <div class="onb-hint">Mandant <strong>${escapeHtml(SUBDOMAIN)}</strong> · Schritt 2 von 2: Fehlendes wird angelegt, Vorhandenes auf die Vorlage aktualisiert - einzeln oder gesammelt.</div>
+      <div class="onb-summary">
+        <span>ERP-Zielsystem: <strong>${escapeHtml(erpLabel(erpSystem))}</strong></span>
+        <span>API-Key: <strong>••••${escapeHtml(apiKey.trim().slice(-4))}</strong></span>
+        <button type="button" class="btn btn-sm btn-link p-0" data-onb-action="config">Konfiguration ändern</button>
+      </div>
     </div>
     <div class="onb-body">
       <div class="onb-key">
-        <div class="onb-field">
-          <label for="onb-api-key">API-Key</label>
-          <input id="onb-api-key" type="password" autocomplete="off" class="form-control form-control-sm onb-key-input" data-onb-key placeholder="API-Key eingeben…" value="${escapeHtml(apiKey)}">
-        </div>
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-onb-action="create-key" title="Legt für den angemeldeten Benutzer einen neuen API-Key an">Neuen API-Key erstellen</button>
         <button type="button" class="btn btn-sm btn-outline-secondary" data-onb-action="check">Status prüfen</button>
       </div>
       <div data-onb-message></div>
@@ -2236,7 +2299,7 @@ function refreshView() {
     const root = mountedRoot;
     if (!root?.isConnected)
         return;
-    for (const step of steps) {
+    for (const step of activeSteps()) {
         const row = root.querySelector(`tr[data-onb-step="${step.id}"]`);
         const status = statuses.get(step.id);
         const cell = row?.querySelector("[data-onb-status]");
@@ -2259,7 +2322,9 @@ function refreshView() {
     });
     root.querySelectorAll("button[data-onb-action]").forEach((button) => {
         const action = button.dataset.onbAction;
-        button.disabled = busy || (action !== "create-key" && !hasKey);
+        button.disabled = busy
+            || (action !== "create-key" && action !== "config" && !hasKey)
+            || (action === "next" && erpSystem === "");
     });
 }
 function mountContent(form) {
@@ -2307,10 +2372,10 @@ async function checkStep(step) {
 }
 async function checkAll() {
     message = { kind: "info", text: "Status wird geprüft…" };
-    for (const step of steps) {
+    for (const step of activeSteps()) {
         await checkStep(step);
     }
-    const counts = steps.map((step) => statuses.get(step.id).state);
+    const counts = activeSteps().map((step) => statuses.get(step.id).state);
     const open = counts.filter((state) => state === "missing").length;
     const existing = counts.filter((state) => state === "exists").length;
     const errors = counts.filter((state) => state === "error").length;
@@ -2370,7 +2435,7 @@ const ACTION_VERBS = {
 async function runBatch(states, title) {
     await withBusy(async () => {
         await checkAll();
-        const todo = steps.filter((step) => states.includes(statuses.get(step.id).state));
+        const todo = activeSteps().filter((step) => states.includes(statuses.get(step.id).state));
         if (todo.length === 0) {
             message = { kind: "ok", text: "Nichts zu tun." };
             return;
@@ -2438,9 +2503,43 @@ async function createKey() {
             message = { kind: "error", text: `API-Key konnte nicht erstellt werden: ${getErrorMessage(error)}` };
         }
     });
-    if (created) {
+    if (created && page === "steps") {
         await withBusy(checkAll);
     }
+}
+// Konfigurationsseite -> Schritte: API-Key vorher kurz prüfen (ein
+// ungültiger Key würde sonst erst in jedem einzelnen Schritt auffallen).
+async function goToSteps() {
+    if (!apiKey.trim() || erpSystem === "") {
+        message = { kind: "error", text: "Bitte API-Key eingeben und das ERP-Zielsystem auswählen." };
+        refreshView();
+        return;
+    }
+    let valid = false;
+    await withBusy(async () => {
+        message = { kind: "info", text: "API-Key wird geprüft…" };
+        refreshView();
+        try {
+            await getRepositoryId(apiKey.trim());
+            valid = true;
+        }
+        catch (error) {
+            message = { kind: "error", text: `Der API-Key funktioniert nicht: ${getErrorMessage(error)}` };
+        }
+    });
+    if (!valid) {
+        return;
+    }
+    page = "steps";
+    message = undefined;
+    steps.forEach((step) => statuses.set(step.id, { state: "unknown", text: "" }));
+    mountContent(currentForm);
+    await withBusy(checkAll);
+}
+function goToConfig() {
+    page = "config";
+    message = undefined;
+    mountContent(currentForm);
 }
 // Listener direkt an den Elementen. Bewusst ohne "instanceof HTMLElement":
 // dforms führt das Bundle ggf. in einem anderen Fenster-Kontext aus.
@@ -2461,11 +2560,21 @@ function bindEvents(root) {
             if (event.key === "Enter") {
                 event.preventDefault();
                 onKeyChange();
-                if (apiKey.trim())
-                    void withBusy(checkAll);
+                void goToSteps();
             }
         });
     }
+    root.querySelectorAll("input[data-onb-erp]").forEach((radio) => {
+        radio.addEventListener("change", () => {
+            if (!radio.checked)
+                return;
+            erpSystem = radio.value;
+            root.querySelectorAll(".onb-erp").forEach((label) => {
+                label.classList.toggle("onb-erp-selected", label.contains(radio));
+            });
+            refreshView();
+        });
+    });
     root.querySelectorAll("button[data-onb-run]").forEach((button) => {
         const step = steps.find((s) => s.id === button.dataset.onbRun);
         if (step) {
@@ -2477,6 +2586,12 @@ function bindEvents(root) {
             switch (button.dataset.onbAction) {
                 case "create-key":
                     void createKey();
+                    return;
+                case "next":
+                    void goToSteps();
+                    return;
+                case "config":
+                    goToConfig();
                     return;
                 case "check":
                     void withBusy(checkAll);
