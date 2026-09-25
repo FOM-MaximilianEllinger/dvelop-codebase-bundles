@@ -5392,6 +5392,24 @@ exports.targetForms = [
     },
     {
         type: "form",
+        id: "invoiceReaderCleanup",
+        name: "Bereinigung Rechnungsleser",
+        description: "Listet die Stapel des Rechnungslesers mit Filter nach Name und Datum und löscht bzw. klassifiziert markierte Stapel erneut.",
+        formId: "507be658-9883-5549-9cc1-3c7398429594",
+        bundlePath: "invoiceReaderCleanup/formBundle.js",
+        formDefinitionPath: "invoiceReaderCleanup/form.json",
+    },
+    {
+        type: "form",
+        id: "orderConfirmationCleanup",
+        name: "Bereinigung Auftragsbestätigungsleser",
+        description: "Listet die Stapel des Auftragsbestätigungslesers mit Filter nach Name und Datum und löscht bzw. klassifiziert markierte Stapel erneut.",
+        formId: "0ccc29d0-ab0d-497b-9246-bfdad0a09e4d",
+        bundlePath: "orderConfirmationCleanup/formBundle.js",
+        formDefinitionPath: "orderConfirmationCleanup/form.json",
+    },
+    {
+        type: "form",
         id: "processAdministration",
         name: "Prozess-Administration",
         description: "Verwaltet die Prozesse in der Systemumgebung.",
@@ -5466,7 +5484,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // ausgerollt werden soll, hier um 1 erhöhen. So bleibt die Versionsnummer
 // unabhängig vom Stand auf der jeweiligen Umgebung korrekt, auch wenn dort
 // noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 47;
+const TOOLBOX_VERSION_COUNTER = 48;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
