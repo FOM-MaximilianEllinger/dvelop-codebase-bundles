@@ -5444,9 +5444,10 @@ const TOOLBOX_FORM_NAME = "Toolbox";
 // .github/workflows/publish-bundles.yml dorthin veröffentlicht).
 const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // Eigener Versionszähler, gepflegt im Sourcecode (nicht auf dem Server
-// abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
-// hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
-// jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
+// abgeleitet): bei jeder Änderung, die über die Toolbox-Aktualisierung
+// ausgerollt werden soll, hier um 1 erhöhen. So bleibt die Versionsnummer
+// unabhängig vom Stand auf der jeweiligen Umgebung korrekt, auch wenn dort
+// noch eine ältere Version liegt.
 const TOOLBOX_VERSION_COUNTER = 41;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
@@ -5454,175 +5455,35 @@ const TOOLBOX_VERSION_COUNTER = 41;
 // Die Helper (getForm/createForm/patchForm) erwarten trotzdem einen Token-Parameter
 // für den Authorization-Header – der bleibt hier bewusst leer.
 const NO_TOKEN = "";
-function onInitialization(form, instance, data) {
-    logger.debug("FormLoader initialisiert.");
-    // Anders als bei den Button-Custom-Actions (openForm/updateTool/createOrUpdate,
-    // wo "form" die tatsächliche Formio-Webform ist) liefert dieser Init-Hook in
-    // "form" kein Objekt mit getComponent() - die echte Webform steckt in
-    // instance.root (gleiches Muster wie onFormLoad in
-    // projects/CostAccountingWorkflow und projects/GeneralCostAccountingWorkflow).
-    const webform = instance.root;
-    setupAvailableFormsSelector(webform);
-    populateVersionCounter(webform);
-    void refreshToolLists(webform);
-    document.addEventListener("keydown", function (event) {
-        if (event.ctrlKey && event.key === "F1") {
-            console.log("form");
-            console.dir(form);
-            console.log("instance");
-            console.dir(instance);
-            console.log("data");
-            console.dir(data);
-            console.log("document");
-            console.dir(document);
-        }
-    });
-}
-;
-window.onInitialization = onInitialization;
-// Registriert den change-Listener der Select-Komponente "availableForms" -
-// einmalig beim Formular-Init, damit er bei einem erneuten Befüllen (siehe
-// populateAvailableForms, z.B. nach createOrUpdate) nicht mehrfach hängt.
-function setupAvailableFormsSelector(form) {
-    const selector = form.getComponent("availableForms");
-    if (!selector) {
-        logger.warn('Komponente "availableForms" nicht im Formular gefunden.');
-        return;
-    }
-    selector.on("change", () => updateToolDescription(form, selector.getValue()));
-}
-// Setzt die Auswahl-Optionen der Select-Komponente "availableForms" auf die
-// übergebenen (noch nicht in dforms angelegten) targetForms-Einträge - siehe
-// refreshToolLists, das die kuratierte Liste (config/targetForms.ts) danach
-// aufteilt, was hier im Dropdown und was im loadedTools-Grid landet. Key an
-// das tatsächliche Feld im Formio-Schema (Process Studio Formular-Editor)
-// anpassen, falls abweichend benannt.
-function populateAvailableForms(form, availableTargets) {
-    const selector = form.getComponent("availableForms");
-    if (!selector) {
-        logger.warn('Komponente "availableForms" nicht im Formular gefunden.');
-        return;
-    }
-    selector.component.data = {
-        values: availableTargets.map((t) => ({ label: t.name, value: t.id })),
-    };
-    selector.redraw();
-    updateToolDescription(form, selector.getValue());
-}
-// Lädt einmalig die vollständige dforms-Formularliste und teilt die
-// kuratierten targetForms (config/targetForms.ts) danach auf: Werkzeuge, die
-// dort noch NICHT existieren, landen im availableForms-Dropdown; Werkzeuge,
-// die schon existieren, in der loadedTools-Liste (siehe populateLoadedTools) -
-// ein bereits geladenes Werkzeug taucht also nicht mehr im Dropdown auf.
-// Wird beim Formular-Init sowie nach jedem Anlegen/Aktualisieren erneut
-// aufgerufen, damit ein frisch angelegtes Werkzeug direkt vom Dropdown in die
-// Liste wandert, ohne dass die Seite neu geladen werden muss.
-async function refreshToolLists(form) {
-    try {
-        const baseUri = window.location.origin;
-        const [allForms, allScripts] = await Promise.all([
-            (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN),
-            (0, getAllScripts_1.getAllScripts)(baseUri, NO_TOKEN),
-        ]);
-        // Diagnose (bewusst auf warn-Level, damit es in der Konsole nicht
-        // rausgefiltert wird): zeigt, ob ein Tool überhaupt als "schon angelegt"
-        // erkannt wird.
-        logger.warn(`refreshToolLists: ${allForms.body.forms.length} Formulare, ${allScripts.body.length} Scripts in dforms gefunden. ` +
-            `targetForms: ${targetForms_1.targetForms.map((t) => t.type === "script" ? `${t.name}(script)` : `${t.name}=${t.formId}${t.type === "combined" ? "+script" : ""}`).join(", ")}`);
-        // Formulare werden über ihre feste formId erkannt, Scripts (die ihre GUID
-        // serverseitig bei createScript bekommen, siehe TargetScriptEntry) über
-        // ihren eindeutigen Namen. "combined" wird wie "form" über die
-        // Formular-GUID erkannt (stabilere Identität als der Script-Name) -
-        // ensureTargetUpToDate legt bei einem "combined"-Tool ohnehin immer auch
-        // das Script mit an/aktualisiert es, ein separater Script-Check hier wäre
-        // redundant.
-        const isAlreadyLoaded = (t) => t.type === "script"
-            ? allScripts.body.some((s) => s.name === t.name)
-            : allForms.body.forms.some((f) => f.id === t.formId);
-        const availableTargets = targetForms_1.targetForms.filter((t) => !isAlreadyLoaded(t));
-        const loadedTargets = targetForms_1.targetForms.filter(isAlreadyLoaded);
-        logger.warn(`refreshToolLists: verfügbar=[${availableTargets.map((t) => t.name).join(", ")}], ` +
-            `geladen=[${loadedTargets.map((t) => t.name).join(", ")}]`);
-        populateAvailableForms(form, availableTargets);
-        void populateLoadedTools(form, loadedTargets);
-    }
-    catch (error) {
-        logger.error(`Fehler beim Ermitteln bereits angelegter Werkzeuge: ${getErrorMessage(error)}`);
-        // Fallback: Dropdown zeigt sicherheitshalber alle kuratierten Werkzeuge an,
-        // statt eines, das eigentlich schon geladen ist, dauerhaft zu verstecken.
-        populateAvailableForms(form, targetForms_1.targetForms);
-    }
-}
-const toolDescriptionKey = "toolDescription";
-// Zeigt die Beschreibung des im Dropdown "availableForms" ausgewählten Eintrags
-// (siehe config/targetForms.ts) in der Content-Komponente "toolDescription" an.
-function updateToolDescription(form, selectedTargetId) {
-    const descriptionComponent = form.getComponent(toolDescriptionKey);
-    if (!descriptionComponent) {
-        logger.warn(`Komponente "${toolDescriptionKey}" nicht im Formular gefunden.`);
-        return;
-    }
-    const target = targetForms_1.targetForms.find((t) => t.id === selectedTargetId);
-    descriptionComponent.component.content = target?.description ?? "";
-    descriptionComponent.redraw();
-}
-// Schreibt TOOLBOX_VERSION_COUNTER unter dem Key "updateFormKey" in die
-// Formulardaten (form.data), damit er sich über eine Komponente mit genau
-// diesem Key (z.B. readonly Textfeld) im Process Studio Formular-Editor
-// anzeigen lässt.
-const updateFormKey = "updateForm";
-function populateVersionCounter(form) {
-    form.data[updateFormKey] = TOOLBOX_VERSION_COUNTER;
-    // Holen der Update-Schaltfläche aus dem Formular.
-    const updateButton = form.getComponent(updateFormKey);
-    if (!updateButton) {
-        logger.warn(`Komponente "${updateFormKey}" nicht im Formular gefunden.`);
-        return;
-    }
-    updateButton.label = `Toolbox aktualisieren (Version ${TOOLBOX_VERSION_COUNTER})`;
-    updateButton.component.disabled = true;
-    updateButton.redraw();
-    void enableUpdateButtonIfNewerVersionAvailable(updateButton);
-}
 // webpack.form.config.js baut mit mode: "development" (kein Minify), daher
 // taucht der Konstantenname im veröffentlichten Bundle unverändert als
 // "TOOLBOX_VERSION_COUNTER = <Zahl>;" auf. Das erlaubt es, die im GitHub-Repo
 // veröffentlichte Version zu ermitteln, ohne eine eigene Versionsdatei pflegen
 // zu müssen.
 const VERSION_COUNTER_PATTERN = /TOOLBOX_VERSION_COUNTER\s*=\s*(\d+)/;
-// Analog zu VERSION_COUNTER_PATTERN, aber für die Ziel-Tools in loadedTools:
-// deren Versionszähler heißt in JEDEM Tool-Projekt einheitlich "VERSION_COUNTER"
-// (nicht mehr projektspezifisch benannt, siehe generateTargetForms.js), daher
-// hier ein einziges, festes Pattern statt einer pro TargetForm konfigurierten
-// Konstante.
+// Analog zu VERSION_COUNTER_PATTERN, aber für die Werkzeuge: deren
+// Versionszähler heißt in JEDEM Tool-Projekt einheitlich "VERSION_COUNTER"
+// (siehe generateTargetForms.js).
 const TOOL_VERSION_COUNTER_PATTERN = /VERSION_COUNTER\s*=\s*(\d+)/;
-// Lädt das aktuell auf GitHub veröffentlichte Toolbox-Bundle und aktiviert die
-// Update-Schaltfläche nur, wenn die dort enthaltene Version neuer ist als die
-// hier im Browser laufende (TOOLBOX_VERSION_COUNTER). So bleibt der Button
-// inaktiv, wenn bereits die aktuellste Version läuft.
-async function enableUpdateButtonIfNewerVersionAvailable(updateButton) {
-    try {
-        const remoteBundleContent = await loadLatestBundle(TOOLBOX_BUNDLE_PATH);
-        const match = remoteBundleContent.match(VERSION_COUNTER_PATTERN);
-        if (!match) {
-            logger.warn("Version im veröffentlichten Toolbox-Bundle konnte nicht ermittelt werden.");
-            return;
-        }
-        const remoteVersion = parseInt(match[1], 10);
-        logger.info(`Veröffentlichte Toolbox-Version auf GitHub: ${remoteVersion}, lokale Version: ${TOOLBOX_VERSION_COUNTER}.`);
-        updateButton.component.disabled = remoteVersion <= TOOLBOX_VERSION_COUNTER;
-        updateButton.redraw();
-    }
-    catch (error) {
-        logger.error(`Fehler beim Prüfen auf eine neue Toolbox-Version: ${getErrorMessage(error)}`);
-    }
-}
-// Key der HTML-Element-Komponente im Process Studio Formular-Editor, in die
-// die Liste der bereits angelegten Werkzeuge gerendert wird (früher ein
-// DataGrid mit Custom-Action-Buttons - jetzt baut dieses Skript Name,
-// Öffnen- und Aktualisieren-Knopf komplett selbst als HTML auf, die Buttons
-// brauchen im Formular-Editor also keine Custom Action mehr).
-const loadedToolsKey = "loadedTools";
+// ---------------------------------------------------------------------------
+// Oberfläche
+//
+// Die komplette Toolbox-Oberfläche (Kopf mit "Toolbox aktualisieren",
+// Werkzeugauswahl mit "Erstellen", Liste der installierten Werkzeuge mit
+// "Öffnen"/"Aktualisieren") wird von diesem Skript selbst als HTML in EINE
+// HTML-Element-Komponente mit dem Key "content" gerendert. Im Process Studio
+// Formular-Editor braucht es dafür nur diese eine (leere) Komponente - keine
+// Select-/Button-Komponenten und keine Custom Actions mehr. "Refresh On
+// Change" dort NICHT aktivieren; falls Formio die Komponente trotzdem neu
+// zeichnet, hängt sich mountToolbox über das "render"-Event automatisch
+// wieder ein.
+// ---------------------------------------------------------------------------
+const contentKey = "content";
+// Zuletzt gerenderte Wurzel der Oberfläche - dient zur Erkennung, ob Formio
+// die Komponente neu gezeichnet (und unseren Inhalt damit entfernt) hat.
+let mountedRoot;
+// Zuletzt ermittelte, noch nicht angelegte Werkzeuge (Inhalt der Auswahl).
+let availableTargets = [];
 function escapeHtml(value) {
     return value
         .replace(/&/g, "&amp;")
@@ -5646,15 +5507,28 @@ function scriptBundlePathOf(target) {
         return target.bundlePath;
     return undefined;
 }
-const loadedToolsStyles = `
+const toolboxStyles = `
 <style>
+  .tbx-root { display: flex; flex-direction: column; gap: 16px; }
+  .tbx-section { border: 1px solid #dee2e6; border-radius: 6px; background: #fff; }
+  .tbx-section-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border-bottom: 1px solid #dee2e6; background: #f8f9fa; border-radius: 6px 6px 0 0; }
+  .tbx-section-title { font-weight: 600; font-size: 1.05em; margin: 0; }
+  .tbx-section-body { padding: 12px; }
+  .tbx-toolbox-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .tbx-toolbox-title { font-weight: 700; font-size: 1.25em; }
+  .tbx-toolbox-version { color: #6c757d; font-size: 0.9em; margin-left: 8px; }
+  .tbx-select-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .tbx-select-row select { flex: 1 1 260px; min-width: 200px; }
   .tbx-empty { color: #6c757d; font-style: italic; }
   .tbx-tool { border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
+  .tbx-tool:last-child { margin-bottom: 0; }
   .tbx-tool-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
   .tbx-tool-name { font-weight: 600; font-size: 1.05em; }
-  .tbx-tool-desc { color: #6c757d; font-size: 0.9em; margin-top: 2px; }
+  .tbx-tool-desc { color: #6c757d; font-size: 0.9em; margin-top: 4px; }
   .tbx-tool-actions { display: flex; gap: 6px; flex-shrink: 0; }
   .tbx-badge { display: inline-block; font-size: 0.75em; font-weight: 600; padding: 2px 7px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
+  .tbx-badges { margin: 8px 0 4px; }
+  .tbx-badges .tbx-badge:first-child { margin-left: 0; }
   .tbx-badge-form { background: #e7f1ff; color: #0b5ed7; }
   .tbx-badge-script { background: #fff3cd; color: #997404; }
   .tbx-badge-link { color: #6c757d; font-size: 0.8em; margin-left: 4px; vertical-align: middle; }
@@ -5668,12 +5542,67 @@ const loadedToolsStyles = `
   .tbx-status-unknown { color: #6c757d; }
   .tbx-status-error { color: #dc3545; }
 </style>`;
+function renderShell() {
+    return `${toolboxStyles}
+<div class="tbx-root" data-tbx-root>
+  <div class="tbx-section">
+    <div class="tbx-section-body tbx-toolbox-header">
+      <div>
+        <span class="tbx-toolbox-title">Toolbox</span>
+        <span class="tbx-toolbox-version">Version ${TOOLBOX_VERSION_COUNTER}</span>
+      </div>
+      <button type="button" class="btn btn-sm btn-outline-primary" data-action="update-toolbox" disabled>Prüfe…</button>
+    </div>
+  </div>
+
+  <div class="tbx-section">
+    <div class="tbx-section-header"><h5 class="tbx-section-title">Werkzeug hinzufügen</h5></div>
+    <div class="tbx-section-body" data-region="available">
+      <div class="tbx-empty">Werkzeuge werden geladen…</div>
+    </div>
+  </div>
+
+  <div class="tbx-section">
+    <div class="tbx-section-header"><h5 class="tbx-section-title">Installierte Werkzeuge</h5></div>
+    <div class="tbx-section-body" data-region="loaded">
+      <div class="tbx-empty">Werkzeuge werden geladen…</div>
+    </div>
+  </div>
+</div>`;
+}
 function renderToolBadges(target) {
     const form = `<span class="tbx-badge tbx-badge-form">Formular</span>`;
     const script = `<span class="tbx-badge tbx-badge-script">Script</span>`;
     if (target.type === "combined")
         return `${form}<span class="tbx-badge-link">+</span>${script}`;
     return target.type === "form" ? form : script;
+}
+function renderAvailableTools(targets) {
+    if (targets.length === 0) {
+        return `<div class="tbx-empty">Alle verfügbaren Werkzeuge sind bereits installiert.</div>`;
+    }
+    const options = targets
+        .map((t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`)
+        .join("");
+    return `
+<div class="tbx-select-row">
+  <select class="form-control" data-role="tool-select">${options}</select>
+  <button type="button" class="btn btn-primary" data-action="create">Erstellen</button>
+</div>
+<div data-role="tool-details">${renderSelectedToolDetails(targets[0])}</div>`;
+}
+function renderSelectedToolDetails(target) {
+    if (!target)
+        return "";
+    const combinedHint = target.type === "combined"
+        ? `<div class="tbx-part-hint">Legt Formular und zugehöriges Script gemeinsam an.</div>`
+        : "";
+    return `
+<div class="tbx-tool-desc">
+  <div class="tbx-badges">${renderToolBadges(target)}</div>
+  ${target.description ? `<div>${escapeHtml(target.description)}</div>` : ""}
+  ${combinedHint}
+</div>`;
 }
 function renderToolPart(target, part) {
     const label = part === "form" ? "Formular" : target.type === "combined" ? "↳ Script" : "Script";
@@ -5708,28 +5637,77 @@ function renderLoadedTool(target) {
 }
 function renderLoadedTools(loadedTargets) {
     if (loadedTargets.length === 0) {
-        return `${loadedToolsStyles}<div class="tbx-empty">Noch keine Werkzeuge geladen.</div>`;
+        return `<div class="tbx-empty">Noch keine Werkzeuge installiert.</div>`;
     }
-    return loadedToolsStyles + loadedTargets.map(renderLoadedTool).join("");
+    return loadedTargets.map(renderLoadedTool).join("");
+}
+function region(name) {
+    return mountedRoot?.querySelector(`[data-region="${name}"]`) ?? null;
 }
 // Die HTML-Element-Komponente legt ihren Inhalt in ein Kind-Element mit
 // ref="html" - dort hinein wird gerendert, damit Formio's eigene Hülle
-// (Label etc.) erhalten bleibt.
-function getLoadedToolsHost(component) {
+// erhalten bleibt.
+function getContentHost(webform) {
+    const component = webform.getComponent?.(contentKey);
+    if (!component)
+        return undefined;
     return component.refs?.html ?? component.element?.querySelector?.('[ref="html"]') ?? component.element ?? undefined;
 }
-// Ein einziger Klick-Listener pro Host-Element (Event-Delegation), damit
-// erneutes Rendern nach refreshToolLists keine zusätzlichen Listener
-// anhängt.
-function bindLoadedToolsActions(form, host) {
-    const marker = host;
-    if (marker.__tbxBound)
+function onInitialization(form, instance, data) {
+    logger.debug("Toolbox initialisiert.");
+    // Anders als bei Button-Custom-Actions liefert dieser Init-Hook in "form"
+    // kein Objekt mit getComponent() - die echte Webform steckt in
+    // instance.root (gleiches Muster wie onFormLoad in
+    // projects/CostAccountingWorkflow und projects/GeneralCostAccountingWorkflow).
+    const webform = instance.root;
+    mountToolbox(webform);
+    // Zeichnet Formio die Komponente neu (oder war sie beim Init noch nicht
+    // gerendert), ist unser Inhalt weg - dann einfach erneut einhängen.
+    webform.on?.("render", () => {
+        if (!mountedRoot || !mountedRoot.isConnected)
+            mountToolbox(webform);
+    });
+    document.addEventListener("keydown", function (event) {
+        if (event.ctrlKey && event.key === "F1") {
+            console.log("form");
+            console.dir(form);
+            console.log("instance");
+            console.dir(instance);
+            console.log("data");
+            console.dir(data);
+        }
+    });
+}
+window.onInitialization = onInitialization;
+function mountToolbox(webform) {
+    const host = getContentHost(webform);
+    if (!host) {
+        logger.warn(`HTML-Element-Komponente "${contentKey}" nicht im Formular gefunden (oder noch nicht gerendert).`);
         return;
-    marker.__tbxBound = true;
-    host.addEventListener("click", (event) => {
+    }
+    host.innerHTML = renderShell();
+    mountedRoot = host.querySelector("[data-tbx-root]") ?? undefined;
+    if (!mountedRoot)
+        return;
+    bindToolboxEvents(mountedRoot);
+    void checkToolboxVersion();
+    void refreshToolLists();
+}
+// Event-Delegation auf der Wurzel: ein Listener für alle Buttons und die
+// Auswahl, damit neu gerenderte Bereiche keine eigenen Listener brauchen.
+function bindToolboxEvents(root) {
+    root.addEventListener("click", (event) => {
         const button = event.target?.closest?.("button[data-action]");
         if (!button || button.disabled)
             return;
+        switch (button.dataset.action) {
+            case "update-toolbox":
+                void updateToolbox(button);
+                return;
+            case "create":
+                void createSelectedTool(button);
+                return;
+        }
         const target = targetForms_1.targetForms.find((t) => t.id === button.dataset.toolId);
         if (!target) {
             logger.error(`Kein Werkzeug mit id "${button.dataset.toolId}" in der kuratierten Liste gefunden.`);
@@ -5738,34 +5716,178 @@ function bindLoadedToolsActions(form, host) {
         if (button.dataset.action === "open")
             void openLoadedTool(target, button);
         if (button.dataset.action === "update")
-            void updateLoadedTool(form, target, button);
+            void updateLoadedTool(target, button);
+    });
+    root.addEventListener("change", (event) => {
+        const select = event.target;
+        if (select?.dataset?.role !== "tool-select")
+            return;
+        const details = region("available")?.querySelector('[data-role="tool-details"]');
+        if (details)
+            details.innerHTML = renderSelectedToolDetails(targetForms_1.targetForms.find((t) => t.id === select.value));
     });
 }
-// Befüllt die HTML-Element-Komponente "loadedTools" mit den übergebenen (in
-// dforms bereits existierenden) targetForms-Einträgen - siehe
-// refreshToolLists, das die kuratierte Liste (config/targetForms.ts)
-// entsprechend aufteilt. Jedes Werkzeug bekommt eine eigene Karte mit Name,
-// Öffnen- (nur mit Formular) und Aktualisieren-Knopf; bei "combined"-Tools
-// (Formular + zugehöriges Script, siehe toolbox.meta.json) zeigt die Karte
-// beide Bestandteile gemeinsam mit jeweils eigenem Versionsstand an.
-async function populateLoadedTools(form, loadedTargets) {
-    const component = form.getComponent(loadedToolsKey);
-    if (!component) {
-        logger.warn(`Komponente "${loadedToolsKey}" nicht im Formular gefunden.`);
+// ---------------------------------------------------------------------------
+// Toolbox selbst
+// ---------------------------------------------------------------------------
+// Lädt das aktuell auf GitHub veröffentlichte Toolbox-Bundle und aktiviert
+// "Toolbox aktualisieren" nur, wenn die dort enthaltene Version neuer ist als
+// die hier im Browser laufende (TOOLBOX_VERSION_COUNTER).
+async function checkToolboxVersion() {
+    const button = mountedRoot?.querySelector('button[data-action="update-toolbox"]');
+    if (!button)
+        return;
+    try {
+        const remoteBundleContent = await loadLatestBundle(TOOLBOX_BUNDLE_PATH);
+        const match = remoteBundleContent.match(VERSION_COUNTER_PATTERN);
+        if (!match) {
+            logger.warn("Version im veröffentlichten Toolbox-Bundle konnte nicht ermittelt werden.");
+            button.textContent = "Toolbox aktualisieren";
+            button.disabled = false;
+            return;
+        }
+        const remoteVersion = parseInt(match[1], 10);
+        logger.info(`Veröffentlichte Toolbox-Version auf GitHub: ${remoteVersion}, lokale Version: ${TOOLBOX_VERSION_COUNTER}.`);
+        if (remoteVersion > TOOLBOX_VERSION_COUNTER) {
+            button.textContent = `Toolbox aktualisieren (Version ${remoteVersion})`;
+            button.disabled = false;
+        }
+        else {
+            button.textContent = "Toolbox ist aktuell";
+            button.disabled = true;
+        }
+    }
+    catch (error) {
+        logger.error(`Fehler beim Prüfen auf eine neue Toolbox-Version: ${getErrorMessage(error)}`);
+        button.textContent = "Toolbox aktualisieren";
+        button.disabled = false;
+    }
+}
+/**
+ * Aktualisiert das Toolbox-Formular selbst: lädt sein eigenes Bundle aus dem
+ * öffentlichen Artefakt-Repo und patcht es als customJs auf TOOLBOX_FORM_ID.
+ * Legt anschließend per newVersion eine neue dforms-Version an. Das gerade
+ * laufende Skript im Browser-Speicher bleibt davon unberührt – deshalb wird
+ * die Seite nach erfolgreichem Patch automatisch neu geladen.
+ */
+async function updateToolbox(button) {
+    const previousLabel = button.textContent ?? "Toolbox aktualisieren";
+    button.disabled = true;
+    button.textContent = "Aktualisiere…";
+    try {
+        const baseUri = window.location.origin;
+        const customJsContent = await loadLatestBundle(TOOLBOX_BUNDLE_PATH);
+        const installedVersionMatch = customJsContent.match(VERSION_COUNTER_PATTERN);
+        const installedVersion = installedVersionMatch ? installedVersionMatch[1] : "?";
+        const existing = await (0, getForm_1.getForm)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID);
+        const definition = {
+            formioFormDefinition: existing.body.definition.formioFormDefinition,
+            customCss: existing.body.definition.customCss,
+            dvfDefVersion: "1.0",
+            customJs: customJsContent,
+        };
+        await (0, patchForm_1.patchForm)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID, TOOLBOX_FORM_NAME, definition);
+        await (0, newVersion_1.newVersion)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID);
+        logger.info(`Toolbox-Formular aktualisiert (Version ${installedVersion}). Seite wird neu geladen.`);
+        await showSuccessAlert("Toolbox aktualisiert", `Version ${installedVersion} wurde erstellt. Die Seite wird jetzt neu geladen, damit die neue Version greift.`);
+        window.location.reload();
+    }
+    catch (error) {
+        logger.error(`Fehler beim Aktualisieren des Toolbox-Formulars: ${getErrorMessage(error)}`);
+        await showErrorAlert("Fehler beim Aktualisieren der Toolbox", error);
+        button.disabled = false;
+        button.textContent = previousLabel;
+    }
+}
+// ---------------------------------------------------------------------------
+// Werkzeuglisten
+// ---------------------------------------------------------------------------
+// Lädt einmalig die vollständige dforms-Formular- und Script-Liste und teilt
+// die kuratierten targetForms (config/targetForms.ts) danach auf: Werkzeuge,
+// die dort noch NICHT existieren, landen in der Auswahl "Werkzeug
+// hinzufügen"; Werkzeuge, die schon existieren, in "Installierte Werkzeuge".
+// Wird beim Mounten sowie nach jedem Anlegen/Aktualisieren erneut aufgerufen,
+// damit ein frisch angelegtes Werkzeug direkt von der Auswahl in die Liste
+// wandert, ohne dass die Seite neu geladen werden muss.
+async function refreshToolLists() {
+    try {
+        const baseUri = window.location.origin;
+        const [allForms, allScripts] = await Promise.all([
+            (0, getAllForms_1.getAllForms)(baseUri, NO_TOKEN),
+            (0, getAllScripts_1.getAllScripts)(baseUri, NO_TOKEN),
+        ]);
+        // Formulare werden über ihre feste formId erkannt, Scripts (die ihre GUID
+        // serverseitig bei createScript bekommen, siehe TargetScriptEntry) über
+        // ihren eindeutigen Namen. "combined" wird wie "form" über die
+        // Formular-GUID erkannt - ensureTargetUpToDate legt bei einem
+        // "combined"-Tool ohnehin immer auch das Script mit an/aktualisiert es.
+        const isAlreadyLoaded = (t) => t.type === "script"
+            ? allScripts.body.some((s) => s.name === t.name)
+            : allForms.body.forms.some((f) => f.id === t.formId);
+        availableTargets = targetForms_1.targetForms.filter((t) => !isAlreadyLoaded(t));
+        const loadedTargets = targetForms_1.targetForms.filter(isAlreadyLoaded);
+        logger.debug(`refreshToolLists: verfügbar=[${availableTargets.map((t) => t.name).join(", ")}], ` +
+            `installiert=[${loadedTargets.map((t) => t.name).join(", ")}]`);
+        const available = region("available");
+        if (available)
+            available.innerHTML = renderAvailableTools(availableTargets);
+        await populateLoadedTools(loadedTargets, () => Promise.resolve(allScripts));
+    }
+    catch (error) {
+        logger.error(`Fehler beim Ermitteln bereits angelegter Werkzeuge: ${getErrorMessage(error)}`);
+        // Fallback: Auswahl zeigt sicherheitshalber alle kuratierten Werkzeuge an,
+        // statt eines, das eigentlich schon geladen ist, dauerhaft zu verstecken.
+        availableTargets = [...targetForms_1.targetForms];
+        const available = region("available");
+        if (available)
+            available.innerHTML = renderAvailableTools(availableTargets);
+        const loaded = region("loaded");
+        if (loaded) {
+            loaded.innerHTML = `<div class="tbx-status-error">Installierte Werkzeuge konnten nicht ermittelt werden: ${escapeHtml(getErrorMessage(error))}</div>`;
+        }
+    }
+}
+// Legt das in der Auswahl gewählte Werkzeug an (bei "combined" Formular UND
+// Script, siehe ensureTargetUpToDate). Danach wandert es per
+// refreshToolLists in die Liste der installierten Werkzeuge.
+async function createSelectedTool(button) {
+    const select = region("available")?.querySelector('[data-role="tool-select"]');
+    const target = availableTargets.find((t) => t.id === select?.value);
+    if (!target) {
+        await showErrorAlert("Werkzeug konnte nicht angelegt werden", "Bitte zuerst ein Werkzeug auswählen.");
         return;
     }
-    const host = getLoadedToolsHost(component);
-    if (!host) {
-        logger.warn(`Komponente "${loadedToolsKey}" hat (noch) kein gerendertes Element.`);
-        return;
+    button.disabled = true;
+    button.textContent = "Erstelle…";
+    if (select)
+        select.disabled = true;
+    try {
+        await ensureTargetUpToDate(target);
+        await refreshToolLists();
+        await showSuccessAlert("Werkzeug erstellt", target.type === "combined"
+            ? `Formular und Script von "${target.name}" wurden angelegt.`
+            : `"${target.name}" wurde angelegt.`);
     }
-    bindLoadedToolsActions(form, host);
-    host.innerHTML = renderLoadedTools(loadedTargets);
-    // Script-Liste nur einmal für alle Karten laden (Scripts werden über ihren
-    // Namen gefunden, siehe TargetScriptEntry).
-    let scriptsPromise;
-    const loadScripts = () => (scriptsPromise ?? (scriptsPromise = (0, getAllScripts_1.getAllScripts)(window.location.origin, NO_TOKEN)));
-    await Promise.all(loadedTargets.map((target) => updateLoadedToolStatus(host, target, loadScripts)));
+    catch (error) {
+        logger.error(`Fehler beim Anlegen von "${target.name}": ${getErrorMessage(error)}`);
+        await showErrorAlert(`Fehler beim Anlegen von "${target.name}"`, error);
+        button.disabled = false;
+        button.textContent = "Erstellen";
+        if (select)
+            select.disabled = false;
+    }
+}
+// Befüllt "Installierte Werkzeuge": jedes Werkzeug bekommt eine eigene Karte
+// mit Name, Öffnen- (nur mit Formular) und Aktualisieren-Knopf; bei
+// "combined"-Tools (Formular + zugehöriges Script, siehe toolbox.meta.json)
+// zeigt die Karte beide Bestandteile gemeinsam mit jeweils eigenem
+// Versionsstand an.
+async function populateLoadedTools(loadedTargets, loadScripts) {
+    const loaded = region("loaded");
+    if (!loaded)
+        return;
+    loaded.innerHTML = renderLoadedTools(loadedTargets);
+    await Promise.all(loadedTargets.map((target) => updateLoadedToolStatus(loaded, target, loadScripts)));
 }
 async function remoteVersionOf(bundlePath) {
     const content = await loadLatestBundle(bundlePath);
@@ -5835,8 +5957,8 @@ function describePartStatus(status) {
     }
     return { text: `Version ${status.installed} – aktuell`, css: "tbx-status-ok" };
 }
-async function updateLoadedToolStatus(host, target, loadScripts) {
-    const card = host.querySelector(`.tbx-tool[data-tool-id="${CSS.escape(target.id)}"]`);
+async function updateLoadedToolStatus(container, target, loadScripts) {
+    const card = container.querySelector(`.tbx-tool[data-tool-id="${CSS.escape(target.id)}"]`);
     if (!card)
         return;
     const statuses = await Promise.all(toolParts(target).map(async (part) => ({
@@ -5869,14 +5991,14 @@ async function updateLoadedToolStatus(host, target, loadScripts) {
 }
 // Patcht das Werkzeug in dforms/Scripting (bei "combined" Formular UND
 // Script gemeinsam, siehe ensureTargetUpToDate) und baut danach nur die
-// Werkzeug-Listen neu auf - kein Neuladen der ganzen Toolbox-Seite.
-async function updateLoadedTool(form, target, button) {
+// Werkzeuglisten neu auf - kein Neuladen der ganzen Toolbox-Seite.
+async function updateLoadedTool(target, button) {
     const previousLabel = button.textContent ?? "Aktualisieren";
     button.disabled = true;
     button.textContent = "Aktualisiere…";
     try {
         await ensureTargetUpToDate(target);
-        void refreshToolLists(form);
+        void refreshToolLists();
         await showSuccessAlert("Werkzeug aktualisiert", target.type === "combined"
             ? `Formular und Script von "${target.name}" wurden aktualisiert.`
             : `"${target.name}" wurde aktualisiert.`);
@@ -5912,6 +6034,9 @@ async function openLoadedTool(target, button) {
         button.disabled = false;
     }
 }
+// ---------------------------------------------------------------------------
+// Ausrollen von Werkzeugen
+// ---------------------------------------------------------------------------
 /**
  * Holt zuerst den aktuellen Bundle-Inhalt (customJs) des Ziel-Projekts direkt aus dem
  * öffentlichen Artefakt-Repo (kein Auth nötig, dasselbe Repo, in das
@@ -5925,16 +6050,14 @@ async function openLoadedTool(target, button) {
  *  - existiert es nicht: wird per createForm (POST /processstudio/components/form)
  *    neu angelegt und mit einem minimalen Bootstrap-Schema plus dem Bundle-Inhalt
  *    befüllt.
- * So erledigt ein Klick auf createOrUpdate wirklich beides: anlegen ODER
- * aktualisieren, immer mit dem aktuellsten Stand aus GitHub main.
  */
 async function ensureTargetFormUpToDate(target) {
     const baseUri = window.location.origin;
     const customJsContent = await loadLatestBundle(target.bundlePath);
     // Falls das Projekt sein Formio-Schema als Code pflegt (formDefinitionPath
-    // gesetzt, kommt 1:1 aus <projekt>/src/form.json), überschreibt dieses Schema bei
-    // jedem Update das im Process Studio Formular-Editor gebaute Schema. Ohne
-    // formDefinitionPath bleibt das Editor-Schema wie bisher unangetastet.
+    // gesetzt, kommt 1:1 aus <projekt>/src/forms/form.json), überschreibt dieses
+    // Schema bei jedem Update das im Process Studio Formular-Editor gebaute
+    // Schema. Ohne formDefinitionPath bleibt das Editor-Schema unangetastet.
     const codeOwnedFormDefinition = target.formDefinitionPath
         ? JSON.parse(await loadLatestBundle(target.formDefinitionPath))
         : undefined;
@@ -5967,34 +6090,22 @@ async function ensureTargetFormUpToDate(target) {
 }
 /**
  * Analog zu ensureTargetFormUpToDate, aber für Scripts (Process Studio
- * "Scripting"-Modul statt dforms-Formular, target.type === "script"). Zwei
- * wichtige Unterschiede zu Formularen:
+ * "Scripting"-Modul statt dforms-Formular). Wichtige Unterschiede zu Formularen:
  *  - Scripts haben keine vom Aufrufer wählbare Id: createScript() vergibt die
  *    GUID serverseitig. Ein bereits angelegtes Script wird deshalb über
- *    getAllScripts() anhand seines (eindeutigen) Namens gefunden, nicht über
- *    eine feste Id wie bei Formularen.
+ *    getAllScripts() anhand seines (eindeutigen) Namens gefunden.
  *  - customerVariables (z.B. ein API-Key, den das Script für eigene Aufrufe
  *    gegen andere d.velop-APIs braucht) werden hier BEWUSST NIE gesetzt oder
- *    überschrieben - nur .content wird aktualisiert. Die Scripting-API wird
- *    hier als partial PATCH behandelt (weggelassene Felder bleiben
- *    unangetastet); anders als beim Formular-Schema (reine Konfigurationsdaten)
- *    ließe sich ein versehentliches Überschreiben/Leeren eines bereits
- *    gesetzten, verschlüsselten API-Keys nicht rückgängig machen. Nach dem
- *    erstmaligen Anlegen muss der API-Key daher einmalig manuell im Process
- *    Studio Script-Editor eingetragen werden.
- *  - Anders als bei Formularen (customJs, per getForm zurücklesbar) liefert
- *    die Scripting-API den installierten Content über getScriptVersion NICHT
- *    zurück - ein direkter Versionsvergleich wie bei Formularen ist über die
- *    Version selbst nicht möglich. Ein Umweg über die Release-Historie
- *    (getScriptReleases/getScriptRelease) wurde ausprobiert und wieder
- *    verworfen: patchScript legt NICHT bei jedem Aufruf automatisch eine neue
- *    Release an, der Vergleich griff daher nie und der Update-Button blieb
- *    dauerhaft aktiv. Stattdessen wird derselbe VERSION_COUNTER-Marker, der
- *    bereits im Content steht, zusätzlich in "action.description" eingetragen
- *    (dieses Feld liefert getScriptVersion zuverlässig zurück, da es Teil
- *    derselben Draft-Version ist, die hier gepatcht wird) -
- *    checkScriptPart liest ihn von dort, um die installierte Version
- *    zu bestimmen.
+ *    überschrieben - ein versehentliches Überschreiben/Leeren eines bereits
+ *    gesetzten, verschlüsselten API-Keys ließe sich nicht rückgängig machen.
+ *    Nach dem erstmaligen Anlegen muss der API-Key daher einmalig manuell im
+ *    Process Studio Script-Editor eingetragen werden.
+ *  - Die Scripting-API liefert den installierten Content über getScriptVersion
+ *    NICHT zurück. Deshalb wird derselbe VERSION_COUNTER-Marker, der bereits
+ *    im Content steht, zusätzlich in "action.description" eingetragen (dieses
+ *    Feld liefert getScriptVersion zuverlässig zurück) - checkScriptPart liest
+ *    ihn von dort. Ein Umweg über die Release-Historie funktioniert nicht, da
+ *    patchScript nicht bei jedem Aufruf eine neue Release anlegt.
  */
 async function ensureTargetScriptUpToDate(target) {
     const baseUri = window.location.origin;
@@ -6034,10 +6145,8 @@ async function ensureTargetScriptUpToDate(target) {
     };
     await (0, patchScript_1.patchScript)(baseUri, NO_TOKEN, script.id, versionId, body);
 }
-// Wählt je nach target.type die passende ensureTarget…UpToDate-Funktion
-// (Formular vs. Script) - einziger Aufrufpunkt für createOrUpdate/updateTool,
-// damit beide nicht selbst zwischen den beiden Werkzeug-Arten unterscheiden
-// müssen.
+// Wählt je nach target.type die passende ensureTarget…UpToDate-Funktion -
+// einziger Aufrufpunkt für Erstellen und Aktualisieren.
 async function ensureTargetUpToDate(target) {
     if (target.type === "script") {
         await ensureTargetScriptUpToDate(target);
@@ -6047,11 +6156,9 @@ async function ensureTargetUpToDate(target) {
     if (target.type === "combined") {
         // "combined" bringt Formular UND Script mit (siehe toolbox.meta.json,
         // z.B. projects/Toolbox_UserLicenceCounter) - beide werden als EIN
-        // Toolbox-Eintrag gemeinsam ausgerollt. ensureTargetScriptUpToDate
-        // erwartet den Script-Bundle-Pfad unter "bundlePath" (wie bei einem
-        // reinen Script), bei "combined" heißt das Feld dafür "scriptBundlePath" -
-        // daher hier ein synthetisches TargetScriptEntry-Objekt statt target
-        // direkt durchzureichen.
+        // Werkzeug gemeinsam ausgerollt. ensureTargetScriptUpToDate erwartet den
+        // Script-Bundle-Pfad unter "bundlePath", bei "combined" heißt das Feld
+        // "scriptBundlePath" - daher ein synthetisches TargetScriptEntry-Objekt.
         await ensureTargetScriptUpToDate({
             type: "script",
             id: target.id,
@@ -6069,76 +6176,6 @@ async function loadLatestBundle(bundlePath) {
     }
     return await response.text();
 }
-/**
- * Legt das ausgewählte Ziel-Formular an bzw. aktualisiert es (ensureTargetFormUpToDate),
- * ohne es inline neben dem Toolbox-Formular zu mounten. Zum Öffnen danach den
- * "öffnen"-Button der neu in loadedTools erscheinenden Zeile nutzen (siehe openForm).
- */
-async function createOrUpdate(form, instance, data) {
-    const targetId = data.availableForms;
-    const target = targetForms_1.targetForms.find((t) => t.id === targetId);
-    if (!target) {
-        logger.error(`Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
-        await showErrorAlert("Formular konnte nicht geladen werden", `Kein Formular mit id "${targetId}" in der kuratierten Liste gefunden.`);
-        return;
-    }
-    try {
-        await ensureTargetUpToDate(target);
-        // Dropdown/Grid neu abgleichen, damit das gerade angelegte Werkzeug aus
-        // availableForms verschwindet und in loadedTools auftaucht.
-        void refreshToolLists(form);
-        await showSuccessAlert("Erfolgreich geladen", `Formular "${target.name}" wurde angelegt`);
-    }
-    catch (error) {
-        logger.error(`Fehler beim Laden von Formular "${target.name}": ${error}`);
-        await showErrorAlert(`Fehler beim Laden von Formular "${target.name}"`, error);
-    }
-}
-window.createOrUpdate = createOrUpdate;
-/**
- * Aktualisiert das Toolbox-Formular selbst: lädt sein eigenes Bundle aus dem
- * öffentlichen Artefakt-Repo und patcht es als customJs auf TOOLBOX_FORM_ID.
- * Legt anschließend per newVersion eine neue dforms-Version an und meldet dazu
- * TOOLBOX_VERSION_COUNTER (aus dem Sourcecode, siehe Kommentar dort). Das
- * gerade laufende Skript im Browser-Speicher bleibt davon unberührt – deshalb
- * lädt diese Funktion die Seite nach erfolgreichem Patch automatisch neu,
- * damit die neue Version tatsächlich greift.
- */
-async function updateForm(form, instance, data) {
-    if (TOOLBOX_FORM_ID === "TODO-GUID") {
-        logger.error("TOOLBOX_FORM_ID ist noch nicht gesetzt (siehe Kommentar am Anfang von form.ts).");
-        await showErrorAlert("Toolbox nicht konfiguriert", "TOOLBOX_FORM_ID ist noch nicht gesetzt (siehe Kommentar am Anfang von form.ts).");
-        return;
-    }
-    try {
-        const baseUri = window.location.origin;
-        const customJsContent = await loadLatestBundle(TOOLBOX_BUNDLE_PATH);
-        // customJsContent ist die gerade von GitHub geladene, neuere Version (der
-        // Button ist nur aktiv, wenn deren Zähler höher als TOOLBOX_VERSION_COUNTER
-        // ist, siehe enableUpdateButtonIfNewerVersionAvailable) – für die
-        // Erfolgsmeldung deshalb die tatsächlich installierte Version daraus
-        // auslesen statt der alten, noch laufenden TOOLBOX_VERSION_COUNTER.
-        const installedVersionMatch = customJsContent.match(VERSION_COUNTER_PATTERN);
-        const installedVersion = installedVersionMatch ? installedVersionMatch[1] : "?";
-        const existing = await (0, getForm_1.getForm)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID);
-        const definition = {
-            formioFormDefinition: existing.body.definition.formioFormDefinition,
-            customCss: existing.body.definition.customCss,
-            dvfDefVersion: "1.0",
-            customJs: customJsContent,
-        };
-        await (0, patchForm_1.patchForm)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID, TOOLBOX_FORM_NAME, definition);
-        await (0, newVersion_1.newVersion)(baseUri, NO_TOKEN, TOOLBOX_FORM_ID);
-        logger.info(`Toolbox-Formular aktualisiert (Version ${installedVersion}). Seite wird neu geladen, damit die neue Version greift.`);
-        await showSuccessAlert("Toolbox aktualisiert", `Version ${installedVersion} wurde erstellt. Die Seite wird jetzt neu geladen, damit die neue Version greift.`);
-        window.location.reload();
-    }
-    catch (error) {
-        logger.error(`Fehler beim Aktualisieren des Toolbox-Formulars: ${error}`);
-        await showErrorAlert("Fehler beim Aktualisieren des Toolbox-Formulars", error);
-    }
-}
-window.updateForm = updateForm;
 
 
 /***/ }
