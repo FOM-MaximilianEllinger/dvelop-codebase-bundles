@@ -201,13 +201,14 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
 const performHttpRequest_1 = __webpack_require__(/*! ../../../../helper/performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // Eigener Versionszähler, analog zu TOOLBOX_VERSION_COUNTER in
-// projects/Toolbox/src/form.ts: wird von publish-bundles.yml bei jedem
-// Publish automatisch um 1 erhöht, damit die Toolbox (loadedTools-Grid)
+// projects/Toolbox/src/form.ts: publish-bundles.yml stempelt bei jedem
+// Publish den nächsten Stand ins veröffentlichte Bundle (der Wert hier ist nur
+// ein Platzhalter und wird nicht hochgezählt), damit die Toolbox (loadedTools-Grid)
 // erkennen kann, ob auf GitHub eine neuere Version dieses Tools liegt. Heißt in
 // JEDEM Toolbox-Tool-Projekt einheitlich "VERSION_COUNTER" (nicht mehr
 // projektspezifisch benannt) - die Toolbox sucht beim Bump/Auslesen immer nach
 // genau diesem Namen, siehe generateTargetForms.js.
-const VERSION_COUNTER = 10;
+const VERSION_COUNTER = 11;
 const BASE_URI = window.location.origin;
 const GET_HEADERS = { 'Accept': 'application/json' };
 function loadBootstrap() {
