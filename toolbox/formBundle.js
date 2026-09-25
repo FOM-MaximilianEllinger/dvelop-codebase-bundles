@@ -5367,7 +5367,7 @@ exports.PUBLIC_BUNDLE_REPO_BASE_URL = "https://raw.githubusercontent.com/FOM-Max
 // Scripts mit (je Datei in src/scripts/, optional beschrieben unter "scripts"
 // in toolbox.meta.json - inkl. eigener customerVariables pro Script). Alle
 // Bestandteile eines Werkzeugs werden als EIN Toolbox-Eintrag gemeinsam
-// ausgerollt (siehe ensureTargetUpToDate in src/forms/form.ts).
+// ausgerollt, einzelne Bestandteile lassen sich aber auch separat anlegen/aktualisieren (siehe rolloutParts in src/forms/form.ts).
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.targetForms = void 0;
 // Kuratierte Liste der nachladbaren Werkzeuge (Formulare und Scripts) -
@@ -5456,7 +5456,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // ausgerollt werden soll, hier um 1 erhöhen. So bleibt die Versionsnummer
 // unabhängig vom Stand auf der jeweiligen Umgebung korrekt, auch wenn dort
 // noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 44;
+const TOOLBOX_VERSION_COUNTER = 45;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5522,16 +5522,21 @@ function partLabel(target, part) {
     return `${prefix}Script${showName ? `: ${escapeHtml(part.script.name)}` : ""}`;
 }
 // Erfolgsmeldung, die nennt, was tatsächlich ausgerollt wurde - z.B.
-// "Formular und 2 Scripts von "X" wurden angelegt."
-function describeRollout(target, verb) {
+// "Formular und 2 Scripts von "X" wurden angelegt." bzw. bei einem einzelnen
+// Bestandteil 'Script "Y" von "X" wurde aktualisiert.'
+function describeRollout(target, parts, verb) {
+    if (parts.length < toolParts(target).length) {
+        const names = parts.map((p) => (p.kind === "form" ? "Formular" : `Script "${p.script.name}"`));
+        return `${names.join(" und ")} von "${target.name}" wurde${parts.length > 1 ? "n" : ""} ${verb}.`;
+    }
     const scriptCount = scriptsOf(target).length;
-    const parts = [
+    const labels = [
         hasFormPart(target) ? "Formular" : "",
         scriptCount === 1 ? "Script" : scriptCount > 1 ? `${scriptCount} Scripts` : "",
     ].filter((p) => p !== "");
-    if (parts.length === 1 && scriptCount <= 1)
+    if (labels.length === 1 && scriptCount <= 1)
         return `"${target.name}" wurde ${verb}.`;
-    return `${parts.join(" und ")} von "${target.name}" wurden ${verb}.`;
+    return `${labels.join(" und ")} von "${target.name}" wurden ${verb}.`;
 }
 function resolveDefault(spec) {
     return (spec.default ?? "").replace(/\{origin\}/g, window.location.origin);
@@ -5574,7 +5579,7 @@ async function promptCustomerVariables(target, scripts) {
 ${groups}`,
         focusConfirm: false,
         showCancelButton: true,
-        confirmButtonText: "Erstellen",
+        confirmButtonText: "Anlegen",
         cancelButtonText: "Abbrechen",
         preConfirm: () => {
             const values = new Map();
@@ -5620,9 +5625,10 @@ const toolboxStyles = `
   .tbx-badge-link { color: #6c757d; font-size: 0.8em; margin-left: 4px; vertical-align: middle; }
   .tbx-parts { list-style: none; margin: 8px 0 0; padding: 0; font-size: 0.9em; }
   .tbx-section-body > .tbx-parts { margin-top: 0; }
-  .tbx-parts li { padding: 2px 0; }
+  .tbx-parts li { padding: 3px 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .tbx-parts-combined { border-left: 3px solid #adb5bd; padding-left: 10px; }
   .tbx-part-label { display: inline-block; min-width: 80px; font-weight: 600; }
+  .tbx-part-status { flex: 1 1 auto; }
   .tbx-hint { color: #6c757d; font-size: 0.85em; margin-top: 6px; }
   .tbx-status-ok { color: #198754; }
   .tbx-status-outdated { color: #b35c00; }
@@ -5633,7 +5639,8 @@ const CHECKING_LABEL = "Prüfe…";
 function renderButton(action, label, variant, options = {}) {
     const css = variant === "primary" ? "btn-primary" : "btn-outline-secondary";
     const toolId = options.toolId ? ` data-tool-id="${escapeHtml(options.toolId)}"` : "";
-    return `<button type="button" class="btn btn-sm ${css}" data-action="${action}"${toolId}${options.disabled ? " disabled" : ""}>${label}</button>`;
+    const partKey = options.partKey ? ` data-part-key="${escapeHtml(options.partKey)}"` : "";
+    return `<button type="button" class="btn btn-sm ${css}" data-action="${action}"${toolId}${partKey}${options.disabled ? " disabled" : ""}>${label}</button>`;
 }
 function renderSection(title, actions, regionName, body) {
     return `
@@ -5645,8 +5652,13 @@ function renderSection(title, actions, regionName, body) {
     <div class="tbx-section-body" data-region="${regionName}">${body}</div>
   </div>`;
 }
-function renderStatusLine(label, statusRole) {
-    return `<li data-part="${statusRole}"><span class="tbx-part-label">${label}</span> <span class="tbx-part-status tbx-status-unknown">wird geprüft…</span></li>`;
+function renderStatusLine(label, statusRole, statusText = "wird geprüft…", button = "") {
+    return `<li data-part="${statusRole}"><span class="tbx-part-label">${label}</span><span class="tbx-part-status tbx-status-unknown">${statusText}</span>${button}</li>`;
+}
+// Einzel-Buttons pro Bestandteil nur, wenn es mehr als einen gibt - sonst
+// macht der Button in der Kopfzeile der Karte bereits genau dasselbe.
+function hasSeveralParts(target) {
+    return toolParts(target).length > 1;
 }
 function renderShell() {
     const loading = `<div class="tbx-empty">Werkzeuge werden geladen…</div>`;
@@ -5696,31 +5708,42 @@ function renderAvailableTools(targets) {
 }
 // Vorschau in "Werkzeug hinzufügen": dieselbe Karte wie bei den installierten
 // Werkzeugen, statt Versionsständen zeigt jede Zeile, welche Werte beim
-// Erstellen für das jeweilige Script abgefragt werden.
+// Anlegen für das jeweilige Script abgefragt werden. "Erstellen" in der
+// Kopfzeile legt alles an, bei mehreren Bestandteilen kann jeder auch
+// einzeln angelegt werden.
 function renderSelectedToolDetails(target) {
     if (!target)
         return "";
+    const several = hasSeveralParts(target);
     const parts = toolParts(target)
         .map((part) => {
         const specs = part.kind === "script" ? part.script.customerVariables : [];
         const info = specs.length > 0
-            ? `fragt beim Erstellen ab: ${specs.map((s) => escapeHtml(s.label)).join(", ")}`
+            ? `fragt beim Anlegen ab: ${specs.map((s) => escapeHtml(s.label)).join(", ")}`
             : "keine Eingaben nötig";
-        return `<li data-part="${part.key}"><span class="tbx-part-label">${partLabel(target, part)}</span> <span class="tbx-part-status tbx-status-unknown">${info}</span></li>`;
+        const button = several
+            ? renderButton("part", "Anlegen", "secondary", { toolId: target.id, partKey: part.key })
+            : "";
+        return renderStatusLine(partLabel(target, part), part.key, info, button);
     })
         .join("");
     return renderToolCard(target, {
         parts: target.type === "form" ? undefined : parts,
-        hint: target.type === "combined" ? "Formular und Script gehören zusammen und werden gemeinsam angelegt." : undefined,
+        hint: several ? "„Erstellen“ legt alle Bestandteile an, einzelne lassen sich über „Anlegen“ separat anlegen." : undefined,
     });
 }
+// Karte eines installierten Werkzeugs: der Button in der Kopfzeile
+// aktualisiert alle Bestandteile (fehlende werden dabei angelegt), bei
+// mehreren Bestandteilen hat zusätzlich jede Statuszeile ihren eigenen
+// Button zum Anlegen/Aktualisieren nur dieses Bestandteils.
 function renderLoadedTool(target) {
+    const several = hasSeveralParts(target);
     const actions = [
         hasFormPart(target) ? renderButton("open", "Öffnen", "secondary", { toolId: target.id }) : "",
         renderButton("update", CHECKING_LABEL, "primary", { toolId: target.id, disabled: true }),
     ].join("");
     const parts = toolParts(target)
-        .map((part) => renderStatusLine(partLabel(target, part), part.key))
+        .map((part) => renderStatusLine(partLabel(target, part), part.key, undefined, several ? renderButton("part", CHECKING_LABEL, "secondary", { toolId: target.id, partKey: part.key, disabled: true }) : ""))
         .join("");
     return renderToolCard(target, { actions, parts });
 }
@@ -5739,18 +5762,42 @@ function applyStatus(statusElement, status) {
     statusElement.textContent = text;
     statusElement.className = `tbx-part-status ${css}`;
 }
+// Button für ein Werkzeug bzw. die Toolbox als Ganzes. Bei mehreren
+// Bestandteilen heißt er "Alle aktualisieren" (fehlende Bestandteile werden
+// dabei mit angelegt), sonst trägt er die neue Versionsnummer.
 function applyUpdateButton(button, statuses) {
     if (!button)
         return;
-    const remoteVersions = statuses.map((s) => s.remote).filter((v) => v !== undefined);
-    const latest = remoteVersions.length > 0 ? Math.max(...remoteVersions) : undefined;
     const actionable = statuses.some((s) => s.error || isPartOutdated(s));
     button.disabled = !actionable;
+    if (!actionable) {
+        button.textContent = "Aktuell";
+    }
+    else if (statuses.length > 1) {
+        button.textContent = "Alle aktualisieren";
+    }
+    else if (statuses[0]?.missing) {
+        button.textContent = "Anlegen";
+    }
+    else {
+        const remote = statuses[0]?.remote;
+        button.textContent = remote !== undefined ? `Aktualisieren (Version ${remote})` : "Aktualisieren";
+    }
+}
+// Button eines einzelnen Bestandteils (Formular oder ein Script).
+function applyPartButton(button, status) {
+    if (!button)
+        return;
+    const actionable = Boolean(status.error) || isPartOutdated(status);
+    button.disabled = !actionable;
+    button.dataset.verb = status.missing ? "angelegt" : "aktualisiert";
     button.textContent = !actionable
         ? "Aktuell"
-        : latest !== undefined
-            ? `Aktualisieren (Version ${latest})`
-            : "Aktualisieren";
+        : status.missing
+            ? "Anlegen"
+            : status.remote !== undefined && !status.error
+                ? `Aktualisieren (Version ${status.remote})`
+                : "Aktualisieren";
 }
 function region(name) {
     return mountedRoot?.querySelector(`[data-region="${name}"]`) ?? null;
@@ -5824,10 +5871,25 @@ function bindToolboxEvents(root) {
             logger.error(`Kein Werkzeug mit id "${button.dataset.toolId}" in der kuratierten Liste gefunden.`);
             return;
         }
-        if (button.dataset.action === "open")
-            void openLoadedTool(target, button);
-        if (button.dataset.action === "update")
-            void updateLoadedTool(target, button);
+        switch (button.dataset.action) {
+            case "open":
+                void openLoadedTool(target, button);
+                return;
+            case "update":
+                void runRollout(target, toolParts(target), button, "aktualisiert");
+                return;
+            case "part": {
+                const part = toolParts(target).find((p) => p.key === button.dataset.partKey);
+                if (!part)
+                    return;
+                // In "Werkzeug hinzufügen" wird immer angelegt; bei installierten
+                // Werkzeugen setzt applyPartButton, ob der Bestandteil noch fehlt.
+                const creating = button.closest('[data-region="available"]') !== null || button.dataset.verb === "angelegt";
+                const verb = creating ? "angelegt" : "aktualisiert";
+                void runRollout(target, [part], button, verb);
+                return;
+            }
+        }
     });
     root.addEventListener("change", (event) => {
         const select = event.target;
@@ -5919,13 +5981,13 @@ async function refreshToolLists() {
         ]);
         // Formulare werden über ihre feste formId erkannt, Scripts (die ihre GUID
         // serverseitig bei createScript bekommen, siehe TargetScript) über ihren
-        // eindeutigen Namen. "combined" wird wie "form" über die Formular-GUID
-        // erkannt, ein reines Script-Werkzeug gilt als installiert, sobald eines
-        // seiner Scripts existiert - fehlende Scripts zeigt die Karte dann als
-        // "fehlt" an, "Aktualisieren" legt sie nach.
-        const isAlreadyLoaded = (t) => t.type === "script"
-            ? t.scripts.some((script) => allScripts.body.some((s) => s.name === script.name))
-            : allForms.body.forms.some((f) => f.id === t.formId);
+        // eindeutigen Namen. Ein Werkzeug gilt als installiert, sobald IRGENDEIN
+        // Bestandteil existiert - fehlende Bestandteile zeigt die Karte dann als
+        // "fehlt" an und lassen sich dort einzeln oder gesammelt anlegen.
+        const partExists = (t, part) => part.kind === "form"
+            ? hasFormPart(t) && allForms.body.forms.some((f) => f.id === t.formId)
+            : allScripts.body.some((s) => s.name === part.script.name);
+        const isAlreadyLoaded = (t) => toolParts(t).some((part) => partExists(t, part));
         availableTargets = targetForms_1.targetForms.filter((t) => !isAlreadyLoaded(t));
         const loadedTargets = targetForms_1.targetForms.filter(isAlreadyLoaded);
         logger.debug(`refreshToolLists: verfügbar=[${availableTargets.map((t) => t.name).join(", ")}], ` +
@@ -5957,11 +6019,9 @@ function renderAvailableRegion() {
         createButton.disabled = availableTargets.length === 0;
     }
 }
-// Legt das in der Auswahl gewählte Werkzeug an (bei "combined" Formular UND
-// Script, siehe ensureTargetUpToDate). Braucht das Script customerVariables
-// und existiert es noch nicht, werden diese vorher per Dialog abgefragt.
-// Danach wandert das Werkzeug per refreshToolLists in die Liste der
-// installierten Werkzeuge.
+// "Erstellen" in "Werkzeug hinzufügen": legt ALLE Bestandteile des in der
+// Auswahl gewählten Werkzeugs an. Danach wandert es per refreshToolLists in
+// die Liste der installierten Werkzeuge.
 async function createSelectedTool(button) {
     const select = region("available")?.querySelector('[data-role="tool-select"]');
     const target = availableTargets.find((t) => t.id === select?.value);
@@ -5969,34 +6029,29 @@ async function createSelectedTool(button) {
         await showErrorAlert("Werkzeug konnte nicht angelegt werden", "Bitte zuerst ein Werkzeug auswählen.");
         return;
     }
-    button.disabled = true;
-    button.textContent = "Erstelle…";
-    if (select)
-        select.disabled = true;
+    await runRollout(target, toolParts(target), button, "angelegt");
+}
+// Gemeinsamer Ablauf für alle Buttons, die etwas anlegen oder aktualisieren -
+// ob ein einzelner Bestandteil, mehrere oder das ganze Werkzeug. Sperrt
+// währenddessen alle Buttons des Bereichs (keine parallelen Vorgänge) und
+// baut danach die Werkzeuglisten neu auf, was auch alle Button-Zustände
+// wiederherstellt - im Erfolgs- wie im Fehler- oder Abbruchfall.
+async function runRollout(target, parts, button, verb) {
+    const section = button.closest(".tbx-section");
+    section?.querySelectorAll("button, select").forEach((el) => (el.disabled = true));
+    button.textContent = verb === "angelegt" ? "Lege an…" : "Aktualisiere…";
     try {
-        // Nur für Scripts fragen, die neu angelegt werden - bei einem bereits
-        // existierenden Script bleiben dessen customerVariables unangetastet.
-        let customerVariables;
-        const needsValues = scriptsOf(target).filter((s) => s.customerVariables.length > 0);
-        if (needsValues.length > 0) {
-            const existing = await (0, getAllScripts_1.getAllScripts)(window.location.origin, NO_TOKEN);
-            const newScripts = needsValues.filter((s) => !existing.body.some((e) => e.name === s.name));
-            if (newScripts.length > 0) {
-                customerVariables = await promptCustomerVariables(target, newScripts);
-                if (!customerVariables) {
-                    renderAvailableRegion();
-                    return;
-                }
-            }
-        }
-        await ensureTargetUpToDate(target, { customerVariables });
+        const completed = await rolloutParts(target, parts);
         await refreshToolLists();
-        await showSuccessAlert("Werkzeug erstellt", describeRollout(target, "angelegt"));
+        if (completed) {
+            await showSuccessAlert(verb === "angelegt" ? "Angelegt" : "Aktualisiert", describeRollout(target, parts, verb));
+        }
     }
     catch (error) {
-        logger.error(`Fehler beim Anlegen von "${target.name}": ${getErrorMessage(error)}`);
-        await showErrorAlert(`Fehler beim Anlegen von "${target.name}"`, error);
-        renderAvailableRegion();
+        const action = verb === "angelegt" ? "Anlegen" : "Aktualisieren";
+        logger.error(`Fehler beim ${action} von "${target.name}": ${getErrorMessage(error)}`);
+        await refreshToolLists();
+        await showErrorAlert(`Fehler beim ${action} von "${target.name}"`, error);
     }
 }
 // Befüllt "Installierte Werkzeuge": jedes Werkzeug bekommt eine eigene Karte
@@ -6089,28 +6144,11 @@ async function updateLoadedToolStatus(container, target, loadScripts) {
                 : { error: "Kein Formular konfiguriert." },
     })));
     for (const { part, status } of statuses) {
-        applyStatus(card.querySelector(`li[data-part="${part.key}"] .tbx-part-status`), status);
+        const line = card.querySelector(`li[data-part="${part.key}"]`);
+        applyStatus(line?.querySelector(".tbx-part-status") ?? null, status);
+        applyPartButton(line?.querySelector('button[data-action="part"]') ?? null, status);
     }
     applyUpdateButton(card.querySelector('button[data-action="update"]'), statuses.map((s) => s.status));
-}
-// Patcht das Werkzeug in dforms/Scripting (bei "combined" Formular UND
-// Script gemeinsam, siehe ensureTargetUpToDate) und baut danach nur die
-// Werkzeuglisten neu auf - kein Neuladen der ganzen Toolbox-Seite.
-async function updateLoadedTool(target, button) {
-    const previousLabel = button.textContent ?? "Aktualisieren";
-    button.disabled = true;
-    button.textContent = "Aktualisiere…";
-    try {
-        await ensureTargetUpToDate(target);
-        void refreshToolLists();
-        await showSuccessAlert("Werkzeug aktualisiert", describeRollout(target, "aktualisiert"));
-    }
-    catch (error) {
-        logger.error(`Fehler beim Aktualisieren von "${target.name}": ${getErrorMessage(error)}`);
-        await showErrorAlert(`Fehler beim Aktualisieren von "${target.name}"`, error);
-        button.disabled = false;
-        button.textContent = previousLabel;
-    }
 }
 // Öffnet das Formular eines Werkzeugs (nur "form"/"combined" - reine Scripts
 // haben keine Seite und bekommen keinen Öffnen-Knopf) in einem neuen Tab.
@@ -6257,16 +6295,33 @@ async function ensureTargetScriptUpToDate(targetScript, customerVariables) {
     }
     await (0, patchScript_1.patchScript)(baseUri, NO_TOKEN, script.id, versionId, body);
 }
-// Rollt alle Bestandteile eines Werkzeugs aus: erst das Formular (falls
-// vorhanden), dann jedes Script mit seinen eigenen customerVariables -
-// einziger Aufrufpunkt für Erstellen und Aktualisieren.
-async function ensureTargetUpToDate(target, options = {}) {
-    if (hasFormPart(target)) {
+// Rollt die übergebenen Bestandteile eines Werkzeugs aus (einen, mehrere oder
+// alle - einziger Aufrufpunkt für jedes Anlegen/Aktualisieren). Scripts, die
+// dabei NEU angelegt werden und customerVariables brauchen, werden vorher in
+// einem Dialog abgefragt - jedes mit seinen eigenen Werten. Liefert false,
+// wenn der Dialog abgebrochen wurde (dann wird nichts ausgerollt).
+async function rolloutParts(target, parts) {
+    const scripts = parts.flatMap((p) => (p.kind === "script" ? [p.script] : []));
+    let customerVariables;
+    const needsValues = scripts.filter((s) => s.customerVariables.length > 0);
+    if (needsValues.length > 0) {
+        const existing = await (0, getAllScripts_1.getAllScripts)(window.location.origin, NO_TOKEN);
+        const newScripts = needsValues.filter((s) => !existing.body.some((e) => e.name === s.name));
+        if (newScripts.length > 0) {
+            customerVariables = await promptCustomerVariables(target, newScripts);
+            if (!customerVariables)
+                return false;
+        }
+    }
+    // Formular zuerst, damit ein Script, das auf das Formular verweist, es
+    // beim ersten Aufruf bereits vorfindet.
+    if (parts.some((p) => p.kind === "form") && hasFormPart(target)) {
         await ensureTargetFormUpToDate(target);
     }
-    for (const script of scriptsOf(target)) {
-        await ensureTargetScriptUpToDate(script, options.customerVariables?.get(script.name));
+    for (const script of scripts) {
+        await ensureTargetScriptUpToDate(script, customerVariables?.get(script.name));
     }
+    return true;
 }
 async function loadLatestBundle(bundlePath) {
     const url = `${publicBundleRepo_1.PUBLIC_BUNDLE_REPO_BASE_URL}/${bundlePath}`;
