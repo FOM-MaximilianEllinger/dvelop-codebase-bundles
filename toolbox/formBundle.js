@@ -5477,10 +5477,10 @@ exports.targetForms = [
 
 /***/ },
 
-/***/ "./src/form.ts"
-/*!*********************!*\
-  !*** ./src/form.ts ***!
-  \*********************/
+/***/ "./src/forms/form.ts"
+/*!***************************!*\
+  !*** ./src/forms/form.ts ***!
+  \***************************/
 (__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
@@ -5489,20 +5489,20 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const getForm_1 = __webpack_require__(/*! ../../../helper/dforms/getForm */ "../../helper/dforms/getForm.ts");
-const createForm_1 = __webpack_require__(/*! ../../../helper/processstudio/createForm */ "../../helper/processstudio/createForm.ts");
-const getAllForms_1 = __webpack_require__(/*! ../../../helper/processstudio/getAllForms */ "../../helper/processstudio/getAllForms.ts");
-const patchForm_1 = __webpack_require__(/*! ../../../helper/dforms/patchForm */ "../../helper/dforms/patchForm.ts");
-const newVersion_1 = __webpack_require__(/*! ../../../helper/dforms/newVersion */ "../../helper/dforms/newVersion.ts");
-const getAllScripts_1 = __webpack_require__(/*! ../../../helper/scripting/getAllScripts */ "../../helper/scripting/getAllScripts.ts");
-const createScript_1 = __webpack_require__(/*! ../../../helper/scripting/createScript */ "../../helper/scripting/createScript.ts");
-const getScriptVersion_1 = __webpack_require__(/*! ../../../helper/scripting/getScriptVersion */ "../../helper/scripting/getScriptVersion.ts");
-const patchScript_1 = __webpack_require__(/*! ../../../helper/scripting/patchScript */ "../../helper/scripting/patchScript.ts");
-const getScriptReleases_1 = __webpack_require__(/*! ../../../helper/scripting/getScriptReleases */ "../../helper/scripting/getScriptReleases.ts");
-const getScriptRelease_1 = __webpack_require__(/*! ../../../helper/scripting/getScriptRelease */ "../../helper/scripting/getScriptRelease.ts");
-const logger_1 = __webpack_require__(/*! ../../../helper/utils/logger */ "../../helper/utils/logger.ts");
-const targetForms_1 = __webpack_require__(/*! ./config/targetForms */ "./src/config/targetForms.ts");
-const publicBundleRepo_1 = __webpack_require__(/*! ./config/publicBundleRepo */ "./src/config/publicBundleRepo.ts");
+const getForm_1 = __webpack_require__(/*! ../../../../helper/dforms/getForm */ "../../helper/dforms/getForm.ts");
+const createForm_1 = __webpack_require__(/*! ../../../../helper/processstudio/createForm */ "../../helper/processstudio/createForm.ts");
+const getAllForms_1 = __webpack_require__(/*! ../../../../helper/processstudio/getAllForms */ "../../helper/processstudio/getAllForms.ts");
+const patchForm_1 = __webpack_require__(/*! ../../../../helper/dforms/patchForm */ "../../helper/dforms/patchForm.ts");
+const newVersion_1 = __webpack_require__(/*! ../../../../helper/dforms/newVersion */ "../../helper/dforms/newVersion.ts");
+const getAllScripts_1 = __webpack_require__(/*! ../../../../helper/scripting/getAllScripts */ "../../helper/scripting/getAllScripts.ts");
+const createScript_1 = __webpack_require__(/*! ../../../../helper/scripting/createScript */ "../../helper/scripting/createScript.ts");
+const getScriptVersion_1 = __webpack_require__(/*! ../../../../helper/scripting/getScriptVersion */ "../../helper/scripting/getScriptVersion.ts");
+const patchScript_1 = __webpack_require__(/*! ../../../../helper/scripting/patchScript */ "../../helper/scripting/patchScript.ts");
+const getScriptReleases_1 = __webpack_require__(/*! ../../../../helper/scripting/getScriptReleases */ "../../helper/scripting/getScriptReleases.ts");
+const getScriptRelease_1 = __webpack_require__(/*! ../../../../helper/scripting/getScriptRelease */ "../../helper/scripting/getScriptRelease.ts");
+const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
+const targetForms_1 = __webpack_require__(/*! ../config/targetForms */ "./src/config/targetForms.ts");
+const publicBundleRepo_1 = __webpack_require__(/*! ../config/publicBundleRepo */ "./src/config/publicBundleRepo.ts");
 const sweetalert2_1 = __importDefault(__webpack_require__(/*! sweetalert2 */ "./node_modules/sweetalert2/dist/sweetalert2.all.js"));
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
 function getErrorMessage(error) {
@@ -5523,7 +5523,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // abgeleitet): bei jeder Änderung, die über updateForm ausgerollt werden soll,
 // hier um 1 erhöhen. So bleibt die Versionsnummer unabhängig vom Stand auf der
 // jeweiligen Umgebung korrekt, auch wenn dort noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 38;
+const TOOLBOX_VERSION_COUNTER = 39;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -6195,7 +6195,7 @@ window.updateForm = updateForm;
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	let __webpack_exports__ = __webpack_require__("./src/form.ts");
+/******/ 	let __webpack_exports__ = __webpack_require__("./src/forms/form.ts");
 /******/ 	window.FormLoaderBundle = __webpack_exports__;
 /******/ 	
 /******/ })()
