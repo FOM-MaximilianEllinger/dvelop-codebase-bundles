@@ -67,6 +67,63 @@ async function getRepositories(baseUri, token) {
 
 /***/ },
 
+/***/ "../../helper/dms/sourceMappings.ts"
+/*!******************************************!*\
+  !*** ../../helper/dms/sourceMappings.ts ***!
+  \******************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getSourceMappings = getSourceMappings;
+exports.updateSourceMapping = updateSourceMapping;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Liest die Quell-Mappings eines Repositorys (GET /dms/r/<repo>/m). Die Antwort
+ * wird tolerant ausgewertet (Liste direkt oder unter "mappings"/"items"/
+ * "value"/"_embedded"), da das Format nicht dokumentiert ist.
+ */
+async function getSourceMappings(baseUri, token, repositoryId) {
+    const url = `${baseUri}/dms/r/${repositoryId}/m`;
+    const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/hal+json, application/json",
+    };
+    const response = await (0, performHttpRequest_1.performHttpRequest)(url, { method: "GET", headers });
+    const body = response.body;
+    const list = Array.isArray(body) ? body
+        : body?.mappings ?? body?.items ?? body?.value ?? body?._embedded?.mappings ?? body?._embedded?.items;
+    if (!Array.isArray(list)) {
+        throw new Error("Unbekanntes Antwortformat beim Lesen der Quell-Mappings.");
+    }
+    return list;
+}
+/**
+ * Aktualisiert ein bestehendes Quell-Mapping (PUT auf "_links.update"/"self",
+ * sonst /dms/r/<repo>/m/<id>).
+ */
+async function updateSourceMapping(baseUri, token, repositoryId, existing, sourceMapping) {
+    const href = existing._links?.update?.href ?? existing._links?.self?.href
+        ?? (existing.id ? `/dms/r/${repositoryId}/m/${existing.id}` : undefined);
+    if (!href) {
+        throw new Error(`Für das Quell-Mapping "${existing.name}" ist keine Id/kein Link bekannt.`);
+    }
+    const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ ...sourceMapping, id: existing.id }),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(new URL(href, baseUri).toString(), options);
+}
+
+
+/***/ },
+
 /***/ "../../helper/dmsConfig/createEvent.ts"
 /*!*********************************************!*\
   !*** ../../helper/dmsConfig/createEvent.ts ***!
@@ -176,6 +233,46 @@ async function getEvents(baseUri, token, repositoryId) {
 
 /***/ },
 
+/***/ "../../helper/dmsConfig/updateEvent.ts"
+/*!*********************************************!*\
+  !*** ../../helper/dmsConfig/updateEvent.ts ***!
+  \*********************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.updateEvent = updateEvent;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Aktualisiert einen bestehenden Webhook (PUT auf dessen "_links.self" aus
+ * getEvents).
+ *
+ * @param baseUri - The base URI of the DMS configuration API.
+ * @param token - The authorization token to access the API.
+ * @param existing - Bestehender Webhook aus getEvents.
+ * @param event - Neue Einstellungen des Webhooks.
+ */
+async function updateEvent(baseUri, token, existing, event) {
+    const href = existing._links?.self?.href;
+    if (!href) {
+        throw new Error("Für den Webhook liefert die API keinen Link zum Aktualisieren.");
+    }
+    const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ ...event, id: existing.id }),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(new URL(href, baseUri).toString(), options);
+}
+
+
+/***/ },
+
 /***/ "../../helper/emailinbound/createEmailinboundProfile.ts"
 /*!**************************************************************!*\
   !*** ../../helper/emailinbound/createEmailinboundProfile.ts ***!
@@ -238,6 +335,47 @@ async function getEmailinboundProfiles(baseUri, token) {
 
 /***/ },
 
+/***/ "../../helper/emailinbound/updateEmailinboundProfile.ts"
+/*!**************************************************************!*\
+  !*** ../../helper/emailinbound/updateEmailinboundProfile.ts ***!
+  \**************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.updateEmailinboundProfile = updateEmailinboundProfile;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Aktualisiert ein bestehendes E-Mail-Postfach (PUT auf "_links.update" aus
+ * getEmailinboundProfiles, sonst auf "_links.self").
+ *
+ * @param baseUri - The base URI of the API endpoint.
+ * @param token - The bearer token used for authentication.
+ * @param existing - Bestehendes Postfach aus getEmailinboundProfiles.
+ * @param payload - Neue Einstellungen des Postfachs.
+ */
+async function updateEmailinboundProfile(baseUri, token, existing, payload) {
+    const href = existing._links?.update?.href ?? existing._links?.self?.href;
+    if (!href) {
+        throw new Error(`Für das Postfach "${existing.mailbox}" liefert die API keinen Link zum Aktualisieren.`);
+    }
+    const url = new URL(href, baseUri).toString();
+    const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json",
+        "Content-Type": "application/json; charset=utf-8",
+    };
+    const options = {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(payload),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
 /***/ "../../helper/identityprovider/createAPIKey.ts"
 /*!*****************************************************!*\
   !*** ../../helper/identityprovider/createAPIKey.ts ***!
@@ -248,8 +386,15 @@ async function getEmailinboundProfiles(baseUri, token) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.createAPIKey = createAPIKey;
 const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Legt einen API-Key für einen Benutzer an - wie die Identityprovider-
+ * Oberfläche: POST /identityprovider/config/apikey mit
+ * {"id":"create","status":"Unconfirmed","userId":"<id>","label":"<label>"}.
+ *
+ * @param token - Optional bearer token; ohne Token wird die Browser-Session genutzt.
+ */
 async function createAPIKey(baseUri, token = null, input) {
-    const url = `${baseUri}/identityprovider/config/apikey/create`;
+    const url = `${baseUri}/identityprovider/config/apikey`;
     const headers = {
         Accept: "application/json",
         "Content-Type": "application/json",
@@ -268,30 +413,51 @@ async function createAPIKey(baseUri, token = null, input) {
 
 /***/ },
 
-/***/ "../../helper/identityprovider/getAPIConfig.ts"
-/*!*****************************************************!*\
-  !*** ../../helper/identityprovider/getAPIConfig.ts ***!
-  \*****************************************************/
+/***/ "../../helper/identityprovider/getAllUsers.ts"
+/*!****************************************************!*\
+  !*** ../../helper/identityprovider/getAllUsers.ts ***!
+  \****************************************************/
 (__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getAPIConfig = getAPIConfig;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-async function getAPIConfig(baseUri, token = null) {
-    const url = `${baseUri}/identityprovider/config/apikey`;
-    const headers = {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-    };
-    if (token) {
-        headers.Authorization = `Bearer ${token}`;
+exports.getAllUsers = getAllUsers;
+const getUsers_1 = __webpack_require__(/*! ./getUsers */ "../../helper/identityprovider/getUsers.ts");
+const PAGE_SIZE = 100;
+// Schutz vor Endlosschleifen, falls die API totalResults/startIndex nicht wie
+// erwartet liefert (100 * 1000 = 100.000 Benutzer).
+const MAX_PAGES = 1000;
+/**
+ * Fetches ALL users from the identity provider (SCIM). getUsers alone returns
+ * only the API's default page; this pages through with startIndex/count until
+ * totalResults is reached or a page comes back empty.
+ *
+ * @param baseUri - The base URI of the identity provider API.
+ * @param token - The authorization token to access the API.
+ * @returns All users, duplicates (same id on several pages) removed.
+ */
+async function getAllUsers(baseUri, token) {
+    const usersById = new Map();
+    const usersWithoutId = [];
+    let startIndex = 1;
+    for (let page = 0; page < MAX_PAGES; page++) {
+        const response = await (0, getUsers_1.getUsers)(baseUri, token, startIndex, PAGE_SIZE);
+        const resources = response.body.resources ?? [];
+        for (const user of resources) {
+            if (user.id) {
+                usersById.set(user.id, user);
+            }
+            else {
+                usersWithoutId.push(user);
+            }
+        }
+        const total = response.body.totalResults;
+        startIndex += resources.length;
+        if (resources.length === 0 || (total !== undefined && startIndex > total)) {
+            break;
+        }
     }
-    const options = {
-        method: "GET",
-        headers,
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+    return [...usersById.values(), ...usersWithoutId];
 }
 
 
@@ -376,6 +542,51 @@ async function getGroups(baseUri, token) {
 
 /***/ },
 
+/***/ "../../helper/identityprovider/getUsers.ts"
+/*!*************************************************!*\
+  !*** ../../helper/identityprovider/getUsers.ts ***!
+  \*************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getUsers = getUsers;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Fetches a list of users from the identity provider using the SCIM protocol.
+ *
+ * @param baseUri - The base URI of the identity provider API.
+ * @param token - The authorization token to access the API.
+ * @param startIndex - Optional (SCIM, 1-based): first result of the page. Without it the API returns only its default page - see getAllUsers for all users.
+ * @param count - Optional (SCIM): maximum number of results of the page.
+ * @returns A promise that resolves to an `ApiResponse` containing the list of users.
+ *
+ * @template GetUsers - The type representing the structure of the user data returned by the API.
+ */
+async function getUsers(baseUri, token, startIndex, count) {
+    const query = new URLSearchParams();
+    if (startIndex !== undefined)
+        query.set("startIndex", String(startIndex));
+    if (count !== undefined)
+        query.set("count", String(count));
+    const queryString = query.toString();
+    const url = `${baseUri}/identityprovider/scim/Users${queryString ? `?${queryString}` : ""}`;
+    // Ohne Token (Formular im Browser) über die Session des angemeldeten Benutzers.
+    const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "GET",
+        headers,
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
 /***/ "../../helper/inbound/createBatchProfile.ts"
 /*!**************************************************!*\
   !*** ../../helper/inbound/createBatchProfile.ts ***!
@@ -443,6 +654,44 @@ async function getBatchProfiles(baseUri, token) {
     const options = {
         method: "GET",
         headers,
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/inbound/updateBatchProfile.ts"
+/*!**************************************************!*\
+  !*** ../../helper/inbound/updateBatchProfile.ts ***!
+  \**************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.updateBatchProfile = updateBatchProfile;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Aktualisiert ein bestehendes Stapelprofil (PUT). Nutzt den Link
+ * "_links.update" aus getBatchProfiles, sonst /inbound/batchprofile/<id>.
+ *
+ * @param baseUri - The base URI of the API endpoint.
+ * @param token - The bearer token used for authentication.
+ * @param profile - Bestehendes Profil (batchProfileId und ggf. _links aus getBatchProfiles).
+ * @param body - Neue Einstellungen des Profils.
+ */
+async function updateBatchProfile(baseUri, token, profile, body) {
+    const href = profile._links?.update?.href ?? `/inbound/batchprofile/${profile.batchProfileId}`;
+    const url = new URL(href, baseUri).toString();
+    const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json",
+        "Content-Type": "application/json; charset=utf-8",
+    };
+    const options = {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ ...body, batchProfileId: profile.batchProfileId }),
     };
     return await (0, performHttpRequest_1.performHttpRequest)(url, options);
 }
@@ -563,6 +812,33 @@ async function getAllScripts(baseUri, token) {
 
 /***/ },
 
+/***/ "../../helper/scripting/getScriptVersion.ts"
+/*!**************************************************!*\
+  !*** ../../helper/scripting/getScriptVersion.ts ***!
+  \**************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getScriptVersion = getScriptVersion;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+async function getScriptVersion(baseUri, token, scriptId) {
+    const url = `${baseUri}/scripting/script/${scriptId}/version`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "GET",
+        headers,
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
 /***/ "../../helper/scripting/importScript.ts"
 /*!**********************************************!*\
   !*** ../../helper/scripting/importScript.ts ***!
@@ -584,6 +860,63 @@ async function importScript(baseUri, token, payload) {
         method: "PUT",
         headers,
         body: JSON.stringify(payload),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/scripting/patchScript.ts"
+/*!*********************************************!*\
+  !*** ../../helper/scripting/patchScript.ts ***!
+  \*********************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PatchScript_Scriptbody_CustomerVariable = exports.PatchScript_Scriptbody_OutputProperty = exports.PatchScript_Scriptbody_InputProperty = exports.PatchScript_Scriptbody_Description = exports.PatchScript_Scriptbody_Action = exports.PatchScript_Scriptbody = void 0;
+exports.patchScript = patchScript;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+class PatchScript_Scriptbody {
+}
+exports.PatchScript_Scriptbody = PatchScript_Scriptbody;
+class PatchScript_Scriptbody_Action {
+}
+exports.PatchScript_Scriptbody_Action = PatchScript_Scriptbody_Action;
+class PatchScript_Scriptbody_Description {
+}
+exports.PatchScript_Scriptbody_Description = PatchScript_Scriptbody_Description;
+class PatchScript_Scriptbody_InputProperty {
+}
+exports.PatchScript_Scriptbody_InputProperty = PatchScript_Scriptbody_InputProperty;
+class PatchScript_Scriptbody_OutputProperty {
+}
+exports.PatchScript_Scriptbody_OutputProperty = PatchScript_Scriptbody_OutputProperty;
+class PatchScript_Scriptbody_CustomerVariable {
+}
+exports.PatchScript_Scriptbody_CustomerVariable = PatchScript_Scriptbody_CustomerVariable;
+/**
+ * Overrides a script version with the provided body content.
+ *
+ * @param baseUri - The base URI of the API endpoint.
+ * @param token - The authorization token to access the API.
+ * @param scriptId - The unique identifier of the script to override.
+ * @param scriptVersionId - The unique identifier of the script version to override.
+ * @param body - The content to override the script version with.
+ * @returns A promise that resolves to the API response containing the overridden script details.
+ */
+async function patchScript(baseUri, token, scriptId, scriptVersionId, body) {
+    const url = `${baseUri}/scripting/script/${scriptId}/version/${scriptVersionId}`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(body),
     };
     return await (0, performHttpRequest_1.performHttpRequest)(url, options);
 }
@@ -726,6 +1059,291 @@ function getLogger() {
 
 /***/ },
 
+/***/ "../../helper/utils/tableExport.ts"
+/*!*****************************************!*\
+  !*** ../../helper/utils/tableExport.ts ***!
+  \*****************************************/
+(__unused_webpack_module, exports) {
+
+
+/**
+ * Export einer einfachen Tabelle (Kopfzeile + Zeilen) als CSV oder Excel
+ * (.xlsx) direkt im Browser - ohne externe Bibliothek. Eine .xlsx-Datei ist
+ * ein ZIP-Archiv aus wenigen XML-Dateien; hier wird es unkomprimiert
+ * ("stored") erzeugt, was Excel/LibreOffice problemlos öffnen.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.toCsv = toCsv;
+exports.toXlsx = toXlsx;
+exports.downloadBlob = downloadBlob;
+exports.getTenantName = getTenantName;
+// ---------------------------------------------------------------- CSV
+/**
+ * CSV im von deutschem Excel erwarteten Format: Semikolon als Trennzeichen,
+ * CRLF als Zeilenende und UTF-8-BOM, damit Umlaute korrekt erkannt werden.
+ */
+function toCsv(table, separator = ";") {
+    const escapeCell = (cell) => {
+        const text = cell === null || cell === undefined ? "" : String(cell);
+        return /["\r\n]/.test(text) || text.includes(separator)
+            ? `"${text.replace(/"/g, '""')}"`
+            : text;
+    };
+    const lines = [table.headers, ...table.rows].map((row) => row.map(escapeCell).join(separator));
+    return new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+}
+// ---------------------------------------------------------------- XLSX
+function escapeXml(value) {
+    return value
+        // In XML 1.0 unzulässige Steuerzeichen entfernen, sonst meldet Excel eine beschädigte Datei.
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+function columnName(index) {
+    let name = "";
+    for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) {
+        name = String.fromCharCode(65 + ((n - 1) % 26)) + name;
+    }
+    return name;
+}
+function xlsxCell(cell, ref, style) {
+    const s = style ? ` s="${style}"` : "";
+    if (typeof cell === "number" && Number.isFinite(cell)) {
+        return `<c r="${ref}"${s}><v>${cell}</v></c>`;
+    }
+    if (typeof cell === "boolean") {
+        return `<c r="${ref}"${s} t="b"><v>${cell ? 1 : 0}</v></c>`;
+    }
+    const text = cell === null || cell === undefined ? "" : String(cell);
+    return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`;
+}
+function sheetXml(table) {
+    const allRows = [table.headers, ...table.rows];
+    const columnCount = Math.max(1, ...allRows.map((row) => row.length));
+    const lastRef = `${columnName(columnCount - 1)}${allRows.length}`;
+    // Spaltenbreite grob nach längstem Inhalt (in Zeichen), begrenzt auf 10..60.
+    const cols = Array.from({ length: columnCount }, (_, c) => {
+        const longest = Math.max(...allRows.map((row) => String(row[c] ?? "").length));
+        const width = Math.min(60, Math.max(10, longest + 2));
+        return `<col min="${c + 1}" max="${c + 1}" width="${width}" customWidth="1"/>`;
+    }).join("");
+    const rowsXml = allRows
+        .map((row, r) => {
+        const cells = row.map((cell, c) => xlsxCell(cell, `${columnName(c)}${r + 1}`, r === 0 ? 1 : 0)).join("");
+        return `<row r="${r + 1}">${cells}</row>`;
+    })
+        .join("");
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<cols>${cols}</cols>
+<sheetData>${rowsXml}</sheetData>
+<autoFilter ref="A1:${lastRef}"/>
+</worksheet>`;
+}
+function xlsxFiles(table, sheetName) {
+    // Excel erlaubt max. 31 Zeichen und keine der Zeichen []:*?/\ im Blattnamen.
+    const safeSheetName = escapeXml(sheetName.replace(/[\[\]:*?\/\\]/g, " ").slice(0, 31) || "Tabelle1");
+    return [
+        {
+            name: "[Content_Types].xml",
+            content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`,
+        },
+        {
+            name: "_rels/.rels",
+            content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`,
+        },
+        {
+            name: "xl/workbook.xml",
+            content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="${safeSheetName}" sheetId="1" r:id="rId1"/></sheets>
+<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${safeSheetName.replace(/'/g, "''")}'!$A$1:$${columnName(Math.max(1, table.headers.length) - 1)}$${table.rows.length + 1}</definedName></definedNames>
+</workbook>`,
+        },
+        {
+            name: "xl/_rels/workbook.xml.rels",
+            content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`,
+        },
+        {
+            // Stil 0 = Standard, Stil 1 = fett mit grauem Hintergrund (Kopfzeile).
+            name: "xl/styles.xml",
+            content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
+<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE9ECEF"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs>
+<cellStyles count="1"><cellStyle name="Standard" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`,
+        },
+        { name: "xl/worksheets/sheet1.xml", content: sheetXml(table) },
+    ];
+}
+const CRC_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) {
+            c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        }
+        table[n] = c >>> 0;
+    }
+    return table;
+})();
+function crc32(data) {
+    let crc = 0xffffffff;
+    for (let i = 0; i < data.length; i++) {
+        crc = CRC_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+}
+// Minimales ZIP ohne Kompression (Methode 0 "stored").
+function createZip(files) {
+    const encoder = new TextEncoder();
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+    for (const file of files) {
+        const name = encoder.encode(file.name);
+        const data = encoder.encode(file.content);
+        const crc = crc32(data);
+        const local = new Uint8Array(30 + name.length);
+        const lv = new DataView(local.buffer);
+        lv.setUint32(0, 0x04034b50, true); // Local file header signature
+        lv.setUint16(4, 20, true); // Version needed
+        lv.setUint16(6, 0x0800, true); // Flags: Dateinamen in UTF-8
+        lv.setUint16(8, 0, true); // Methode: stored
+        lv.setUint16(10, 0, true); // Uhrzeit
+        lv.setUint16(12, 0x21, true); // Datum 01.01.1980
+        lv.setUint32(14, crc, true);
+        lv.setUint32(18, data.length, true); // Komprimierte Größe
+        lv.setUint32(22, data.length, true); // Originalgröße
+        lv.setUint16(26, name.length, true);
+        lv.setUint16(28, 0, true); // Extra-Feld
+        local.set(name, 30);
+        const central = new Uint8Array(46 + name.length);
+        const cv = new DataView(central.buffer);
+        cv.setUint32(0, 0x02014b50, true); // Central directory signature
+        cv.setUint16(4, 20, true); // Version made by
+        cv.setUint16(6, 20, true); // Version needed
+        cv.setUint16(8, 0x0800, true);
+        cv.setUint16(10, 0, true);
+        cv.setUint16(12, 0, true);
+        cv.setUint16(14, 0x21, true);
+        cv.setUint32(16, crc, true);
+        cv.setUint32(20, data.length, true);
+        cv.setUint32(24, data.length, true);
+        cv.setUint16(28, name.length, true);
+        cv.setUint32(42, offset, true); // Offset des Local Headers
+        central.set(name, 46);
+        localParts.push(local, data);
+        centralParts.push(central);
+        offset += local.length + data.length;
+    }
+    const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+    const end = new Uint8Array(22);
+    const ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true); // End of central directory signature
+    ev.setUint16(8, files.length, true);
+    ev.setUint16(10, files.length, true);
+    ev.setUint32(12, centralSize, true);
+    ev.setUint32(16, offset, true);
+    const parts = [...localParts, ...centralParts, end];
+    const zip = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+    let position = 0;
+    for (const part of parts) {
+        zip.set(part, position);
+        position += part.length;
+    }
+    return zip;
+}
+/** Excel-Datei (.xlsx) mit einem Blatt, fetter Kopfzeile, fixierter erster Zeile und Autofilter. */
+function toXlsx(table, sheetName = "Tabelle1") {
+    // .buffer statt des Uint8Array selbst: neuere TS-DOM-Typen lassen
+    // Uint8Array<ArrayBufferLike> nicht als BlobPart zu (der Puffer ist exakt so groß wie das ZIP).
+    return new Blob([createZip(xlsxFiles(table, sheetName)).buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+}
+// ---------------------------------------------------------------- Download
+/** Startet im Browser den Download eines Blobs unter dem angegebenen Dateinamen. */
+function downloadBlob(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+/**
+ * Mandantenname für Dateinamen, abgeleitet aus der ersten Stelle des
+ * Hostnamens, z.B. "ellinger.d-velop.cloud" -> "Ellinger".
+ */
+function getTenantName(hostname = window.location.hostname) {
+    const label = hostname.split(".")[0] ?? "";
+    return label ? label.charAt(0).toUpperCase() + label.slice(1) : "";
+}
+
+
+/***/ },
+
+/***/ "../../helper/webindexlayouter/getDocumentReaderWebindexForm.ts"
+/*!**********************************************************************!*\
+  !*** ../../helper/webindexlayouter/getDocumentReaderWebindexForm.ts ***!
+  \**********************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getDocumentReaderWebindexForm = getDocumentReaderWebindexForm;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Liest die aktuelle Webindex-Layout-Konfiguration des Rechnungslesers
+ * (Gegenstück zu replaceDocumentReaderWebindexForm, gleiche URL per GET) -
+ * z.B. als Sicherung vor dem Überschreiben.
+ *
+ * @param baseUri - The base URI of the API endpoint.
+ * @param token - The Bearer token used for authentication.
+ * @returns Die Konfiguration (JSON-Objekt bzw. Text, je nach Content-Type).
+ */
+async function getDocumentReaderWebindexForm(baseUri, token) {
+    const url = `${baseUri}/webindexlayouter/api/v1/apps/classcon-documentreader/configuration`;
+    const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json",
+    };
+    const options = {
+        method: "GET",
+        headers,
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
 /***/ "../../helper/webindexlayouter/replaceDocumentReaderWebindexForm.ts"
 /*!**************************************************************************!*\
   !*** ../../helper/webindexlayouter/replaceDocumentReaderWebindexForm.ts ***!
@@ -779,12 +1397,20 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 const getBatchProfiles_1 = __webpack_require__(/*! ../../../../helper/inbound/getBatchProfiles */ "../../helper/inbound/getBatchProfiles.ts");
 const createBatchProfile_1 = __webpack_require__(/*! ../../../../helper/inbound/createBatchProfile */ "../../helper/inbound/createBatchProfile.ts");
+const updateBatchProfile_1 = __webpack_require__(/*! ../../../../helper/inbound/updateBatchProfile */ "../../helper/inbound/updateBatchProfile.ts");
+const updateEmailinboundProfile_1 = __webpack_require__(/*! ../../../../helper/emailinbound/updateEmailinboundProfile */ "../../helper/emailinbound/updateEmailinboundProfile.ts");
+const sourceMappings_1 = __webpack_require__(/*! ../../../../helper/dms/sourceMappings */ "../../helper/dms/sourceMappings.ts");
+const updateEvent_1 = __webpack_require__(/*! ../../../../helper/dmsConfig/updateEvent */ "../../helper/dmsConfig/updateEvent.ts");
+const getScriptVersion_1 = __webpack_require__(/*! ../../../../helper/scripting/getScriptVersion */ "../../helper/scripting/getScriptVersion.ts");
+const patchScript_1 = __webpack_require__(/*! ../../../../helper/scripting/patchScript */ "../../helper/scripting/patchScript.ts");
 const getGroups_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getGroups */ "../../helper/identityprovider/getGroups.ts");
 const createGroup_1 = __webpack_require__(/*! ../../../../helper/usermanagement/createGroup */ "../../helper/usermanagement/createGroup.ts");
 const getAllGroups_1 = __webpack_require__(/*! ../../../../helper/usermanagement/getAllGroups */ "../../helper/usermanagement/getAllGroups.ts");
 const getEmailinboundProfiles_1 = __webpack_require__(/*! ../../../../helper/emailinbound/getEmailinboundProfiles */ "../../helper/emailinbound/getEmailinboundProfiles.ts");
 const createEmailinboundProfile_1 = __webpack_require__(/*! ../../../../helper/emailinbound/createEmailinboundProfile */ "../../helper/emailinbound/createEmailinboundProfile.ts");
 const replaceDocumentReaderWebindexForm_1 = __webpack_require__(/*! ../../../../helper/webindexlayouter/replaceDocumentReaderWebindexForm */ "../../helper/webindexlayouter/replaceDocumentReaderWebindexForm.ts");
+const getDocumentReaderWebindexForm_1 = __webpack_require__(/*! ../../../../helper/webindexlayouter/getDocumentReaderWebindexForm */ "../../helper/webindexlayouter/getDocumentReaderWebindexForm.ts");
+const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExport */ "../../helper/utils/tableExport.ts");
 const getRepositories_1 = __webpack_require__(/*! ../../../../helper/dms/getRepositories */ "../../helper/dms/getRepositories.ts");
 const createSourceMapping_1 = __webpack_require__(/*! ../../../../helper/dms/createSourceMapping */ "../../helper/dms/createSourceMapping.ts");
 const getAllScripts_1 = __webpack_require__(/*! ../../../../helper/scripting/getAllScripts */ "../../helper/scripting/getAllScripts.ts");
@@ -792,8 +1418,8 @@ const importScript_1 = __webpack_require__(/*! ../../../../helper/scripting/impo
 const getEvents_1 = __webpack_require__(/*! ../../../../helper/dmsConfig/getEvents */ "../../helper/dmsConfig/getEvents.ts");
 const createEvent_1 = __webpack_require__(/*! ../../../../helper/dmsConfig/createEvent */ "../../helper/dmsConfig/createEvent.ts");
 const getCurrentUserInformation_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getCurrentUserInformation */ "../../helper/identityprovider/getCurrentUserInformation.ts");
-const getAPIConfig_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getAPIConfig */ "../../helper/identityprovider/getAPIConfig.ts");
 const createAPIKey_1 = __webpack_require__(/*! ../../../../helper/identityprovider/createAPIKey */ "../../helper/identityprovider/createAPIKey.ts");
+const getAllUsers_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getAllUsers */ "../../helper/identityprovider/getAllUsers.ts");
 const batchProfileMail_json_1 = __importDefault(__webpack_require__(/*! ../data/batchProfileMail.json */ "./src/data/batchProfileMail.json"));
 const batchProfileScan_json_1 = __importDefault(__webpack_require__(/*! ../data/batchProfileScan.json */ "./src/data/batchProfileScan.json"));
 const webindexDesignerForm_json_1 = __importDefault(__webpack_require__(/*! ../data/webindexDesignerForm.json */ "./src/data/webindexDesignerForm.json"));
@@ -802,16 +1428,18 @@ const scriptGutschriftenVerschieben_json_1 = __importDefault(__webpack_require__
  * Onboarding gevis ECM Rechnungsleser (ehemals
  * projects/OnboardingGevisECMDocumentReader - dort als lokales Node-Script
  * src/script.ts plus unfertigem Formular): richtet den Rechnungsleser in einem
- * Mandanten Schritt für Schritt ein. Jeder Schritt zeigt, ob er bereits
- * erledigt ist, und lässt sich einzeln ausführen; "Alle fehlenden Schritte
- * ausführen" arbeitet nur die als fehlend erkannten Schritte ab. Schritte, die
- * sich nicht prüfen lassen (Webindex-Layout, Quell-Mapping), laufen nur
- * einzeln nach Rückfrage.
+ * Mandanten Schritt für Schritt ein (je Stapelprofil und je Postfach ein
+ * eigener Schritt). Jeder Schritt zeigt, ob er fehlt (→ anlegen) oder schon
+ * vorhanden ist (→ auf die Vorlage aktualisieren) und lässt sich einzeln
+ * ausführen; gesammelt geht "Alle fehlenden anlegen" bzw. "Alles anlegen /
+ * aktualisieren". Nicht aktualisiert werden bestehende Gruppen (Mitglieder
+ * blieben sonst nicht erhalten) und die hinterlegten API-Keys in Script
+ * (customerVariables) und Webhook.
  *
  * Alle Aufrufe laufen mit dem im Formular eingegebenen (oder hier neu
- * erstellten) API-Key - der wird außerdem im Gutschriften-Script
- * (customerVariables, nur beim Neuanlegen) und im Webhook hinterlegt. Der Key
- * wird nirgends im Formular gespeichert, nur im Speicher dieser Seite.
+ * erstellten) API-Key - der wird außerdem beim Neuanlegen im Gutschriften-
+ * Script und im Webhook hinterlegt. Der Key wird nirgends im Formular
+ * gespeichert, nur im Speicher dieser Seite.
  *
  * Nicht übernommen: die im alten Script auskommentierten gevis-R-Schritte
  * (SFTP-Zielsystem, XML-Aufbereitungs-Script, Extension Point) und das
@@ -827,7 +1455,7 @@ const scriptGutschriftenVerschieben_json_1 = __importDefault(__webpack_require__
  * .github/workflows/publish-bundles.yml erhöht ihn bei jedem Publish
  * automatisch.
  */
-const VERSION_COUNTER = 2;
+const VERSION_COUNTER = 3;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -868,6 +1496,81 @@ const SOURCE_MAPPING = {
         { source: "DocumentType", destination: "ed5c47ce-716a-4182-986f-dffa4135b7cf", isSystemProperty: false, regexIgnoreCase: false, type: 0 },
     ],
 };
+async function ensureSwal() {
+    await loadSweetAlert();
+    if (typeof Swal === "undefined") {
+        throw new Error("Dialog-Bibliothek (SweetAlert2) konnte nicht geladen werden.");
+    }
+}
+async function confirmWarning(title, html, confirmText) {
+    await ensureSwal();
+    const result = await Swal.fire({
+        icon: "warning",
+        title,
+        html,
+        showCancelButton: true,
+        confirmButtonColor: "#dc3545",
+        confirmButtonText: confirmText,
+        cancelButtonText: "Abbrechen",
+        focusCancel: true,
+    });
+    return !!result.isConfirmed;
+}
+// Sichert das aktuelle Layout als JSON-Datei, z.B.
+// "Ellinger_Webindex-Layout_Rechnungsleser_2026-09-26.json".
+async function downloadCurrentWebindexLayout(apiKey) {
+    const current = (await (0, getDocumentReaderWebindexForm_1.getDocumentReaderWebindexForm)(BASE_URI, apiKey)).body;
+    const content = typeof current === "string" ? current : JSON.stringify(current, null, 2);
+    if (!content || content === "{}") {
+        throw new Error("Das aktuelle Webindex-Layout ist leer oder konnte nicht gelesen werden.");
+    }
+    const date = new Date().toISOString().slice(0, 10);
+    const fileName = [(0, tableExport_1.getTenantName)(), "Webindex-Layout_Rechnungsleser", date].filter(Boolean).join("_") + ".json";
+    (0, tableExport_1.downloadBlob)(new Blob([content], { type: "application/json" }), fileName);
+}
+// Swal mit deutlichem Hinweis aufs Überschreiben und (vorausgewählter)
+// Sicherung des aktuellen Layouts. Schlägt die Sicherung fehl, wird NICHT
+// überschrieben.
+async function confirmWebindexOverwrite(apiKey) {
+    await ensureSwal();
+    const result = await Swal.fire({
+        icon: "warning",
+        title: "Achtung: Webindex-Layout wird überschrieben",
+        html: `
+      <p>Das aktuelle Webindex-Layout des Rechnungslesers wird <strong>vollständig und unwiderruflich</strong> durch die gevis-ECM-Vorlage ersetzt.
+      Eigene Anpassungen gehen dabei verloren.</p>
+      <label style="display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px;cursor:pointer">
+        <input type="checkbox" id="onb-swal-backup" checked style="width:16px;height:16px">
+        Aktuelles Webindex-Layout vorher herunterladen (Sicherung)
+      </label>`,
+        showCancelButton: true,
+        confirmButtonColor: "#dc3545",
+        confirmButtonText: "Überschreiben",
+        cancelButtonText: "Abbrechen",
+        focusCancel: true,
+        preConfirm: () => {
+            const checkbox = Swal.getPopup().querySelector("#onb-swal-backup");
+            return { backup: !!checkbox?.checked };
+        },
+    });
+    if (!result.isConfirmed) {
+        return false;
+    }
+    if (result.value?.backup) {
+        try {
+            await downloadCurrentWebindexLayout(apiKey);
+        }
+        catch (error) {
+            await Swal.fire({
+                icon: "error",
+                title: "Sicherung fehlgeschlagen",
+                html: `Das aktuelle Layout konnte nicht heruntergeladen werden - es wurde <strong>nichts überschrieben</strong>.<br><br>${escapeHtml(getErrorMessage(error))}`,
+            });
+            return false;
+        }
+    }
+    return true;
+}
 function done(text) {
     return { state: "done", text };
 }
@@ -888,125 +1591,220 @@ async function findCreditMemoScriptId(apiKey) {
 function scriptRunUri(scriptId) {
     return `${BASE_URI}/scripting/script/${scriptId}/run`;
 }
-async function findCreditMemoWebhook(apiKey, scriptId) {
-    const events = (await (0, getEvents_1.getEvents)(BASE_URI, apiKey, await getRepositoryId(apiKey))).body;
-    const uri = scriptRunUri(scriptId);
-    return Object.values(events._embedded ?? {}).some((event) => (event._embedded?.webhooks ?? []).some((webhook) => webhook.uri === uri));
+// Gruppennamen tolerant vergleichen: Groß-/Kleinschreibung, mehrfache
+// Leerzeichen und unterschiedlich kodierte Umlaute ("ü" als ein Zeichen oder
+// als "u" + Trema) sollen keinen Unterschied machen.
+function normalizeGroupName(name) {
+    return (name ?? "").normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
 }
-function mailboxExists(mailboxes, name) {
-    return mailboxes.some((mailbox) => mailbox === name || mailbox?.startsWith(`${name}@`));
+// Gruppen aus Benutzerverwaltung UND Identityprovider (SCIM) - je nach
+// Mandant ist eine Gruppe nur in einer der beiden Listen vollständig.
+async function loadGroups(apiKey) {
+    const [management, scim] = await Promise.all([
+        (0, getAllGroups_1.getAllGroups)(BASE_URI, apiKey).then((r) => r.body.groups ?? []).catch(() => []),
+        (0, getGroups_1.getGroups)(BASE_URI, apiKey).then((r) => r.body.resources ?? []).catch(() => []),
+    ]);
+    const groups = new Map();
+    for (const group of management) {
+        if (group.id && group.name)
+            groups.set(group.id.toLowerCase(), { id: group.id, name: group.name });
+    }
+    for (const group of scim) {
+        if (group.id && group.displayName && !groups.has(group.id.toLowerCase())) {
+            groups.set(group.id.toLowerCase(), { id: group.id, name: group.displayName });
+        }
+    }
+    if (groups.size === 0) {
+        throw new Error("Gruppen konnten nicht geladen werden - ist der API-Key gültig?");
+    }
+    return [...groups.values()];
 }
-const steps = [
-    {
-        id: "batchProfiles",
-        title: "Stapelprofile",
-        description: `„${PROFILE_MAIL_NAME}“ und „${PROFILE_SCAN_NAME}“ in der Eingangsverarbeitung.`,
+function findGroupId(groups, name, id) {
+    const wanted = normalizeGroupName(name);
+    return groups.find((group) => (id && group.id.toLowerCase() === id.toLowerCase()) || normalizeGroupName(group.name) === wanted)?.id;
+}
+// Vom Onboarding benötigte Gruppen; "id" nur, wo sie fest vorgegeben ist.
+const REQUIRED_GROUPS = [
+    { name: GROUP_RECHNUNGSLESER_NAME, id: GROUP_RECHNUNGSLESER_ID, addCurrentUser: true },
+    { name: GROUP_FRUEHES_SCANNEN_NAME, addCurrentUser: false },
+];
+async function findMissingGroups(apiKey) {
+    const groups = await loadGroups(apiKey);
+    return REQUIRED_GROUPS.filter((definition) => !findGroupId(groups, definition.name, definition.id));
+}
+function exists(text) {
+    return { state: "exists", text };
+}
+function mailboxMatches(mailbox, name) {
+    return mailbox === name || !!mailbox?.startsWith(`${name}@`);
+}
+async function findMailbox(apiKey, name) {
+    const settings = (await (0, getEmailinboundProfiles_1.getEmailinboundProfiles)(BASE_URI, apiKey)).body.mailStoreSettings ?? [];
+    return settings.find((setting) => mailboxMatches(setting.mailbox, name));
+}
+async function findBatchProfile(apiKey, name) {
+    const profiles = (await (0, getBatchProfiles_1.getBatchProfiles)(BASE_URI, apiKey)).body.profiles ?? [];
+    return profiles.find((profile) => profile.name === name);
+}
+function unique(values) {
+    return [...new Set(values.filter((value) => !!value))];
+}
+// Ein Schritt je Stapelprofil: anlegen bzw. mit der Vorlage aktualisieren.
+function batchProfileStep(id, template) {
+    return {
+        id,
+        title: `Stapelprofil „${template.name}“`,
+        description: "Eingangsverarbeitung - ein vorhandenes Profil wird mit den Einstellungen der Vorlage aktualisiert.",
         async check(apiKey) {
-            const names = ((await (0, getBatchProfiles_1.getBatchProfiles)(BASE_URI, apiKey)).body.profiles ?? []).map((p) => p.name);
-            const absent = [PROFILE_MAIL_NAME, PROFILE_SCAN_NAME].filter((name) => !names.includes(name));
-            return absent.length === 0 ? done("Beide Profile vorhanden.") : missing(`Fehlt: ${absent.join(", ")}`);
+            return (await findBatchProfile(apiKey, template.name))
+                ? exists("Vorhanden - Einstellungen werden aktualisiert.")
+                : missing("Profil fehlt.");
         },
         async run(apiKey) {
-            const names = ((await (0, getBatchProfiles_1.getBatchProfiles)(BASE_URI, apiKey)).body.profiles ?? []).map((p) => p.name);
-            const created = [];
-            for (const profile of [batchProfileMail_json_1.default, batchProfileScan_json_1.default]) {
-                if (!names.includes(profile.name)) {
-                    await (0, createBatchProfile_1.createBatchProfile)(BASE_URI, apiKey, profile);
-                    created.push(profile.name);
-                }
+            const body = template;
+            const existing = await findBatchProfile(apiKey, template.name);
+            if (existing) {
+                await (0, updateBatchProfile_1.updateBatchProfile)(BASE_URI, apiKey, existing, body);
+                return "Profil aktualisiert.";
             }
-            return created.length ? `Angelegt: ${created.join(", ")}` : "Bereits vorhanden.";
+            await (0, createBatchProfile_1.createBatchProfile)(BASE_URI, apiKey, body);
+            return "Profil angelegt.";
         },
-    },
-    {
-        id: "group",
-        title: "Gruppe „Rechnungsleser“",
-        description: "Berechtigungsgruppe für den Rechnungsleser, der aktuelle Benutzer wird Mitglied. Eine vorhandene Gruppe bleibt unverändert.",
+    };
+}
+// Ein Schritt je Postfach: anlegen bzw. aktualisieren. Beim Aktualisieren
+// bleiben zusätzlich berechtigte Gruppen/Benutzer erhalten, die Onboarding-
+// Gruppen werden ergänzt.
+function mailboxStep(entry) {
+    return {
+        id: `mailbox-${entry.mailbox}`,
+        title: `Postfach „${entry.mailbox}“`,
+        description: `${entry.mailbox}@${SUBDOMAIN}.emailinbound… → Stapelprofil „${entry.profileName}“ - benötigt das Stapelprofil und die Gruppen.`,
         async check(apiKey) {
-            const groups = (await (0, getGroups_1.getGroups)(BASE_URI, apiKey)).body.resources ?? [];
-            return groups.some((group) => group.id === GROUP_RECHNUNGSLESER_ID)
-                ? done("Gruppe vorhanden.")
-                : missing("Gruppe fehlt.");
+            return (await findMailbox(apiKey, entry.mailbox))
+                ? exists("Vorhanden - Einstellungen werden aktualisiert.")
+                : missing("Postfach fehlt.");
         },
         async run(apiKey) {
-            const groups = (await (0, getGroups_1.getGroups)(BASE_URI, apiKey)).body.resources ?? [];
-            if (groups.some((group) => group.id === GROUP_RECHNUNGSLESER_ID)) {
-                return "Bereits vorhanden.";
-            }
-            const userId = await getCurrentUserId();
-            const group = {
-                name: GROUP_RECHNUNGSLESER_NAME,
-                id: GROUP_RECHNUNGSLESER_ID,
-                isGlobalGroup: false,
-                isScimProvisioned: false,
-                isTenantAdminGroup: false,
-                showChangeToGlobalGroupButton: true,
-                groupTypes: [],
-                groupMembers: [],
-                idpGroupMembers: [],
-                userMembers: userId ? [userId] : [],
-                idpUserMembers: [],
-            };
-            await (0, createGroup_1.createGroup)(BASE_URI, apiKey, group);
-            return "Gruppe angelegt.";
-        },
-    },
-    {
-        id: "mailboxes",
-        title: "E-Mail-Postfächer",
-        description: `fruehesscannenmail@ und fruehesscannenscan@${SUBDOMAIN}.emailinbound… – benötigt die Stapelprofile und die Gruppe „${GROUP_FRUEHES_SCANNEN_NAME}“.`,
-        async check(apiKey) {
-            const mailboxes = ((await (0, getEmailinboundProfiles_1.getEmailinboundProfiles)(BASE_URI, apiKey)).body.mailStoreSettings ?? []).map((s) => s.mailbox);
-            const absent = MAILBOXES.filter((m) => !mailboxExists(mailboxes, m.mailbox)).map((m) => m.mailbox);
-            return absent.length === 0 ? done("Beide Postfächer vorhanden.") : missing(`Fehlt: ${absent.join(", ")}`);
-        },
-        async run(apiKey) {
-            const mailboxes = ((await (0, getEmailinboundProfiles_1.getEmailinboundProfiles)(BASE_URI, apiKey)).body.mailStoreSettings ?? []).map((s) => s.mailbox);
-            const todo = MAILBOXES.filter((m) => !mailboxExists(mailboxes, m.mailbox));
-            if (todo.length === 0) {
-                return "Bereits vorhanden.";
-            }
-            const groups = (await (0, getAllGroups_1.getAllGroups)(BASE_URI, apiKey)).body.groups ?? [];
-            const adminGroupId = groups.find((group) => group.name === ADMIN_GROUP_NAME)?.id;
+            const groups = await loadGroups(apiKey);
+            const adminGroupId = findGroupId(groups, ADMIN_GROUP_NAME);
             if (!adminGroupId) {
                 throw new Error(`Gruppe „${ADMIN_GROUP_NAME}“ nicht gefunden.`);
             }
-            const scanGroupId = groups.find((group) => group.name === GROUP_FRUEHES_SCANNEN_NAME)?.id;
+            const scanGroupId = findGroupId(groups, GROUP_FRUEHES_SCANNEN_NAME);
             if (!scanGroupId) {
-                throw new Error(`Gruppe „${GROUP_FRUEHES_SCANNEN_NAME}“ nicht gefunden.`);
+                throw new Error(`Gruppe „${GROUP_FRUEHES_SCANNEN_NAME}“ nicht gefunden - bitte zuerst den Schritt „Gruppen“ ausführen.`);
             }
-            const profiles = (await (0, getBatchProfiles_1.getBatchProfiles)(BASE_URI, apiKey)).body.profiles ?? [];
-            for (const entry of todo) {
-                const profileId = profiles.find((profile) => profile.name === entry.profileName)?.batchProfileId;
-                if (!profileId) {
-                    throw new Error(`Stapelprofil „${entry.profileName}“ nicht gefunden - bitte zuerst die Stapelprofile anlegen.`);
-                }
-                const mailbox = {
-                    _links: {},
-                    mailbox: entry.mailbox,
-                    description: entry.description,
-                    emailWhiteList: ["*@*"],
-                    profileId,
-                    finishImportProcess: true,
-                    updated: false,
-                    batchnameTemplate: "%Subject%",
-                    authorizedInboundGroupIds: [adminGroupId, scanGroupId],
-                    authorizedInboundUserIds: [],
-                    informOnErrorGroupIds: [adminGroupId],
-                    informOnErrorUserIds: [],
-                    batchProperties: [],
-                    documentProperties: [],
+            const profileId = (await findBatchProfile(apiKey, entry.profileName))?.batchProfileId;
+            if (!profileId) {
+                throw new Error(`Stapelprofil „${entry.profileName}“ nicht gefunden - bitte zuerst das Stapelprofil anlegen.`);
+            }
+            const existing = await findMailbox(apiKey, entry.mailbox);
+            const payload = {
+                _links: {},
+                mailbox: entry.mailbox,
+                description: entry.description,
+                emailWhiteList: ["*@*"],
+                profileId,
+                finishImportProcess: true,
+                updated: !!existing,
+                batchnameTemplate: "%Subject%",
+                authorizedInboundGroupIds: unique([...(existing?.authorizedInboundGroupIds ?? []), adminGroupId, scanGroupId]),
+                authorizedInboundUserIds: existing?.authorizedInboundUserIds ?? [],
+                informOnErrorGroupIds: unique([...(existing?.informOnErrorGroupIds ?? []), adminGroupId]),
+                informOnErrorUserIds: existing?.informOnErrorUserIds ?? [],
+                batchProperties: [],
+                documentProperties: [],
+            };
+            if (existing) {
+                await (0, updateEmailinboundProfile_1.updateEmailinboundProfile)(BASE_URI, apiKey, existing, payload);
+                return "Postfach aktualisiert.";
+            }
+            await (0, createEmailinboundProfile_1.createEmailinboundProfiles)(BASE_URI, apiKey, payload);
+            return "Postfach angelegt.";
+        },
+    };
+}
+// Quell-Mapping über sourceId (sonst Name) wiederfinden. undefined = Liste
+// nicht lesbar (Format/Endpunkt unbekannt) - dann ist der Schritt "manuell".
+async function findSourceMapping(apiKey) {
+    const repositoryId = await getRepositoryId(apiKey);
+    try {
+        const mappings = await (0, sourceMappings_1.getSourceMappings)(BASE_URI, apiKey, repositoryId);
+        const existing = mappings.find((m) => m.sourceId === SOURCE_MAPPING.sourceId)
+            ?? mappings.find((m) => m.name === SOURCE_MAPPING.name);
+        return { repositoryId, existing };
+    }
+    catch (error) {
+        logger.warn(`Quell-Mappings konnten nicht gelesen werden: ${getErrorMessage(error)}`);
+        return undefined;
+    }
+}
+async function findCreditMemoWebhookEntry(apiKey, scriptId) {
+    const events = (await (0, getEvents_1.getEvents)(BASE_URI, apiKey, await getRepositoryId(apiKey))).body;
+    const uri = scriptRunUri(scriptId);
+    for (const [eventType, event] of Object.entries(events._embedded ?? {})) {
+        const webhook = (event._embedded?.webhooks ?? []).find((w) => w.uri === uri);
+        if (webhook) {
+            return { eventType, webhook };
+        }
+    }
+    return undefined;
+}
+function creditMemoEvent(scriptId, webhookApiKey) {
+    return {
+        description: "Gutschriften des Rechnungslesers verschieben",
+        uri: scriptRunUri(scriptId),
+        enabled: true,
+        timeout: 10000,
+        retry: false,
+        restrictions: [{ key: "CATEGORY", value: CREDIT_MEMO_CATEGORY_ID }],
+        apiKey: webhookApiKey,
+        handleResponse: "NONE",
+    };
+}
+const steps = [
+    batchProfileStep("profileMail", batchProfileMail_json_1.default),
+    batchProfileStep("profileScan", batchProfileScan_json_1.default),
+    {
+        id: "group",
+        title: "Gruppen",
+        description: `„${GROUP_RECHNUNGSLESER_NAME}“ (der aktuelle Benutzer wird Mitglied) und „${GROUP_FRUEHES_SCANNEN_NAME}“ (für die Postfächer). Vorhandene Gruppen bleiben unverändert, damit keine Mitglieder verloren gehen.`,
+        async check(apiKey) {
+            const absent = await findMissingGroups(apiKey);
+            return absent.length === 0 ? done("Beide Gruppen vorhanden.") : missing(`Fehlt: ${absent.map((g) => g.name).join(", ")}`);
+        },
+        async run(apiKey) {
+            const absent = await findMissingGroups(apiKey);
+            if (absent.length === 0) {
+                return "Bereits vorhanden.";
+            }
+            const userId = await getCurrentUserId().catch(() => undefined);
+            for (const definition of absent) {
+                const group = {
+                    name: definition.name,
+                    id: definition.id ?? crypto.randomUUID(),
+                    isGlobalGroup: false,
+                    isScimProvisioned: false,
+                    isTenantAdminGroup: false,
+                    showChangeToGlobalGroupButton: true,
+                    groupTypes: [],
+                    groupMembers: [],
+                    idpGroupMembers: [],
+                    userMembers: definition.addCurrentUser && userId ? [userId] : [],
+                    idpUserMembers: [],
                 };
-                await (0, createEmailinboundProfile_1.createEmailinboundProfiles)(BASE_URI, apiKey, mailbox);
+                await (0, createGroup_1.createGroup)(BASE_URI, apiKey, group);
             }
-            return `Angelegt: ${todo.map((m) => m.mailbox).join(", ")}`;
+            return `Angelegt: ${absent.map((g) => g.name).join(", ")}`;
         },
     },
+    ...MAILBOXES.map(mailboxStep),
     {
         id: "webindex",
         title: "Webindex-Layout",
         description: "Ersetzt das Webindex-Designer-Layout des Rechnungslesers durch die gevis-ECM-Vorlage.",
-        confirm: "Das aktuelle Webindex-Layout des Rechnungslesers wird vollständig überschrieben. Fortfahren?",
+        beforeRun: confirmWebindexOverwrite,
         async check() {
             return { state: "manual", text: "Nicht prüfbar - wird beim Ausführen überschrieben." };
         },
@@ -1018,29 +1816,51 @@ const steps = [
     {
         id: "sourceMapping",
         title: "Quell-Mapping „Rechnungsleser“",
-        description: "Zuordnung der Rechnungsleser-Felder zu den DMS-Eigenschaften (erstes Repository).",
-        confirm: "Das Quell-Mapping kann nicht auf Vorhandensein geprüft werden - existiert es schon, wird es ggf. doppelt angelegt. Fortfahren?",
-        async check() {
-            return { state: "manual", text: "Nicht prüfbar - vor dem Ausführen in der DMS-Konfiguration nachsehen." };
+        description: "Zuordnung der Rechnungsleser-Felder zu den DMS-Eigenschaften (erstes Repository) - ein vorhandenes Mapping wird aktualisiert.",
+        // Nur nachfragen, wenn die vorhandenen Mappings nicht lesbar sind (dann
+        // droht ein Duplikat).
+        async beforeRun(apiKey) {
+            if (await findSourceMapping(apiKey)) {
+                return true;
+            }
+            return confirmWarning("Quell-Mapping anlegen?", "Die vorhandenen Quell-Mappings konnten nicht gelesen werden - existiert „Rechnungsleser“ schon, wird es ggf. <strong>doppelt</strong> angelegt.", "Anlegen");
+        },
+        async check(apiKey) {
+            const found = await findSourceMapping(apiKey);
+            if (!found) {
+                return { state: "manual", text: "Nicht prüfbar - vor dem Ausführen in der DMS-Konfiguration nachsehen." };
+            }
+            return found.existing ? exists("Vorhanden - Zuordnungen werden aktualisiert.") : missing("Mapping fehlt.");
         },
         async run(apiKey) {
-            await (0, createSourceMapping_1.createSourceMapping)(BASE_URI, apiKey, await getRepositoryId(apiKey), SOURCE_MAPPING);
+            const found = await findSourceMapping(apiKey);
+            if (found?.existing) {
+                await (0, sourceMappings_1.updateSourceMapping)(BASE_URI, apiKey, found.repositoryId, found.existing, SOURCE_MAPPING);
+                return "Quell-Mapping aktualisiert.";
+            }
+            await (0, createSourceMapping_1.createSourceMapping)(BASE_URI, apiKey, found?.repositoryId ?? await getRepositoryId(apiKey), SOURCE_MAPPING);
             return "Quell-Mapping angelegt.";
         },
     },
     {
         id: "creditMemoScript",
         title: "Script „Gutschriften verschieben“",
-        description: `Importiert „${CREDIT_MEMO_SCRIPT_NAME}“, der API-Key wird dabei im Script hinterlegt. Ein vorhandenes Script bleibt unverändert.`,
+        description: `„${CREDIT_MEMO_SCRIPT_NAME}“ - wird importiert (API-Key und Kategorien werden dabei hinterlegt) bzw. bei einem vorhandenen Script nur der Code aktualisiert; hinterlegte Werte bleiben unverändert.`,
         async check(apiKey) {
-            return (await findCreditMemoScriptId(apiKey)) ? done("Script vorhanden.") : missing("Script fehlt.");
+            return (await findCreditMemoScriptId(apiKey)) ? exists("Vorhanden - Code wird aktualisiert.") : missing("Script fehlt.");
         },
         async run(apiKey) {
-            if (await findCreditMemoScriptId(apiKey)) {
-                return "Bereits vorhanden.";
+            const scriptId = await findCreditMemoScriptId(apiKey);
+            if (scriptId) {
+                // Nur den Code - customerVariables (u.a. der verschlüsselte API-Key)
+                // werden bei einem vorhandenen Script NIE mitgeschickt.
+                const versionId = (await (0, getScriptVersion_1.getScriptVersion)(BASE_URI, apiKey, scriptId)).body[0]?.id;
+                if (!versionId) {
+                    throw new Error(`Für „${CREDIT_MEMO_SCRIPT_NAME}“ wurde keine Version gefunden.`);
+                }
+                await (0, patchScript_1.patchScript)(BASE_URI, apiKey, scriptId, versionId, { content: scriptGutschriftenVerschieben_json_1.default.content });
+                return "Script-Code aktualisiert.";
             }
-            // customerVariables nur beim Neuanlegen setzen - ein vorhandenes Script
-            // (und dessen hinterlegter Key) wird oben nie angefasst.
             const script = JSON.parse(JSON.stringify(scriptGutschriftenVerschieben_json_1.default));
             const apiKeyVariable = script.customerVariables?.find((entry) => entry.key === "apiKey");
             if (apiKeyVariable) {
@@ -1053,33 +1873,32 @@ const steps = [
     {
         id: "webhook",
         title: "Webhook „Gutschriften verschieben“",
-        description: "Ruft das Script nach dem Import von Gutschriften (Kategorie) im DMS auf - benötigt das Script.",
+        description: "Ruft das Script nach dem Import von Gutschriften (Kategorie) im DMS auf - benötigt das Script. Ein vorhandener Webhook wird aktualisiert, sein hinterlegter API-Key bleibt erhalten.",
         async check(apiKey) {
             const scriptId = await findCreditMemoScriptId(apiKey);
             if (!scriptId) {
                 return missing("Script fehlt noch.");
             }
-            return (await findCreditMemoWebhook(apiKey, scriptId)) ? done("Webhook vorhanden.") : missing("Webhook fehlt.");
+            return (await findCreditMemoWebhookEntry(apiKey, scriptId))
+                ? exists("Vorhanden - Einstellungen werden aktualisiert.")
+                : missing("Webhook fehlt.");
         },
         async run(apiKey) {
             const scriptId = await findCreditMemoScriptId(apiKey);
             if (!scriptId) {
                 throw new Error(`Script „${CREDIT_MEMO_SCRIPT_NAME}“ nicht gefunden - bitte zuerst das Script importieren.`);
             }
-            if (await findCreditMemoWebhook(apiKey, scriptId)) {
-                return "Bereits vorhanden.";
+            const found = await findCreditMemoWebhookEntry(apiKey, scriptId);
+            if (found) {
+                // Hinterlegten API-Key nie überschreiben/leeren: liefert die API ihn
+                // nicht mit, wird der Webhook nicht angefasst.
+                if (!found.webhook.apiKey) {
+                    return "Vorhanden - nicht aktualisiert, da der hinterlegte API-Key sonst überschrieben würde.";
+                }
+                await (0, updateEvent_1.updateEvent)(BASE_URI, apiKey, found.webhook, creditMemoEvent(scriptId, found.webhook.apiKey));
+                return "Webhook aktualisiert.";
             }
-            const event = {
-                description: "Gutschriften des Rechnungslesers verschieben",
-                uri: scriptRunUri(scriptId),
-                enabled: true,
-                timeout: 10000,
-                retry: false,
-                restrictions: [{ key: "CATEGORY", value: CREDIT_MEMO_CATEGORY_ID }],
-                apiKey,
-                handleResponse: "NONE",
-            };
-            await (0, createEvent_1.createEvent)(BASE_URI, apiKey, await getRepositoryId(apiKey), createEvent_1.EventType.PostImport, event);
+            await (0, createEvent_1.createEvent)(BASE_URI, apiKey, await getRepositoryId(apiKey), createEvent_1.EventType.PostImport, creditMemoEvent(scriptId, apiKey));
             return "Webhook angelegt.";
         },
     },
@@ -1107,25 +1926,113 @@ async function getCurrentUserId() {
     }
     return currentUserId;
 }
-// Legt über die Browser-Session einen API-Key für den angemeldeten Benutzer
-// an (wie bisher createNewAPIKey im alten Formular).
-async function createNewApiKey() {
-    const config = await (0, getAPIConfig_1.getAPIConfig)(BASE_URI, null);
+function loadSweetAlert() {
+    return new Promise((resolve) => {
+        if (typeof Swal !== "undefined") {
+            resolve();
+            return;
+        }
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css";
+        document.head.appendChild(link);
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js";
+        script.onload = () => resolve();
+        script.onerror = () => resolve();
+        document.head.appendChild(script);
+    });
+}
+function userLabel(user) {
+    const name = `${user.name?.givenName ?? ""} ${user.name?.familyName ?? ""}`.trim() || user.displayName || "";
+    const login = user.emails?.[0]?.value || user.userName || "";
+    return name && login && name !== login ? `${name} (${login})` : name || login || user.id || "";
+}
+// Swal-Dialog: Benutzer (Dropdown mit Suchfeld, angemeldeter Benutzer
+// vorausgewählt) und Bezeichnung des Keys. undefined = abgebrochen.
+async function askApiKeyRequest() {
+    const [users, ownId] = await Promise.all([
+        (0, getAllUsers_1.getAllUsers)(BASE_URI, ""),
+        getCurrentUserId().catch(() => undefined),
+    ]);
+    const options = users
+        .filter((user) => !!user.id)
+        .map((user) => ({ id: user.id, label: userLabel(user) }))
+        .sort((a, b) => a.label.localeCompare(b.label, "de"));
+    if (options.length === 0) {
+        throw new Error("Es wurden keine Benutzer gefunden.");
+    }
+    const renderOptions = (term) => options
+        .filter((option) => !term || option.label.toLowerCase().includes(term))
+        .map((option) => `<option value="${escapeHtml(option.id)}" ${option.id === ownId ? "selected" : ""}>${escapeHtml(option.label)}</option>`)
+        .join("");
+    const result = await Swal.fire({
+        title: "Neuen API-Key erstellen",
+        html: `
+      <div style="text-align:left">
+        <label for="onb-swal-search" style="font-size:0.85em;font-weight:600">Benutzer</label>
+        <input id="onb-swal-search" class="swal2-input" style="margin:4px 0 6px;width:100%" placeholder="Benutzer suchen…" autocomplete="off">
+        <select id="onb-swal-user" class="swal2-select" size="8" style="margin:0 0 12px;width:100%;display:block">${renderOptions("")}</select>
+        <label for="onb-swal-label" style="font-size:0.85em;font-weight:600">Bezeichnung</label>
+        <input id="onb-swal-label" class="swal2-input" style="margin:4px 0 0;width:100%" value="${escapeHtml(API_KEY_LABEL)}">
+      </div>`,
+        width: 600,
+        showCancelButton: true,
+        confirmButtonText: "API-Key erstellen",
+        cancelButtonText: "Abbrechen",
+        focusConfirm: false,
+        didOpen: (popup) => {
+            const search = popup.querySelector("#onb-swal-search");
+            const select = popup.querySelector("#onb-swal-user");
+            search?.addEventListener("input", () => {
+                if (!select)
+                    return;
+                const previous = select.value;
+                select.innerHTML = renderOptions(search.value.trim().toLowerCase());
+                if ([...select.options].some((option) => option.value === previous)) {
+                    select.value = previous;
+                }
+                else if (select.options.length > 0) {
+                    select.selectedIndex = 0;
+                }
+            });
+            select?.querySelector("option[selected]")?.scrollIntoView({ block: "nearest" });
+        },
+        preConfirm: () => {
+            const popup = Swal.getPopup();
+            const userId = popup.querySelector("#onb-swal-user")?.value ?? "";
+            const label = popup.querySelector("#onb-swal-label")?.value.trim() ?? "";
+            if (!userId) {
+                Swal.showValidationMessage("Bitte einen Benutzer auswählen.");
+                return false;
+            }
+            if (!label) {
+                Swal.showValidationMessage("Bitte eine Bezeichnung eingeben.");
+                return false;
+            }
+            return { userId, label };
+        },
+    });
+    return result.isConfirmed ? result.value : undefined;
+}
+// Wie die Identityprovider-Oberfläche: POST /identityprovider/config/apikey
+// über die Browser-Session.
+async function createNewApiKey(request) {
     const input = {
-        antiCsrfToken: config.body.antiCsrfToken,
-        canConfirm: false,
-        delete: false,
         id: "create",
-        isApiKeyInGracePeriod: false,
-        isTechnicalUser: false,
-        isValidUser: true,
         status: "Unconfirmed",
-        userId: await getCurrentUserId(),
-        label: API_KEY_LABEL,
+        userId: request.userId,
+        label: request.label,
     };
-    const key = (await (0, createAPIKey_1.createAPIKey)(BASE_URI, null, input)).body.apiKeyDto?.key;
+    // Antwort: { apiKeyDto: { key, ... }, saveOk, problemMessages, ... }
+    const body = (await (0, createAPIKey_1.createAPIKey)(BASE_URI, null, input)).body;
+    const problems = (body.problemMessages ?? []).map((problem) => typeof problem === "string" ? problem : JSON.stringify(problem));
+    if (body.saveOk === false || problems.length > 0) {
+        throw new Error(`Der Identityprovider hat den API-Key nicht gespeichert${problems.length ? `: ${problems.join("; ")}` : "."}`);
+    }
+    const key = body.apiKeyDto?.key;
     if (!key) {
-        throw new Error("Es wurde kein API-Key zurückgeliefert.");
+        throw new Error("Der API-Key wurde angelegt, aber nicht zurückgeliefert - bitte in der Benutzerverwaltung prüfen.");
     }
     return key;
 }
@@ -1161,6 +2068,7 @@ const styles = `
   .onb-badge-unknown { background: #e9ecef; color: #495057; }
   .onb-badge-checking, .onb-badge-running { background: #e7f1ff; color: #084298; }
   .onb-badge-done { background: #d1e7dd; color: #0f5132; }
+  .onb-badge-exists { background: #cfe2ff; color: #084298; }
   .onb-badge-missing { background: #fff3cd; color: #997404; }
   .onb-badge-manual { background: #e2e3e5; color: #41464b; }
   .onb-badge-error { background: #f8d7da; color: #842029; }
@@ -1172,9 +2080,21 @@ const STATE_LABELS = {
     checking: "Wird geprüft…",
     running: "Wird ausgeführt…",
     done: "Erledigt",
+    exists: "Vorhanden",
     missing: "Fehlt",
     manual: "Manuell",
     error: "Fehler",
+};
+// Beschriftung des Zeilen-Buttons je nach geprüftem Status.
+const RUN_LABELS = {
+    unknown: "Ausführen",
+    checking: "Ausführen",
+    running: "Läuft…",
+    done: "Erneut ausführen",
+    exists: "Aktualisieren",
+    missing: "Anlegen",
+    manual: "Ausführen",
+    error: "Erneut versuchen",
 };
 function escapeHtml(value) {
     return value
@@ -1211,7 +2131,7 @@ function renderShell() {
   <div class="onb-section">
     <div class="onb-header">
       <div class="onb-title">Onboarding gevis ECM Rechnungsleser</div>
-      <div class="onb-hint">Mandant <strong>${escapeHtml(SUBDOMAIN)}</strong> · Schritte einzeln oder alle fehlenden auf einmal ausführen.</div>
+      <div class="onb-hint">Mandant <strong>${escapeHtml(SUBDOMAIN)}</strong> · Fehlendes wird angelegt, Vorhandenes auf die Vorlage aktualisiert - einzeln oder gesammelt.</div>
     </div>
     <div class="onb-body">
       <div class="onb-key">
@@ -1230,7 +2150,8 @@ function renderShell() {
         </table>
       </div>
       <div class="onb-actions">
-        <button type="button" class="btn btn-sm btn-primary" data-onb-action="run-missing">Alle fehlenden Schritte ausführen</button>
+        <button type="button" class="btn btn-sm btn-outline-primary" data-onb-action="run-missing">Alle fehlenden anlegen</button>
+        <button type="button" class="btn btn-sm btn-primary" data-onb-action="run-all">Alles anlegen / aktualisieren</button>
       </div>
     </div>
   </div>`;
@@ -1259,6 +2180,8 @@ function refreshView() {
     const hasKey = apiKey.trim() !== "";
     root.querySelectorAll("button[data-onb-run]").forEach((button) => {
         button.disabled = busy || !hasKey;
+        const state = statuses.get(button.dataset.onbRun ?? "")?.state;
+        button.textContent = RUN_LABELS[state ?? "unknown"];
     });
     root.querySelectorAll("button[data-onb-action]").forEach((button) => {
         const action = button.dataset.onbAction;
@@ -1315,12 +2238,11 @@ async function checkAll() {
     }
     const counts = steps.map((step) => statuses.get(step.id).state);
     const open = counts.filter((state) => state === "missing").length;
+    const existing = counts.filter((state) => state === "exists").length;
     const errors = counts.filter((state) => state === "error").length;
     message = errors > 0
         ? { kind: "error", text: `${errors} Schritt(e) konnten nicht geprüft werden - ist der API-Key gültig?` }
-        : open > 0
-            ? { kind: "info", text: `${open} Schritt(e) fehlen noch.` }
-            : { kind: "ok", text: "Alle prüfbaren Schritte sind erledigt." };
+        : { kind: open > 0 ? "info" : "ok", text: `${open} fehlend, ${existing} vorhanden (können aktualisiert werden).` };
     refreshView();
 }
 // Führt einen Schritt aus und prüft ihn danach erneut. false = Fehler.
@@ -1330,7 +2252,11 @@ async function runStep(step) {
         const result = await step.run(apiKey.trim());
         logger.info(`${step.title}: ${result}`);
         const status = await step.check(apiKey.trim());
-        setStatus(step.id, status.state === "manual" ? { state: "done", text: result } : { ...status, text: `${result} ${status.text}`.trim() });
+        // Nach erfolgreichem Anlegen/Aktualisieren gilt der Schritt als erledigt,
+        // solange die Prüfung nicht weiterhin "fehlt" meldet.
+        setStatus(step.id, status.state === "missing" || status.state === "error"
+            ? { ...status, text: `${result} ${status.text}`.trim() }
+            : { state: "done", text: result });
         return true;
     }
     catch (error) {
@@ -1340,31 +2266,68 @@ async function runStep(step) {
     }
 }
 async function runSingle(step) {
-    if (step.confirm && !window.confirm(step.confirm)) {
-        return;
-    }
     await withBusy(async () => {
+        if (step.beforeRun) {
+            try {
+                if (!(await step.beforeRun(apiKey.trim()))) {
+                    return;
+                }
+            }
+            catch (error) {
+                message = { kind: "error", text: getErrorMessage(error) };
+                return;
+            }
+        }
         const ok = await runStep(step);
         message = ok
             ? { kind: "ok", text: `„${step.title}“ ausgeführt.` }
             : { kind: "error", text: `„${step.title}“ ist fehlgeschlagen - Details in der Statusspalte.` };
     });
 }
-// Nur Schritte mit Status "Fehlt" (daher vorher prüfen), in Reihenfolge -
-// bricht beim ersten Fehler ab, weil spätere Schritte auf frühere aufbauen.
-async function runMissing() {
+const ACTION_VERBS = {
+    missing: "anlegen",
+    exists: "aktualisieren",
+    manual: "ausführen",
+};
+// Führt die übergebenen Status-Arten gesammelt aus (vorher neu prüfen), in
+// Reihenfolge - bricht beim ersten Fehler bzw. bei einer abgebrochenen
+// Rückfrage (z.B. Webindex-Layout) ab, weil spätere Schritte auf frühere
+// aufbauen.
+async function runBatch(states, title) {
     await withBusy(async () => {
         await checkAll();
-        const todo = steps.filter((step) => statuses.get(step.id).state === "missing");
+        const todo = steps.filter((step) => states.includes(statuses.get(step.id).state));
         if (todo.length === 0) {
-            message = { kind: "ok", text: "Keine fehlenden Schritte - Webindex-Layout und Quell-Mapping bei Bedarf einzeln ausführen." };
+            message = { kind: "ok", text: "Nichts zu tun." };
             return;
         }
-        if (!window.confirm(`${todo.length} fehlende(n) Schritt(e) ausführen?\n\n${todo.map((step) => `• ${step.title}`).join("\n")}`)) {
+        try {
+            await ensureSwal();
+        }
+        catch (error) {
+            message = { kind: "error", text: getErrorMessage(error) };
+            return;
+        }
+        const list = todo
+            .map((step) => `<li><strong>${escapeHtml(step.title)}</strong> – ${ACTION_VERBS[statuses.get(step.id).state] ?? "ausführen"}</li>`)
+            .join("");
+        const confirmed = await Swal.fire({
+            icon: "question",
+            title,
+            html: `<ul style="text-align:left;margin:0 auto;display:inline-block">${list}</ul>`,
+            showCancelButton: true,
+            confirmButtonText: "Ausführen",
+            cancelButtonText: "Abbrechen",
+        });
+        if (!confirmed.isConfirmed) {
             message = undefined;
             return;
         }
         for (const step of todo) {
+            if (step.beforeRun && !(await step.beforeRun(apiKey.trim()))) {
+                message = { kind: "info", text: `Abgebrochen bei „${step.title}“ - die Schritte davor wurden ausgeführt.` };
+                return;
+            }
             if (!(await runStep(step))) {
                 message = { kind: "error", text: `Abgebrochen bei „${step.title}“ - Details in der Statusspalte.` };
                 return;
@@ -1374,23 +2337,34 @@ async function runMissing() {
     });
 }
 async function createKey() {
-    if (!window.confirm(`Für den angemeldeten Benutzer einen neuen API-Key „${API_KEY_LABEL}“ erstellen?`)) {
-        return;
-    }
+    let created = false;
     await withBusy(async () => {
         try {
-            apiKey = await createNewApiKey();
+            await loadSweetAlert();
+            if (typeof Swal === "undefined") {
+                throw new Error("Dialog-Bibliothek (SweetAlert2) konnte nicht geladen werden.");
+            }
+            message = { kind: "info", text: "Benutzer werden geladen…" };
+            refreshView();
+            const request = await askApiKeyRequest();
+            if (!request) {
+                message = undefined;
+                return;
+            }
+            apiKey = await createNewApiKey(request);
+            created = true;
             const input = mountedRoot?.querySelector("[data-onb-key]");
             if (input)
                 input.value = apiKey;
-            message = { kind: "ok", text: "API-Key erstellt und eingetragen." };
+            steps.forEach((step) => statuses.set(step.id, { state: "unknown", text: "" }));
+            message = { kind: "ok", text: `API-Key „${request.label}“ erstellt und eingetragen.` };
         }
         catch (error) {
             logger.error(`API-Key konnte nicht erstellt werden: ${getErrorMessage(error)}`);
             message = { kind: "error", text: `API-Key konnte nicht erstellt werden: ${getErrorMessage(error)}` };
         }
     });
-    if (apiKey) {
+    if (created) {
         await withBusy(checkAll);
     }
 }
@@ -1434,7 +2408,10 @@ function bindEvents(root) {
                     void withBusy(checkAll);
                     return;
                 case "run-missing":
-                    void runMissing();
+                    void runBatch(["missing"], "Fehlende Schritte anlegen?");
+                    return;
+                case "run-all":
+                    void runBatch(["missing", "exists", "manual"], "Alles anlegen bzw. aktualisieren?");
                     return;
             }
         });
