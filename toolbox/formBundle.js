@@ -5383,6 +5383,15 @@ exports.targetForms = [
     },
     {
         type: "form",
+        id: "downloadBatchDocuments",
+        name: "Stapel-Download",
+        description: "Listet alle Stapel der Eingangsverarbeitung (Inbound) auf und lädt alle Dokumente eines Stapels als eine zusammengeführte PDF-Datei herunter.",
+        formId: "393a772c-d2db-5463-9708-488bce1ca6e9",
+        bundlePath: "downloadBatchDocuments/formBundle.js",
+        formDefinitionPath: "downloadBatchDocuments/form.json",
+    },
+    {
+        type: "form",
         id: "processAdministration",
         name: "Prozess-Administration",
         description: "Verwaltet die Prozesse in der Systemumgebung.",
@@ -5457,7 +5466,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // ausgerollt werden soll, hier um 1 erhöhen. So bleibt die Versionsnummer
 // unabhängig vom Stand auf der jeweiligen Umgebung korrekt, auch wenn dort
 // noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 46;
+const TOOLBOX_VERSION_COUNTER = 47;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
