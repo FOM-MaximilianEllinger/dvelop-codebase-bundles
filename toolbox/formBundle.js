@@ -5488,12 +5488,11 @@ const TOOLBOX_FORM_NAME = "Toolbox";
 // Pfad des eigenen Bundles im öffentlichen Artefakt-Repo (wird von
 // .github/workflows/publish-bundles.yml dorthin veröffentlicht).
 const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
-// Eigener Versionszähler, gepflegt im Sourcecode (nicht auf dem Server
-// abgeleitet): bei jeder Änderung, die über die Toolbox-Aktualisierung
-// ausgerollt werden soll, hier um 1 erhöhen. So bleibt die Versionsnummer
-// unabhängig vom Stand auf der jeweiligen Umgebung korrekt, auch wenn dort
-// noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 49;
+// Eigener Versionszähler. Der Wert hier ist nur ein Platzhalter:
+// .github/workflows/publish-bundles.yml stempelt bei jeder inhaltlichen
+// Änderung den nächsten Stand (veröffentlichter Stand + 1) ins veröffentlichte
+// Bundle, ohne den Quellcode zu ändern.
+const TOOLBOX_VERSION_COUNTER = 50;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
