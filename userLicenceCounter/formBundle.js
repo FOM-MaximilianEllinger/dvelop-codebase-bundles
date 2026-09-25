@@ -228,6 +228,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.toCsv = toCsv;
 exports.toXlsx = toXlsx;
 exports.downloadBlob = downloadBlob;
+exports.getTenantName = getTenantName;
 // ---------------------------------------------------------------- CSV
 /**
  * CSV im von deutschem Excel erwarteten Format: Semikolon als Trennzeichen,
@@ -448,6 +449,14 @@ function downloadBlob(blob, fileName) {
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+/**
+ * Mandantenname für Dateinamen, abgeleitet aus der ersten Stelle des
+ * Hostnamens, z.B. "ellinger.d-velop.cloud" -> "Ellinger".
+ */
+function getTenantName(hostname = window.location.hostname) {
+    const label = hostname.split(".")[0] ?? "";
+    return label ? label.charAt(0).toUpperCase() + label.slice(1) : "";
+}
 
 
 /***/ }
@@ -519,7 +528,7 @@ const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExpo
  * bleiben; .github/workflows/publish-bundles.yml erhöht bei jedem Publish
  * automatisch BEIDE Vorkommen gemeinsam.
  */
-const VERSION_COUNTER = 10;
+const VERSION_COUNTER = 11;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // Muss exakt dem Script-Namen in toolbox.meta.json ("scripts[].name") entsprechen - so
 // findet die Toolbox das zugehörige Script anhand seines eindeutigen Namens
@@ -550,9 +559,10 @@ const styles = `
   .ulc-stat { font-size: 0.8em; font-weight: 600; padding: 2px 9px; border-radius: 10px; background: #e9ecef; color: #495057; }
   .ulc-stat strong { font-weight: 700; }
   .ulc-stat-paid { background: #d1e7dd; color: #0f5132; font-size: 0.9em; }
-  .ulc-controls { display: flex; gap: 6px; flex-wrap: wrap; }
-  .ulc-category { width: auto; }
-  .ulc-filter { max-width: 220px; }
+  .ulc-controls { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .ulc-category { width: auto; flex: 0 0 auto; }
+  .ulc-filter { width: 220px; flex: 0 0 auto; }
+  .ulc-export-group { display: flex; gap: 6px; flex-wrap: nowrap; }
   .ulc-export { white-space: nowrap; }
   .ulc-badge { display: inline-block; font-size: 0.75em; font-weight: 600; padding: 2px 7px; border-radius: 10px; margin-right: 4px; white-space: nowrap; }
   .ulc-badge-paid { background: #d1e7dd; color: #0f5132; }
@@ -690,8 +700,10 @@ function renderResult(result) {
       <div class="ulc-controls">
         <select class="form-control form-control-sm ulc-category" aria-label="Benutzer filtern">${options}</select>
         <input type="search" class="form-control form-control-sm ulc-filter" placeholder="Suchen…" aria-label="Benutzer suchen">
-        <button type="button" class="btn btn-sm btn-outline-secondary ulc-export" data-export="xlsx" title="Angezeigte Benutzer als Excel-Datei exportieren">Excel</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary ulc-export" data-export="csv" title="Angezeigte Benutzer als CSV-Datei exportieren">CSV</button>
+        <div class="ulc-export-group">
+          <button type="button" class="btn btn-sm btn-outline-secondary ulc-export" data-export="csv" title="Angezeigte Benutzer als CSV-Datei exportieren">CSV-Download</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary ulc-export" data-export="xlsx" title="Angezeigte Benutzer als Excel-Datei exportieren">Excel-Download</button>
+        </div>
       </div>
     </div>
     <div class="ulc-body">
@@ -763,7 +775,11 @@ function exportUsers(section, format) {
     const category = section.querySelector(".ulc-category")?.value ?? "all";
     const categoryLabel = CATEGORY_FILTERS.find((filter) => filter.value === category)?.label ?? "Benutzer";
     const date = new Date().toISOString().slice(0, 10);
-    const baseName = `${categoryLabel.replace(/[^\wäöüÄÖÜß-]+/g, "_")}_${date}`;
+    // z.B. "Ellinger_Bezahlte_Benutzer_2026-09-25" (Mandant aus dem Hostnamen).
+    const baseName = [(0, tableExport_1.getTenantName)(), categoryLabel, date]
+        .filter(Boolean)
+        .join("_")
+        .replace(/[^\wäöüÄÖÜß-]+/g, "_");
     if (format === "csv") {
         (0, tableExport_1.downloadBlob)((0, tableExport_1.toCsv)(table), `${baseName}.csv`);
     }
@@ -772,37 +788,32 @@ function exportUsers(section, format) {
     }
     logger.debug(`${table.rows.length} Benutzer als ${format.toUpperCase()} exportiert.`);
 }
-// Listener direkt an der eigenen Wurzel (wird bei jedem mountContent neu
-// erzeugt, daher keine doppelten Listener). Delegation innerhalb der Wurzel,
-// weil Tabelle/Controls beim Wechsel Laden -> Ergebnis ausgetauscht werden.
+// Listener direkt an Suchfeld/Select/Buttons (werden bei jedem mountContent
+// mit dem Inhalt neu erzeugt, daher keine doppelten Listener). Bewusst ohne
+// "instanceof HTMLElement": dforms führt das Bundle ggf. in einem anderen
+// Fenster-Kontext aus, dann ist instanceof immer false (gleiches Vorgehen wie
+// bindToolboxEvents in projects/Toolbox/src/forms/form.ts).
 function bindEvents(root) {
-    const onFilterChange = (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLElement) || !target.matches(".ulc-filter, .ulc-category")) {
-            return;
-        }
-        const section = target.closest(".ulc-section");
-        if (section) {
-            applyFilters(section);
-        }
-    };
-    root.addEventListener("input", onFilterChange);
-    root.addEventListener("change", onFilterChange);
-    root.addEventListener("keyup", onFilterChange);
-    // Enter im Suchfeld darf das Formular nicht absenden.
-    root.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" && event.target instanceof HTMLInputElement && event.target.matches(".ulc-filter")) {
-            event.preventDefault();
-        }
-    });
-    root.addEventListener("click", (event) => {
-        const target = event.target;
-        const button = target instanceof HTMLElement ? target.closest("button[data-export]") : null;
-        const section = button?.closest(".ulc-section");
-        if (!button || !section) {
-            return;
-        }
-        exportUsers(section, button.dataset.export === "csv" ? "csv" : "xlsx");
+    const section = root.querySelector(".ulc-section");
+    if (!section) {
+        return;
+    }
+    const onFilterChange = () => applyFilters(section);
+    const search = section.querySelector(".ulc-filter");
+    if (search) {
+        search.addEventListener("input", onFilterChange);
+        search.addEventListener("keyup", onFilterChange);
+        search.addEventListener("search", onFilterChange);
+        // Enter im Suchfeld darf das Formular nicht absenden.
+        search.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+            }
+        });
+    }
+    section.querySelector(".ulc-category")?.addEventListener("change", onFilterChange);
+    section.querySelectorAll("button[data-export]").forEach((button) => {
+        button.addEventListener("click", () => exportUsers(section, button.dataset.export === "csv" ? "csv" : "xlsx"));
     });
 }
 /**
