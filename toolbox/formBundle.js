@@ -5397,6 +5397,7 @@ exports.targetForms = [
         description: "Zählt die lizenzrelevanten Benutzer (ohne technischen Benutzer und @gws.ms-Adressen) und liefert eine HTML-Tabelle mit den Details.",
         formId: "ce3a0bac-79fd-5080-8742-819797a25f19",
         bundlePath: "userLicenceCounter/formBundle.js",
+        formDefinitionPath: "userLicenceCounter/form.json",
         scripts: [
             {
                 name: "User-Lizenz-Zähler",
@@ -5456,7 +5457,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // ausgerollt werden soll, hier um 1 erhöhen. So bleibt die Versionsnummer
 // unabhängig vom Stand auf der jeweiligen Umgebung korrekt, auch wenn dort
 // noch eine ältere Version liegt.
-const TOOLBOX_VERSION_COUNTER = 45;
+const TOOLBOX_VERSION_COUNTER = 46;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
