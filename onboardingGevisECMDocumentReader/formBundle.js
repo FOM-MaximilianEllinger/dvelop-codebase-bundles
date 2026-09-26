@@ -308,6 +308,87 @@ async function getDocumentReaderFeatures(baseUri, token) {
 
 /***/ },
 
+/***/ "../../helper/classcon-documentreader/masterFile.ts"
+/*!**********************************************************!*\
+  !*** ../../helper/classcon-documentreader/masterFile.ts ***!
+  \**********************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getMasterFileRequestToken = getMasterFileRequestToken;
+exports.uploadMasterFile = uploadMasterFile;
+exports.buildMasterFileCsv = buildMasterFileCsv;
+exports.invalidMasterFileValue = invalidMasterFileValue;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Stammdaten des Rechnungslesers (CC_Companies.csv, CC_Vendors.csv, ...).
+ * Läuft über die Browser-Session des angemeldeten Benutzers - der Upload ist
+ * per ASP.NET-Antiforgery-Token geschützt, das zur Session gehört.
+ */
+function masterFileIndexUrl(baseUri, subscriptionId) {
+    return `${baseUri}/classcon-documentreader/MasterFile/Index/${encodeURIComponent(subscriptionId)}`;
+}
+/**
+ * Holt das Antiforgery-Token der Stammdaten-Seite
+ * (<input name="__RequestVerificationToken" value="..."> in
+ * /classcon-documentreader/MasterFile/Index/<subscriptionId>).
+ */
+async function getMasterFileRequestToken(baseUri, subscriptionId) {
+    const response = await fetch(masterFileIndexUrl(baseUri, subscriptionId), {
+        method: "GET",
+        headers: { Accept: "text/html" },
+        credentials: "same-origin",
+    });
+    if (!response.ok) {
+        throw new Error(`Stammdaten-Seite des Rechnungslesers nicht erreichbar (HTTP ${response.status}).`);
+    }
+    const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+    const token = doc.querySelector('input[name="__RequestVerificationToken"]')?.getAttribute("value");
+    if (!token) {
+        throw new Error("Sicherheitstoken der Stammdaten-Seite nicht gefunden.");
+    }
+    return token;
+}
+/**
+ * Lädt eine Stammdaten-Datei hoch - wie die Oberfläche:
+ * POST /classcon-documentreader/MasterFile/Upload?id=<subscriptionId>
+ * als multipart/form-data mit "__RequestVerificationToken" und "file[0]".
+ */
+async function uploadMasterFile(baseUri, subscriptionId, fileName, content) {
+    const token = await getMasterFileRequestToken(baseUri, subscriptionId);
+    const form = new FormData();
+    form.append("__RequestVerificationToken", token);
+    form.append("file[0]", new Blob([content], { type: "text/csv" }), fileName);
+    // Content-Type (mit boundary) setzt der Browser selbst.
+    await (0, performHttpRequest_1.performHttpRequest)(`${baseUri}/classcon-documentreader/MasterFile/Upload?id=${encodeURIComponent(subscriptionId)}`, {
+        method: "POST",
+        headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
+        body: form,
+        credentials: "same-origin",
+    });
+}
+/**
+ * Baut eine Stammdaten-CSV im Format des Rechnungslesers: UTF-8 ohne BOM,
+ * Semikolon als Trennzeichen, CRLF zwischen den Zeilen (wie die Beispiel-
+ * dateien). Werte dürfen weder ";" noch Zeilenumbrüche enthalten - vorher
+ * prüfen (siehe invalidMasterFileValue).
+ */
+function buildMasterFileCsv(headers, rows) {
+    return [headers, ...rows].map((row) => row.join(";")).join("\r\n");
+}
+/** Liefert eine Fehlermeldung, wenn der Wert nicht in die CSV passt. */
+function invalidMasterFileValue(value) {
+    if (value.includes(";"))
+        return "darf kein Semikolon enthalten";
+    if (/[\r\n]/.test(value))
+        return "darf keinen Zeilenumbruch enthalten";
+    return undefined;
+}
+
+
+/***/ },
+
 /***/ "../../helper/classcon-documentreader/metadataEndpointService.ts"
 /*!***********************************************************************!*\
   !*** ../../helper/classcon-documentreader/metadataEndpointService.ts ***!
@@ -2368,6 +2449,7 @@ const serviceBusEndpointMapping_1 = __webpack_require__(/*! ../../../../helper/c
 // "exportXML" als Text aus) - als Text ins Bundle eingebunden.
 const sftpExportStylesheet_xsl_raw_1 = __importDefault(__webpack_require__(/*! ../data/sftpExportStylesheet.xsl?raw */ "./src/data/sftpExportStylesheet.xsl?raw"));
 const sftpEndpointService_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/sftpEndpointService */ "../../helper/classcon-documentreader/sftpEndpointService.ts");
+const masterFile_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/masterFile */ "../../helper/classcon-documentreader/masterFile.ts");
 const endpointServices_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/endpointServices */ "../../helper/classcon-documentreader/endpointServices.ts");
 const metadataEndpointService_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/metadataEndpointService */ "../../helper/classcon-documentreader/metadataEndpointService.ts");
 const impersonateWhitelist_1 = __webpack_require__(/*! ../../../../helper/identityprovider/impersonateWhitelist */ "../../helper/identityprovider/impersonateWhitelist.ts");
@@ -2414,7 +2496,7 @@ const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-do
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 16;
+const VERSION_COUNTER = 17;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -2675,6 +2757,122 @@ async function targetEndpointSettings(apiKey) {
         EndpointServiceOutputStructure: "MainDocWithAttachments",
     };
 }
+// ---------------------------------------------------------------------------
+// Stammdaten: Mandanten (CC_Companies.csv)
+// ---------------------------------------------------------------------------
+const COMPANY_FILE_NAME = "CC_Companies.csv";
+// Spalten in der Reihenfolge der Datei - label/placeholder für den Dialog.
+const COMPANY_COLUMNS = [
+    { key: "COMPANY_NUM", label: "Mandanten-Nr.", placeholder: "z.B. 1000", required: true },
+    { key: "NAME", label: "Name", placeholder: "Firmenname", required: true },
+    { key: "STR", label: "Straße", placeholder: "Straße Hausnr." },
+    { key: "ZIP", label: "PLZ", placeholder: "PLZ" },
+    { key: "CITY", label: "Ort", placeholder: "Ort" },
+    { key: "COUNTRY", label: "Land", placeholder: "z.B. DE" },
+    { key: "DEFAULT_CURRENCY", label: "Währung", placeholder: "z.B. EUR" },
+    { key: "BLACK", label: "BLACK", placeholder: "" },
+    { key: "ERPTENANT_ID", label: "ERP-Mandant-ID", placeholder: "" },
+    { key: "COMPANY_ID", label: "Company-ID", placeholder: "" },
+];
+// Zuletzt eingegebene Mandanten (bleiben für einen erneuten Lauf erhalten).
+let companies = [];
+function emptyCompany() {
+    return Object.fromEntries(COMPANY_COLUMNS.map((column) => [column.key, ""]));
+}
+function companyRowHtml(company) {
+    const cells = COMPANY_COLUMNS
+        .map((column) => `<td><input type="text" class="swal2-input onb-company-input" data-company-field="${column.key}" value="${escapeHtml(company[column.key] ?? "")}" placeholder="${escapeHtml(column.placeholder)}" aria-label="${escapeHtml(column.label)}"></td>`)
+        .join("");
+    return `<tr data-company-row>${cells}<td><button type="button" class="onb-company-remove" data-company-remove title="Zeile entfernen">✕</button></td></tr>`;
+}
+// Dialog zur Eingabe der Mandanten (beliebig viele Zeilen). Liefert die
+// Mandanten oder undefined bei Abbruch.
+async function askCompanies() {
+    await ensureSwal();
+    const rows = (companies.length ? companies : [emptyCompany()]).map(companyRowHtml).join("");
+    const head = COMPANY_COLUMNS.map((c) => `<th>${escapeHtml(c.label)}${c.required ? " *" : ""}</th>`).join("");
+    const result = await Swal.fire({
+        title: "Stammdaten: Mandanten",
+        width: "min(1200px, 96vw)",
+        html: `
+      <style>
+        .onb-company-wrap { overflow-x: auto; text-align: left; }
+        .onb-company-table { border-collapse: collapse; font-size: 0.8em; width: 100%; }
+        .onb-company-table th { text-align: left; padding: 2px 4px; white-space: nowrap; }
+        .onb-company-table td { padding: 2px; }
+        .onb-company-input.swal2-input { margin: 0; height: 30px; font-size: 1em; padding: 2px 6px; min-width: 90px; width: 100%; }
+        .onb-company-remove { border: 0; background: none; color: #dc3545; cursor: pointer; font-size: 1.1em; }
+      </style>
+      <p style="font-size:0.9em">Alle Mandanten des Kunden eintragen - daraus wird <code>${COMPANY_FILE_NAME}</code> erzeugt und in die Stammdaten des Rechnungslesers hochgeladen. <strong>Die vorhandene Datei wird dabei ersetzt.</strong></p>
+      <div class="onb-company-wrap">
+        <table class="onb-company-table"><thead><tr>${head}<th></th></tr></thead><tbody data-company-body>${rows}</tbody></table>
+      </div>
+      <button type="button" class="swal2-styled" data-company-add style="margin-top:10px;background:#6c757d">+ Mandant hinzufügen</button>`,
+        showCancelButton: true,
+        confirmButtonText: "CSV erzeugen und hochladen",
+        cancelButtonText: "Abbrechen",
+        focusConfirm: false,
+        didOpen: (popup) => {
+            const body = popup.querySelector("[data-company-body]");
+            const bindRemove = (row) => {
+                row.querySelector("[data-company-remove]")?.addEventListener("click", () => {
+                    if (body && body.querySelectorAll("[data-company-row]").length > 1)
+                        row.remove();
+                });
+            };
+            body?.querySelectorAll("[data-company-row]").forEach(bindRemove);
+            popup.querySelector("[data-company-add]")?.addEventListener("click", () => {
+                if (!body)
+                    return;
+                body.insertAdjacentHTML("beforeend", companyRowHtml(emptyCompany()));
+                const added = body.lastElementChild;
+                if (added) {
+                    bindRemove(added);
+                    added.querySelector("input")?.focus();
+                }
+            });
+        },
+        preConfirm: () => {
+            const popup = Swal.getPopup();
+            const list = Array.from(popup.querySelectorAll("[data-company-row]")).map((row) => {
+                const company = emptyCompany();
+                row.querySelectorAll("[data-company-field]").forEach((input) => {
+                    company[input.dataset.companyField ?? ""] = input.value.trim();
+                });
+                return company;
+            }).filter((company) => Object.values(company).some(Boolean));
+            if (!list.length) {
+                Swal.showValidationMessage("Bitte mindestens einen Mandanten eintragen.");
+                return false;
+            }
+            for (const [index, company] of list.entries()) {
+                for (const column of COMPANY_COLUMNS) {
+                    const value = company[column.key];
+                    if (column.required && !value) {
+                        Swal.showValidationMessage(`Zeile ${index + 1}: „${column.label}“ fehlt.`);
+                        return false;
+                    }
+                    const problem = (0, masterFile_1.invalidMasterFileValue)(value);
+                    if (problem) {
+                        Swal.showValidationMessage(`Zeile ${index + 1}: „${column.label}“ ${problem}.`);
+                        return false;
+                    }
+                }
+            }
+            const numbers = list.map((company) => company.COMPANY_NUM);
+            const duplicate = numbers.find((num, i) => numbers.indexOf(num) !== i);
+            if (duplicate) {
+                Swal.showValidationMessage(`Mandanten-Nr. „${duplicate}“ ist doppelt.`);
+                return false;
+            }
+            return list;
+        },
+    });
+    return result.isConfirmed ? result.value : undefined;
+}
+function companiesCsv(list) {
+    return (0, masterFile_1.buildMasterFileCsv)(COMPANY_COLUMNS.map((column) => column.key), list.map((company) => COMPANY_COLUMNS.map((column) => company[column.key] ?? "")));
+}
 // Ist das Zielsystem <name> im Rechnungsleser eingerichtet? (Übersichtsseite
 // "Zielsysteme" listet jedes eingerichtete Zielsystem mit seinem Namen als id.)
 async function isEndpointConfigured(apiKey, name) {
@@ -2703,12 +2901,6 @@ const SFTP_EXPORT_MAPPING = {
     DefaultStyleSheetName: "",
     ServiceBusExportType: "XML",
 };
-// Whitespace-unabhängiger Vergleich des Stylesheets (Zeilenenden/Einrückung
-// können sich beim Speichern ändern).
-function sameStyleSheet(a, b) {
-    const norm = (text) => text.replace(/\s+/g, "");
-    return a !== undefined && norm(a) === norm(b);
-}
 async function readSftpEndpoint(apiKey) {
     try {
         return await (0, sftpEndpointService_1.getSftpEndpointService)(BASE_URI, apiKey, await findDocumentReaderSubscriptionId(apiKey));
@@ -3234,6 +3426,32 @@ const steps = [
         },
     },
     {
+        id: "masterDataCompanies",
+        title: "Stammdaten: Mandanten",
+        description: `Fragt die Mandanten des Kunden ab (beliebig viele), erzeugt daraus ${COMPANY_FILE_NAME} und lädt sie in die Stammdaten des Rechnungslesers hoch. Die vorhandene Datei wird ersetzt.`,
+        // Eingabe der Mandanten direkt vor dem Ausführen.
+        async beforeRun() {
+            const list = await askCompanies();
+            if (!list)
+                return false;
+            companies = list;
+            return true;
+        },
+        async check() {
+            return companies.length
+                ? { state: "manual", text: `${companies.length} Mandant(en) erfasst - wird beim Ausführen hochgeladen.` }
+                : { state: "manual", text: "Nicht prüfbar - Mandanten werden beim Ausführen abgefragt und hochgeladen." };
+        },
+        async run(apiKey) {
+            if (!companies.length) {
+                throw new Error("Keine Mandanten erfasst.");
+            }
+            const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
+            await (0, masterFile_1.uploadMasterFile)(BASE_URI, subscriptionId, COMPANY_FILE_NAME, companiesCsv(companies));
+            return `${COMPANY_FILE_NAME} mit ${companies.length} Mandant(en) hochgeladen.`;
+        },
+    },
+    {
         id: "targetSystem",
         title: "Zielsystem des Rechnungslesers",
         description: "Richtet das Zielsystem (d.3-Endpunkt) ein: dieses DMS-Repository, der API-Key aus der Konfiguration, Besitzer „Editor“, Ausgabe „Hauptdokument mit Anhängen“.",
@@ -3372,25 +3590,14 @@ const steps = [
         title: "SFTP-Zielsystem: Export konfigurieren",
         erp: ["gevisR"],
         description: `Konfiguriert den Export des SFTP-Zielsystems für die Dokumentklasse ${SFTP_DOCUMENT_CLASS}: Attribut „exportXML“ wird exportiert und per XSLT-Vorlage als XML-Datei auf den SFTP-Server geschrieben.`,
+        // Wie beim Webindex-Layout: nicht prüfbar, wird beim Ausführen (nach
+        // Rückfrage, ohne Sicherung) mit der Vorlage überschrieben.
+        beforeRun: () => confirmWarning("Export-Konfiguration überschreiben?", `<strong>Achtung:</strong> Die Export-Konfiguration des SFTP-Zielsystems (Dokumentklasse ${SFTP_DOCUMENT_CLASS}) wird vollständig durch die Vorlage ersetzt - Attribut-Zuordnungen und XSLT-Vorlage. Die aktuelle Konfiguration wird nicht gesichert.`, "Überschreiben"),
         async check(apiKey) {
             if (!(await isEndpointConfigured(apiKey, "SftpEndpointService"))) {
                 return missing("SFTP-Zielsystem fehlt noch.");
             }
-            let current;
-            try {
-                current = await (0, serviceBusEndpointMapping_1.getServiceBusEndpointMapping)(BASE_URI, apiKey, await findDocumentReaderSubscriptionId(apiKey), "SftpEndpointService", SFTP_DOCUMENT_CLASS);
-            }
-            catch {
-                current = undefined;
-            }
-            if (!current) {
-                return missing("Aktueller Stand nicht lesbar - wird konfiguriert.");
-            }
-            const exported = current.AttributeMappings?.find((row) => row.JsonOutputName === "exportXML" && row.AttributeName === "exportXML" && row.Export);
-            if (exported && current.ServiceBusExportType === "XML" && sameStyleSheet(current.StyleSheet, sftpExportStylesheet_xsl_raw_1.default)) {
-                return done("Export „exportXML“ als XML konfiguriert.");
-            }
-            return exists("Abweichend konfiguriert - wird auf die Vorlage gesetzt.");
+            return { state: "manual", text: "Nicht prüfbar - wird beim Ausführen überschrieben." };
         },
         async run(apiKey) {
             if (!(await isEndpointConfigured(apiKey, "SftpEndpointService"))) {
