@@ -91,10 +91,8 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  * Bekommt die Attribute des Dokuments als JSON und liefert sie verändert
  * zurück:
  *  - DocumentType wird zum ERP-Code: CreditAdvice -> "3", alles andere
- *    (Invoice, CorrectionOfInvoice, unbekannt) -> "2",
- *  - Rechnungstyp bekommt die deutsche Bezeichnung: Invoice -> "Rechnung",
- *    CreditAdvice -> "Gutschrift", CorrectionOfInvoice -> "Rechnungskorrektur"
- *    (bei unbekanntem DocumentType bleibt Rechnungstyp unverändert).
+ *    (Invoice, CorrectionOfInvoice, unbekannt) -> "2".
+ *    Alle übrigen Attribute bleiben unverändert.
  *
  * Wird der Hook erneut mit einem bereits umgesetzten Dokument aufgerufen
  * (DocumentType ist dann schon "2"/"3"), greift der Standardfall - der Code
@@ -102,11 +100,10 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  */
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const DOCUMENT_TYPE_FIELD = "DocumentType";
-const INVOICE_TYPE_FIELD = "Rechnungstyp";
 const MAPPING = {
-    Invoice: { code: "2", text: "Rechnung" },
-    CreditAdvice: { code: "3", text: "Gutschrift" },
-    CorrectionOfInvoice: { code: "2", text: "Rechnungskorrektur" },
+    Invoice: "2",
+    CreditAdvice: "3",
+    CorrectionOfInvoice: "2",
 };
 // Bereits umgesetzte Codes (erneuter Aufruf) nicht verändern.
 const KNOWN_CODES = new Set(["2", "3"]);
@@ -116,13 +113,12 @@ module.exports = async (req, res) => {
         const documentType = String(body[DOCUMENT_TYPE_FIELD] ?? "");
         const mapped = MAPPING[documentType];
         if (mapped) {
-            body[DOCUMENT_TYPE_FIELD] = mapped.code;
-            body[INVOICE_TYPE_FIELD] = mapped.text;
+            body[DOCUMENT_TYPE_FIELD] = mapped;
         }
         else if (!KNOWN_CODES.has(documentType)) {
             body[DOCUMENT_TYPE_FIELD] = "2";
         }
-        logger.info(`DocumentType "${documentType}" -> "${body[DOCUMENT_TYPE_FIELD]}", Rechnungstyp "${body[INVOICE_TYPE_FIELD] ?? ""}".`);
+        logger.info(`DocumentType "${documentType}" -> "${body[DOCUMENT_TYPE_FIELD]}".`);
         res.status(200).set("Content-Type", "application/json").send(JSON.stringify(body));
     }
     catch (error) {

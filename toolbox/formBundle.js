@@ -5455,6 +5455,15 @@ exports.targetForms = [
     },
     {
         type: "form",
+        id: "deleteDocuments",
+        name: "Dokumente löschen",
+        description: "Löscht alle Dokumente einer Kategorie oder aller Kategorien aus dem DMS – mit mehrfacher Sicherheitsabfrage, Löschgrund und Protokoll-Download.",
+        formId: "b4b039f1-61db-5faf-b63c-1e5651faf1e7",
+        bundlePath: "deleteDocuments/formBundle.js",
+        formDefinitionPath: "deleteDocuments/form.json",
+    },
+    {
+        type: "form",
         id: "downloadBatchDocuments",
         name: "Stapel-Download",
         description: "Listet alle Stapel der Eingangsverarbeitung (Inbound) auf und lädt alle Dokumente eines Stapels als eine zusammengeführte PDF-Datei herunter.",
@@ -5564,7 +5573,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // .github/workflows/publish-bundles.yml stempelt bei jeder inhaltlichen
 // Änderung den nächsten Stand (veröffentlichter Stand + 1) ins veröffentlichte
 // Bundle, ohne den Quellcode zu ändern.
-const TOOLBOX_VERSION_COUNTER = 51;
+const TOOLBOX_VERSION_COUNTER = 52;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
