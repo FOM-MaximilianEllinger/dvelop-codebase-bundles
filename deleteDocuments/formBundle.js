@@ -90,6 +90,95 @@ async function getDocumentIdsByCategory(baseUri, token, repositoryId, categoryKe
 
 /***/ },
 
+/***/ "../../helper/dms/startProcessingFromOtherUser.ts"
+/*!********************************************************!*\
+  !*** ../../helper/dms/startProcessingFromOtherUser.ts ***!
+  \********************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getDmsObjectProcessingInfo = getDmsObjectProcessingInfo;
+exports.startProcessingFromOtherUser = startProcessingFromOtherUser;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+function headers(token) {
+    return {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+}
+/** GET /dms/r/<repo>/o2/<id> - liefert eTag, Systemeigenschaften und Links. */
+async function getDmsObjectProcessingInfo(baseUri, token, repositoryId, documentId) {
+    return (await (0, performHttpRequest_1.performHttpRequest)(`${baseUri}/dms/r/${repositoryId}/o2/${encodeURIComponent(documentId)}`, { method: "GET", headers: headers(token) })).body;
+}
+/**
+ * Übernimmt ein Dokument, das ein anderer Benutzer in Bearbeitung hat - wie
+ * der DMS-Webclient: PUT auf den Link "startProcessingFromOtherUser"
+ * (/dms/r/<repo>/o2/<id>/v/current) mit
+ * { state: "Processing", eTag, destinationUserOrGroup }.
+ * Danach ist `destination` Bearbeiter und darf das Dokument z.B. löschen.
+ *
+ * @param info - Ergebnis von getDmsObjectProcessingInfo (für eTag und Link).
+ * @param destination - Benutzer/Gruppe, der das Dokument übernimmt (userName).
+ * @returns false, wenn das Dokument den Link nicht anbietet (nicht von einem
+ *          anderen Benutzer in Bearbeitung oder keine Berechtigung).
+ */
+async function startProcessingFromOtherUser(baseUri, token, info, destination) {
+    const href = info._links?.startProcessingFromOtherUser?.href;
+    if (!href || !info.eTag) {
+        return false;
+    }
+    await (0, performHttpRequest_1.performHttpRequest)(href.startsWith("http") ? href : `${baseUri}${href}`, {
+        method: "PUT",
+        headers: headers(token),
+        body: JSON.stringify({ state: "Processing", eTag: info.eTag, destinationUserOrGroup: destination }),
+    });
+    return true;
+}
+
+
+/***/ },
+
+/***/ "../../helper/identityprovider/getCurrentUserInformation.ts"
+/*!******************************************************************!*\
+  !*** ../../helper/identityprovider/getCurrentUserInformation.ts ***!
+  \******************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getCurrentUserInformation = getCurrentUserInformation;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Retrieves the current user information by validating the provided token
+ * with the identity provider.
+ *
+ * @param baseUri - The base URI of the identity provider.
+ * @param token - The optional bearer token for authentication. If not provided,
+ *                the request will be made without an Authorization header.
+ * @returns A promise that resolves to an `ApiResponse` containing the
+ *          `GetCurrentUserInformation` data.
+ */
+async function getCurrentUserInformation(baseUri, token = null) {
+    const url = `${baseUri}/identityprovider/validate`;
+    const headers = {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
+    const options = {
+        method: "GET",
+        headers,
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
 /***/ "../../helper/performHttpRequest/performHttpRequest.ts"
 /*!*************************************************************!*\
   !*** ../../helper/performHttpRequest/performHttpRequest.ts ***!
@@ -544,6 +633,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const performHttpRequest_1 = __webpack_require__(/*! ../../../../helper/performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
 const getDocumentIdsByCategory_1 = __webpack_require__(/*! ../../../../helper/dms/getDocumentIdsByCategory */ "../../helper/dms/getDocumentIdsByCategory.ts");
 const deleteDmsObject_1 = __webpack_require__(/*! ../../../../helper/dms/deleteDmsObject */ "../../helper/dms/deleteDmsObject.ts");
+const startProcessingFromOtherUser_1 = __webpack_require__(/*! ../../../../helper/dms/startProcessingFromOtherUser */ "../../helper/dms/startProcessingFromOtherUser.ts");
+const getCurrentUserInformation_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getCurrentUserInformation */ "../../helper/identityprovider/getCurrentUserInformation.ts");
 const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExport */ "../../helper/utils/tableExport.ts");
 /**
@@ -560,7 +651,12 @@ const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExpo
  *  3. letzte Abfrage, deren Button erst nach einem Countdown freigegeben wird.
  * Gelöscht werden genau die Dokumente, die direkt vor Abfrage 1 ermittelt
  * wurden. Ohne SweetAlert2 (CDN nicht erreichbar) wird NICHT gelöscht.
- * Nach dem Lauf gibt es ein Protokoll (CSV) aller Ids mit Ergebnis.
+ *
+ * Die Übersicht bleibt während der Arbeit bedienbar: Zählen und Löschen
+ * laufen parallel (je Kategorie bzw. je Dokument), jeder Löschvorgang ist ein
+ * eigener "Auftrag" mit Fortschritt, Abbrechen und Protokoll (CSV). Nur die
+ * Kategorien eines laufenden Auftrags sind für weitere Aufträge gesperrt; die
+ * Sicherheitsabfragen mehrerer Aufträge erscheinen nacheinander.
  *
  * Das Feld-Layout (nur die Content-Komponente "result") liegt als Code in
  * src/forms/form.json und wird von der Toolbox mit ausgerollt.
@@ -571,25 +667,25 @@ const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExpo
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 3;
+const VERSION_COUNTER = 4;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const GET_HEADERS = { Accept: "application/json" };
 // Komponenten-Key aus src/forms/form.json.
 const resultKey = "result";
-// Parallele Löschaufrufe - klein genug, um das DMS nicht zu überlasten.
-const DELETE_CONCURRENCY = 5;
+// Parallele Suchen (je Kategorie) bzw. Löschaufrufe (je Dokument) - hoch
+// genug für Tempo, klein genug, um das DMS nicht zu überlasten.
+const COUNT_CONCURRENCY = 6;
+const DELETE_CONCURRENCY = 8;
 // Sekunden, bis der Button der letzten Abfrage klickbar wird.
 const FINAL_COUNTDOWN_SECONDS = 5;
 const ALL_CONFIRM_PHRASE = "ALLE DOKUMENTE LÖSCHEN";
+// Fortschritt höchstens so oft neu zeichnen.
+const RENDER_INTERVAL_MS = 250;
 let repositoryId = "";
 let categories = [];
-let busy = false;
-let cancelRequested = false;
-let lastLog = [];
-// Fortschritt des laufenden Vorgangs (wird in renderPanel angezeigt).
-let progress;
-let lastSummary = "";
+let jobs = [];
+let nextJobId = 1;
 const styles = `
 <style>
   .ddd-section { border: 1px solid #dee2e6; border-radius: 6px; background: #fff; }
@@ -610,10 +706,13 @@ const styles = `
   .ddd-id { color: #6c757d; font-family: monospace; font-size: 0.8em; }
   .ddd-muted { color: #adb5bd; font-style: italic; }
   .ddd-err { color: #842029; font-size: 0.85em; }
+  .ddd-busy { color: #997404; font-size: 0.8em; display: block; }
   .ddd-action { white-space: nowrap; text-align: right; }
   .ddd-footer { color: #6c757d; font-size: 0.85em; margin-top: 8px; }
   .ddd-panel { border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; background: #fcfcfd; }
+  .ddd-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
   .ddd-panel .progress { height: 18px; margin: 6px 0; }
+  .ddd-panel-text { font-size: 0.9em; }
   .ddd-loading { display: flex; align-items: center; gap: 10px; color: #6c757d; padding: 12px; }
   .ddd-error { color: #842029; background: #f8d7da; border: 1px solid #f5c2c7; border-radius: 6px; padding: 10px 12px; }
   .ddd-swal-list { text-align: left; max-height: 220px; overflow: auto; margin: 8px 0; font-size: 0.9em; }
@@ -635,6 +734,16 @@ function getErrorMessage(error) {
 function formatNumber(value) {
     return value.toLocaleString("de-DE");
 }
+/** Führt fn für alle Elemente mit höchstens `concurrency` parallelen Aufrufen aus. */
+async function runPool(items, concurrency, fn, stop) {
+    let next = 0;
+    const worker = async () => {
+        while (next < items.length && !stop?.()) {
+            await fn(items[next++]);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+}
 // ---------------------------------------------------------------------------
 // DMS (Browser-Session, daher ohne Authorization-Header)
 // ---------------------------------------------------------------------------
@@ -654,7 +763,9 @@ async function fetchCategories(repoId) {
         .sort((a, b) => a.name.localeCompare(b.name, "de"));
 }
 // ---------------------------------------------------------------------------
-// Darstellung
+// Darstellung - das Grundgerüst wird nur beim Laden aufgebaut; danach werden
+// nur einzelne Zeilen, die Auftrags-Liste und die Fußzeile aktualisiert, damit
+// Suchfeld, Scrollposition und Buttons während der Arbeit bedienbar bleiben.
 // ---------------------------------------------------------------------------
 let currentForm;
 let mountedRoot;
@@ -677,23 +788,24 @@ function mountContent(form) {
     const term = mountedRoot?.querySelector(".ddd-filter")?.value ?? "";
     host.innerHTML = `${styles}<div data-ddd-root>${currentContent}</div>`;
     mountedRoot = host.querySelector("[data-ddd-root]") ?? undefined;
-    if (mountedRoot) {
-        const search = mountedRoot.querySelector(".ddd-filter");
-        if (search && term) {
-            search.value = term;
-            applyFilter(mountedRoot);
-        }
-        bindEvents(mountedRoot);
+    if (!mountedRoot)
+        return;
+    const search = mountedRoot.querySelector(".ddd-filter");
+    if (search && term) {
+        search.value = term;
     }
+    bindEvents(mountedRoot);
+    // Dynamische Teile auf den aktuellen Stand bringen (z.B. nach Neuzeichnen durch Formio).
+    categories.forEach((_, index) => updateRow(index));
+    updateJobs();
+    updateHeader();
+    applyFilter(mountedRoot);
 }
 function showResult(content) {
     currentContent = content;
     if (currentForm) {
         mountContent(currentForm);
     }
-}
-function rerender() {
-    showResult(renderCategories());
 }
 function renderLoading() {
     return `
@@ -712,61 +824,33 @@ function renderError(message) {
   </div>`;
 }
 function renderCount(category) {
+    const job = category.jobId ? jobs.find((j) => j.id === category.jobId) : undefined;
+    const busy = job ? `<span class="ddd-busy">${job.phase === "deleting" ? "wird gelöscht…" : "in Auftrag #" + job.id}</span>` : "";
     if (category.counting) {
-        return `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>`;
+        return `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>${busy}`;
     }
     if (category.error) {
-        return `<span class="ddd-err" title="${escapeHtml(category.error)}">Fehler</span>`;
+        return `<span class="ddd-err" title="${escapeHtml(category.error)}">Fehler</span>${busy}`;
     }
-    return category.count === undefined ? `<span class="ddd-muted">–</span>` : formatNumber(category.count);
+    return (category.count === undefined ? `<span class="ddd-muted">–</span>` : formatNumber(category.count)) + busy;
 }
 function renderRow(category, index) {
     const search = `${category.name} ${category.key}`.toLowerCase();
-    const disabled = busy || category.count === 0 ? "disabled" : "";
     return `
-      <tr data-search="${escapeHtml(search)}">
+      <tr data-search="${escapeHtml(search)}" data-ddd-row="${index}">
         <td class="ddd-nr" data-ddd-nr>${index + 1}</td>
         <td><span class="ddd-name">${escapeHtml(category.name)}</span><div class="ddd-id">${escapeHtml(category.key)}</div></td>
-        <td class="ddd-num">${renderCount(category)}</td>
+        <td class="ddd-num" data-ddd-count-cell>${renderCount(category)}</td>
         <td class="ddd-action">
-          <button type="button" class="btn btn-sm btn-outline-secondary" data-ddd-count="${index}" ${busy ? "disabled" : ""}>Zählen</button>
-          <button type="button" class="btn btn-sm btn-outline-danger" data-ddd-delete="${index}" ${disabled}>Löschen…</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-ddd-count="${index}">Zählen</button>
+          <button type="button" class="btn btn-sm btn-outline-danger" data-ddd-delete="${index}">Löschen…</button>
         </td>
       </tr>`;
 }
-function renderPanel() {
-    if (progress) {
-        const percent = progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
-        return `
-      <div class="ddd-panel">
-        <strong>${escapeHtml(progress.title)}</strong>
-        <div class="progress"><div class="progress-bar progress-bar-striped progress-bar-animated bg-danger" style="width: ${percent}%">${percent}%</div></div>
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-          <span>${escapeHtml(progress.text)}</span>
-          <button type="button" class="btn btn-sm btn-outline-secondary" data-ddd-cancel ${cancelRequested ? "disabled" : ""}>${cancelRequested ? "Wird abgebrochen…" : "Abbrechen"}</button>
-        </div>
-      </div>`;
-    }
-    if (lastSummary) {
-        return `
-      <div class="ddd-panel">
-        <span>${escapeHtml(lastSummary)}</span>
-        ${lastLog.length ? `<button type="button" class="btn btn-sm btn-outline-secondary ms-2" data-ddd-log>Protokoll herunterladen (CSV)</button>` : ""}
-      </div>`;
-    }
-    return "";
-}
-function renderCategories() {
+function renderShell() {
     const rows = categories.length
         ? categories.map(renderRow).join("")
         : `<tr><td colspan="4" class="ddd-muted">Keine Kategorien vorhanden.</td></tr>`;
-    const counted = categories.filter((c) => c.count !== undefined);
-    const total = counted.reduce((sum, c) => sum + (c.count ?? 0), 0);
-    const totalText = counted.length === categories.length && categories.length
-        ? `${formatNumber(total)} Dokumente insgesamt`
-        : counted.length
-            ? `${formatNumber(total)} Dokumente in ${counted.length} gezählten Kategorien`
-            : "Anzahlen noch nicht ermittelt";
     return `
   <div class="ddd-section">
     <div class="ddd-header">
@@ -776,14 +860,14 @@ function renderCategories() {
       </div>
       <div class="ddd-controls">
         <input type="search" class="form-control form-control-sm ddd-filter" placeholder="Kategorie suchen…" aria-label="Kategorie suchen">
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-ddd-count-all ${busy ? "disabled" : ""}>Alle zählen</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-ddd-reload ${busy ? "disabled" : ""}>Aktualisieren</button>
-        <button type="button" class="btn btn-sm btn-danger" data-ddd-delete-all ${busy || !categories.length ? "disabled" : ""}>Alle Dokumente aus allen Kategorien löschen…</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-ddd-count-all>Alle zählen</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-ddd-reload>Aktualisieren</button>
+        <button type="button" class="btn btn-sm btn-danger" data-ddd-delete-all>Alle Dokumente aus allen Kategorien löschen…</button>
       </div>
     </div>
     <div class="ddd-body">
       <div class="ddd-warning"><strong>Achtung:</strong> Gelöschte Dokumente lassen sich über dieses Werkzeug nicht wiederherstellen. Vor jedem Löschen folgen drei Sicherheitsabfragen.</div>
-      ${renderPanel()}
+      <div data-ddd-jobs></div>
       <div class="ddd-table-wrap">
         <table class="table table-sm table-hover table-striped ddd-table">
           <thead>
@@ -792,9 +876,107 @@ function renderCategories() {
           <tbody>${rows}</tbody>
         </table>
       </div>
-      <div class="ddd-footer"><span data-ddd-visible>${categories.length} von ${categories.length} Kategorien angezeigt</span> · ${escapeHtml(totalText)}</div>
+      <div class="ddd-footer"><span data-ddd-visible>${categories.length} von ${categories.length} Kategorien angezeigt</span> · <span data-ddd-total></span></div>
     </div>
   </div>`;
+}
+function isActive(job) {
+    return job.phase === "collecting" || job.phase === "confirming" || job.phase === "deleting";
+}
+function updateRow(index) {
+    const row = mountedRoot?.querySelector(`tr[data-ddd-row="${index}"]`);
+    const category = categories[index];
+    if (!row || !category)
+        return;
+    const cell = row.querySelector("[data-ddd-count-cell]");
+    if (cell)
+        cell.innerHTML = renderCount(category);
+    const locked = !!category.jobId;
+    const countButton = row.querySelector("button[data-ddd-count]");
+    const deleteButton = row.querySelector("button[data-ddd-delete]");
+    if (countButton)
+        countButton.disabled = locked || !!category.counting;
+    if (deleteButton)
+        deleteButton.disabled = locked || !!category.counting || category.count === 0;
+}
+function updateCategory(category) {
+    updateRow(categories.indexOf(category));
+    updateHeader();
+}
+function updateHeader() {
+    if (!mountedRoot)
+        return;
+    const deleteAll = mountedRoot.querySelector("button[data-ddd-delete-all]");
+    if (deleteAll)
+        deleteAll.disabled = !categories.length || categories.some((c) => c.jobId);
+    const counted = categories.filter((c) => c.count !== undefined);
+    const total = counted.reduce((sum, c) => sum + (c.count ?? 0), 0);
+    const totalEl = mountedRoot.querySelector("[data-ddd-total]");
+    if (totalEl) {
+        totalEl.textContent = counted.length === categories.length && categories.length
+            ? `${formatNumber(total)} Dokumente insgesamt`
+            : counted.length
+                ? `${formatNumber(total)} Dokumente in ${counted.length} gezählten Kategorien`
+                : "Anzahlen noch nicht ermittelt";
+    }
+}
+function renderJob(job) {
+    const percent = job.total ? Math.round((job.done / job.total) * 100) : 0;
+    const active = isActive(job);
+    const barClass = job.phase === "collecting"
+        ? "bg-secondary"
+        : job.phase === "done" ? "bg-success" : job.phase === "deleting" ? "bg-danger" : "bg-warning";
+    const buttons = [
+        active && job.phase !== "confirming"
+            ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-ddd-cancel="${job.id}" ${job.cancelRequested ? "disabled" : ""}>${job.cancelRequested ? "Wird abgebrochen…" : "Abbrechen"}</button>`
+            : "",
+        !active && job.log.length
+            ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-ddd-log="${job.id}">Protokoll (CSV)</button>`
+            : "",
+        !active ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-ddd-close="${job.id}" title="Ausblenden">×</button>` : "",
+    ].join(" ");
+    return `
+    <div class="ddd-panel">
+      <div class="ddd-panel-head"><strong>#${job.id} ${escapeHtml(job.title)}</strong><span>${buttons}</span></div>
+      ${active || job.total ? `<div class="progress"><div class="progress-bar ${active ? "progress-bar-striped progress-bar-animated" : ""} ${barClass}" style="width: ${percent}%">${percent}%</div></div>` : ""}
+      <div class="ddd-panel-text">${escapeHtml(job.text)}</div>
+    </div>`;
+}
+function bindJobEvents(container) {
+    container.querySelectorAll("button[data-ddd-cancel]").forEach((button) => button.addEventListener("click", () => {
+        const job = jobs.find((j) => j.id === Number(button.dataset.dddCancel));
+        if (job) {
+            job.cancelRequested = true;
+            updateJobs();
+        }
+    }));
+    container.querySelectorAll("button[data-ddd-log]").forEach((button) => button.addEventListener("click", () => {
+        const job = jobs.find((j) => j.id === Number(button.dataset.dddLog));
+        if (job)
+            downloadLog(job);
+    }));
+    container.querySelectorAll("button[data-ddd-close]").forEach((button) => button.addEventListener("click", () => {
+        jobs = jobs.filter((j) => j.id !== Number(button.dataset.dddClose));
+        updateJobs();
+    }));
+}
+function updateJobs() {
+    const container = mountedRoot?.querySelector("[data-ddd-jobs]");
+    if (!container)
+        return;
+    container.innerHTML = jobs.map(renderJob).join("");
+    bindJobEvents(container);
+}
+// Auftrags-Liste gedrosselt neu zeichnen (Fortschritt pro Dokument).
+let jobsRenderPending = false;
+function scheduleJobsUpdate() {
+    if (jobsRenderPending)
+        return;
+    jobsRenderPending = true;
+    setTimeout(() => {
+        jobsRenderPending = false;
+        updateJobs();
+    }, RENDER_INTERVAL_MS);
 }
 function applyFilter(root) {
     const term = root.querySelector(".ddd-filter")?.value.trim().toLowerCase() ?? "";
@@ -833,40 +1015,34 @@ function bindEvents(root) {
     root.querySelector("button[data-ddd-count-all]")?.addEventListener("click", () => countCategories(categories));
     root.querySelectorAll("button[data-ddd-delete]").forEach((button) => button.addEventListener("click", () => deleteFlow([categories[Number(button.dataset.dddDelete)]], false)));
     root.querySelector("button[data-ddd-delete-all]")?.addEventListener("click", () => deleteFlow(categories, true));
-    root.querySelector("button[data-ddd-cancel]")?.addEventListener("click", () => {
-        cancelRequested = true;
-        rerender();
-    });
-    root.querySelector("button[data-ddd-log]")?.addEventListener("click", downloadLog);
 }
 // ---------------------------------------------------------------------------
-// Zählen
+// Zählen (parallel über die Kategorien)
 // ---------------------------------------------------------------------------
-async function countCategories(targets) {
-    if (busy)
-        return;
-    busy = true;
+async function countCategory(category) {
+    category.counting = true;
+    category.error = undefined;
+    updateCategory(category);
     try {
-        for (const category of targets.filter(Boolean)) {
-            category.counting = true;
-            category.error = undefined;
-            rerender();
-            try {
-                category.count = (await (0, getDocumentIdsByCategory_1.getDocumentIdsByCategory)(BASE_URI, undefined, repositoryId, category.key)).length;
-            }
-            catch (error) {
-                category.error = getErrorMessage(error);
-                logger.error(`Zählen von „${category.name}“ fehlgeschlagen: ${category.error}`);
-            }
-            finally {
-                category.counting = false;
-            }
-        }
+        const ids = await (0, getDocumentIdsByCategory_1.getDocumentIdsByCategory)(BASE_URI, undefined, repositoryId, category.key);
+        category.count = ids.length;
+        return ids;
+    }
+    catch (error) {
+        category.error = getErrorMessage(error);
+        logger.error(`Zählen von „${category.name}“ fehlgeschlagen: ${category.error}`);
+        throw error;
     }
     finally {
-        busy = false;
-        rerender();
+        category.counting = false;
+        updateCategory(category);
     }
+}
+async function countCategories(targets) {
+    const free = targets.filter((c) => c && !c.counting && !c.jobId);
+    await runPool(free, COUNT_CONCURRENCY, async (category) => {
+        await countCategory(category).catch(() => undefined);
+    });
 }
 // ---------------------------------------------------------------------------
 // Sicherheitsabfragen
@@ -894,7 +1070,19 @@ async function ensureSwal() {
         throw new Error("Dialog-Bibliothek (SweetAlert2) konnte nicht geladen werden - ohne Sicherheitsabfragen wird nicht gelöscht.");
     }
 }
+// Swal kann nur einen Dialog gleichzeitig zeigen - Abfragen mehrerer Aufträge
+// deshalb nacheinander.
+let dialogQueue = Promise.resolve();
+function withDialog(fn) {
+    const run = dialogQueue.then(fn, fn);
+    dialogQueue = run.catch(() => undefined);
+    return run;
+}
 function selectionTable(selection) {
+    // Eine Kategorie: nur der Name, mittig - die Anzahl steht schon im Satz darüber.
+    if (selection.length === 1) {
+        return `<p style="text-align:center"><strong>${escapeHtml(selection[0].category.name)}</strong></p>`;
+    }
     const shown = selection.slice(0, 50);
     const rest = selection.length - shown.length;
     return `<div class="ddd-swal-list"><table>${shown
@@ -912,7 +1100,8 @@ async function confirmOverview(selection, total, all) {
       ${selectionTable(selection)}
       <p>Das Löschen kann über dieses Werkzeug nicht rückgängig gemacht werden.</p>
       <input id="ddd-reason" class="swal2-input" placeholder="Löschgrund (Pflicht)" maxlength="250">
-      <label class="ddd-swal-check"><input type="checkbox" id="ddd-ack"> <span>Mir ist bewusst, dass diese Dokumente endgültig gelöscht werden.</span></label>`,
+      <label class="ddd-swal-check"><input type="checkbox" id="ddd-ack"> <span>Mir ist bewusst, dass diese Dokumente endgültig gelöscht werden.</span></label>
+      <label class="ddd-swal-check"><input type="checkbox" id="ddd-takeover" checked> <span>Dokumente, die ein anderer Benutzer in Bearbeitung hat, vorher einchecken (zu mir übernehmen) und dann löschen.</span></label>`,
         showCancelButton: true,
         confirmButtonColor: "#dc3545",
         confirmButtonText: "Weiter",
@@ -929,10 +1118,11 @@ async function confirmOverview(selection, total, all) {
                 Swal.showValidationMessage("Bitte bestätigen, dass die Dokumente endgültig gelöscht werden.");
                 return false;
             }
-            return reason;
+            const takeOver = !!document.getElementById("ddd-takeover")?.checked;
+            return { reason, takeOver };
         },
     });
-    return result.isConfirmed ? String(result.value) : undefined;
+    return result.isConfirmed ? result.value : undefined;
 }
 /** Abfrage 2: Bestätigungstext abtippen. */
 async function confirmPhrase(selection, all) {
@@ -989,161 +1179,192 @@ async function confirmFinal(total, all) {
     return !!result.isConfirmed;
 }
 // ---------------------------------------------------------------------------
-// Löschen
+// Löschen - ein Auftrag je Klick, mehrere Aufträge laufen unabhängig
 // ---------------------------------------------------------------------------
-// Fortschritt höchstens alle 250 ms neu zeichnen - sonst würde bei jedem
-// einzelnen Dokument die komplette Tabelle neu aufgebaut.
-let progressRenderPending = false;
-function setProgress(update) {
-    progress = { title: "", done: 0, total: 0, ok: 0, failed: 0, text: "", ...progress, ...update };
-    if (progressRenderPending)
-        return;
-    progressRenderPending = true;
-    setTimeout(() => {
-        progressRenderPending = false;
-        if (progress)
-            rerender();
-    }, 250);
+function updateJob(job, update) {
+    Object.assign(job, update);
+    scheduleJobsUpdate();
 }
-async function collectSelection(targets) {
+async function collectSelection(job, targets) {
     const selection = [];
-    for (const [index, category] of targets.entries()) {
-        if (cancelRequested)
-            break;
-        setProgress({
-            title: "Dokumente werden ermittelt…",
-            done: index,
-            total: targets.length,
-            text: `Kategorie ${index + 1} von ${targets.length}: ${category.name}`,
-        });
-        const ids = await (0, getDocumentIdsByCategory_1.getDocumentIdsByCategory)(BASE_URI, undefined, repositoryId, category.key, (count) => setProgress({ text: `Kategorie ${index + 1} von ${targets.length}: ${category.name} - ${formatNumber(count)} Dokumente` }));
-        category.count = ids.length;
-        category.error = undefined;
+    let finished = 0;
+    let found = 0;
+    updateJob(job, { done: 0, total: targets.length, text: `0 von ${targets.length} Kategorien ermittelt` });
+    await runPool(targets, COUNT_CONCURRENCY, async (category) => {
+        const ids = await countCategory(category);
+        finished++;
+        found += ids.length;
         if (ids.length) {
             selection.push({ category, ids });
         }
-    }
-    return selection;
+        updateJob(job, {
+            done: finished,
+            text: `${finished} von ${targets.length} Kategorien ermittelt - ${formatNumber(found)} Dokumente`,
+        });
+    }, () => job.cancelRequested);
+    // Reihenfolge wie in der Tabelle (runPool liefert in Fertigstellungs-Reihenfolge).
+    return selection.sort((a, b) => categories.indexOf(a.category) - categories.indexOf(b.category));
 }
-async function deleteOne(category, documentId, reason) {
+// userName des angemeldeten Benutzers - Ziel beim Übernehmen der Bearbeitung.
+let currentUserName;
+function getCurrentUserName() {
+    currentUserName ?? (currentUserName = (0, getCurrentUserInformation_1.getCurrentUserInformation)(BASE_URI).then((response) => {
+        const userName = response.body.userName;
+        if (!userName) {
+            currentUserName = undefined;
+            throw new Error("Angemeldeter Benutzer konnte nicht ermittelt werden.");
+        }
+        return userName;
+    }));
+    return currentUserName;
+}
+/**
+ * Löscht ein Dokument. Schlägt das fehl und hat ein anderer Benutzer das
+ * Dokument in Bearbeitung (Link "startProcessingFromOtherUser"), wird es -
+ * falls gewünscht - erst zum angemeldeten Benutzer übernommen und dann noch
+ * einmal gelöscht. Ohne Fehler kostet das keinen zusätzlichen Aufruf.
+ */
+async function deleteOne(category, documentId, options) {
     const base = { category: category.name, categoryKey: category.key, documentId };
     try {
-        await (0, deleteDmsObject_1.deleteDmsObject)(BASE_URI, undefined, repositoryId, documentId, reason);
+        await (0, deleteDmsObject_1.deleteDmsObject)(BASE_URI, undefined, repositoryId, documentId, options.reason);
         return { ...base, result: "gelöscht", message: "" };
     }
     catch (error) {
-        return { ...base, result: "Fehler", message: getErrorMessage(error) };
+        if (!options.takeOver) {
+            return { ...base, result: "Fehler", message: getErrorMessage(error) };
+        }
+        try {
+            const info = await (0, startProcessingFromOtherUser_1.getDmsObjectProcessingInfo)(BASE_URI, undefined, repositoryId, documentId);
+            const editor = info.systemProperties?.find((p) => p.id === "property_editor");
+            if (!(await (0, startProcessingFromOtherUser_1.startProcessingFromOtherUser)(BASE_URI, undefined, info, await getCurrentUserName()))) {
+                return { ...base, result: "Fehler", message: getErrorMessage(error) };
+            }
+            await (0, deleteDmsObject_1.deleteDmsObject)(BASE_URI, undefined, repositoryId, documentId, options.reason);
+            const from = editor?.displayValue || editor?.value;
+            return { ...base, result: "gelöscht", message: `Vorher eingecheckt${from ? ` (war in Bearbeitung von ${from})` : ""}.` };
+        }
+        catch (retryError) {
+            return { ...base, result: "Fehler", message: `${getErrorMessage(error)} - Einchecken/erneutes Löschen fehlgeschlagen: ${getErrorMessage(retryError)}` };
+        }
     }
 }
-async function runDeletion(selection, reason, total) {
+async function runDeletion(job, selection, options, total) {
     const queue = selection.flatMap((s) => s.ids.map((id) => ({ category: s.category, id })));
-    const log = [];
-    let next = 0;
-    setProgress({ title: "Dokumente werden gelöscht…", done: 0, total, ok: 0, failed: 0, text: `0 von ${formatNumber(total)}` });
-    const worker = async () => {
-        while (next < queue.length && !cancelRequested) {
-            const item = queue[next++];
-            const entry = await deleteOne(item.category, item.id, reason);
-            log.push(entry);
-            if (entry.result === "Fehler") {
-                logger.warn(`${item.id} (${item.category.name}): ${entry.message}`);
-            }
-            const ok = log.filter((e) => e.result === "gelöscht").length;
-            setProgress({
-                done: log.length,
-                ok,
-                failed: log.length - ok,
-                text: `${formatNumber(log.length)} von ${formatNumber(total)} - ${formatNumber(ok)} gelöscht, ${formatNumber(log.length - ok)} Fehler`,
-            });
+    let ok = 0;
+    updateJob(job, { phase: "deleting", done: 0, total, text: `0 von ${formatNumber(total)}` });
+    categories.forEach((_, index) => updateRow(index));
+    await runPool(queue, DELETE_CONCURRENCY, async (item) => {
+        const entry = await deleteOne(item.category, item.id, options);
+        job.log.push(entry);
+        if (entry.result === "gelöscht") {
+            ok++;
+            if (item.category.count)
+                item.category.count--;
         }
-    };
-    await Promise.all(Array.from({ length: DELETE_CONCURRENCY }, worker));
+        else {
+            logger.warn(`${item.id} (${item.category.name}): ${entry.message}`);
+        }
+        updateJob(job, {
+            done: job.log.length,
+            text: `${formatNumber(job.log.length)} von ${formatNumber(total)} - ${formatNumber(ok)} gelöscht, ${formatNumber(job.log.length - ok)} Fehler`,
+        });
+    }, () => job.cancelRequested);
     // Nicht mehr bearbeitete Dokumente (Abbruch) ebenfalls protokollieren.
-    for (const item of queue.slice(next)) {
-        log.push({ category: item.category.name, categoryKey: item.category.key, documentId: item.id, result: "abgebrochen", message: "" });
+    const handled = new Set(job.log.map((e) => e.documentId));
+    for (const item of queue.filter((q) => !handled.has(q.id))) {
+        job.log.push({ category: item.category.name, categoryKey: item.category.key, documentId: item.id, result: "abgebrochen", message: "" });
     }
-    return log;
+}
+function jobSummary(job, total) {
+    const ok = job.log.filter((e) => e.result === "gelöscht").length;
+    const failed = job.log.filter((e) => e.result === "Fehler").length;
+    const cancelled = job.log.filter((e) => e.result === "abgebrochen").length;
+    return `${formatNumber(ok)} von ${formatNumber(total)} Dokument(en) gelöscht`
+        + (failed ? `, ${formatNumber(failed)} Fehler (siehe Protokoll)` : "")
+        + (cancelled ? `, ${formatNumber(cancelled)} wegen Abbruch nicht gelöscht` : "")
+        + ".";
 }
 async function deleteFlow(targets, all) {
-    if (busy || !targets.length || targets.some((t) => !t))
+    const selected = targets.filter(Boolean);
+    if (!selected.length || selected.some((c) => c.jobId || c.counting))
         return;
-    busy = true;
-    cancelRequested = false;
-    lastSummary = "";
+    const job = {
+        id: nextJobId++,
+        title: all ? "Alle Kategorien" : `Kategorie „${selected[0].name}“`,
+        phase: "collecting",
+        done: 0,
+        total: 0,
+        text: "Dokumente werden ermittelt…",
+        cancelRequested: false,
+        log: [],
+    };
+    jobs.unshift(job);
+    selected.forEach((c) => (c.jobId = job.id));
+    selected.forEach(updateCategory);
+    updateJobs();
     try {
         await ensureSwal();
         // Direkt vor den Abfragen frisch ermitteln - gelöscht werden genau diese Ids.
-        const selection = await collectSelection(targets);
-        if (cancelRequested) {
-            lastSummary = "Abgebrochen - es wurde nichts gelöscht.";
+        const selection = await collectSelection(job, selected);
+        if (job.cancelRequested) {
+            updateJob(job, { phase: "cancelled", text: "Abgebrochen - es wurde nichts gelöscht." });
             return;
         }
-        progress = undefined;
-        rerender();
         const total = selection.reduce((sum, s) => sum + s.ids.length, 0);
         if (!total) {
-            await Swal.fire({ icon: "info", title: "Keine Dokumente", text: "In der Auswahl gibt es keine Dokumente." });
+            updateJob(job, { phase: "done", text: "Keine Dokumente vorhanden - nichts zu löschen." });
             return;
         }
-        const reason = await confirmOverview(selection, total, all);
-        if (!reason || !(await confirmPhrase(selection, all)) || !(await confirmFinal(total, all))) {
-            lastSummary = "Abgebrochen - es wurde nichts gelöscht.";
-            return;
-        }
-        logger.info(`Lösche ${total} Dokument(e) aus ${selection.length} Kategorie(n), Grund: ${reason}`);
-        const log = await runDeletion(selection, reason, total);
-        lastLog = log;
-        const ok = log.filter((e) => e.result === "gelöscht").length;
-        const failed = log.filter((e) => e.result === "Fehler").length;
-        const cancelled = log.filter((e) => e.result === "abgebrochen").length;
-        lastSummary = `${formatNumber(ok)} von ${formatNumber(total)} Dokument(en) gelöscht`
-            + (failed ? `, ${formatNumber(failed)} Fehler` : "")
-            + (cancelled ? `, ${formatNumber(cancelled)} wegen Abbruch nicht gelöscht` : "")
-            + ".";
-        for (const s of selection) {
-            s.category.count = log.filter((e) => e.categoryKey === s.category.key && e.result !== "gelöscht").length;
-        }
-        progress = undefined;
-        rerender();
-        await Swal.fire({
-            icon: failed || cancelled ? "warning" : "success",
-            title: failed || cancelled ? "Löschen mit Einschränkungen beendet" : "Löschen abgeschlossen",
-            text: `${lastSummary}${failed ? " Details im Protokoll (CSV)." : ""}`,
+        updateJob(job, { phase: "confirming", text: `${formatNumber(total)} Dokumente gefunden - wartet auf Bestätigung…` });
+        const options = await withDialog(async () => {
+            const value = await confirmOverview(selection, total, all);
+            return value && (await confirmPhrase(selection, all)) && (await confirmFinal(total, all)) ? value : undefined;
         });
+        if (!options) {
+            updateJob(job, { phase: "cancelled", done: 0, total: 0, text: "Abgebrochen - es wurde nichts gelöscht." });
+            return;
+        }
+        logger.info(`Auftrag #${job.id}: lösche ${total} Dokument(e) aus ${selection.length} Kategorie(n), Grund: ${options.reason}, fremde Bearbeitung übernehmen: ${options.takeOver ? "ja" : "nein"}`);
+        await runDeletion(job, selection, options, total);
+        const failed = job.log.some((e) => e.result !== "gelöscht");
+        updateJob(job, { phase: failed ? "error" : "done", text: jobSummary(job, total) });
     }
     catch (error) {
-        lastSummary = `Fehler: ${getErrorMessage(error)}`;
-        logger.error(lastSummary);
-        if (typeof Swal !== "undefined") {
-            await Swal.fire({ icon: "error", title: "Fehler", text: getErrorMessage(error) });
-        }
+        logger.error(`Auftrag #${job.id}: ${getErrorMessage(error)}`);
+        updateJob(job, { phase: "error", text: `Fehler: ${getErrorMessage(error)}` });
     }
     finally {
-        busy = false;
-        cancelRequested = false;
-        progress = undefined;
-        rerender();
+        selected.forEach((c) => (c.jobId = undefined));
+        selected.forEach(updateCategory);
+        updateJobs();
     }
 }
-function downloadLog() {
+function downloadLog(job) {
     const date = new Date().toISOString().slice(0, 10);
-    const fileName = `${[(0, tableExport_1.getTenantName)(), "Loeschprotokoll", date].filter(Boolean).join("_")}.csv`;
+    const fileName = `${[(0, tableExport_1.getTenantName)(), "Loeschprotokoll", `Auftrag${job.id}`, date].filter(Boolean).join("_")}.csv`;
     (0, tableExport_1.downloadBlob)((0, tableExport_1.toCsv)({
         headers: ["Kategorie", "Kategorie-Key", "Dokument-Id", "Ergebnis", "Meldung"],
-        rows: lastLog.map((e) => [e.category, e.categoryKey, e.documentId, e.result, e.message]),
+        rows: job.log.map((e) => [e.category, e.categoryKey, e.documentId, e.result, e.message]),
     }), fileName);
 }
 // ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 async function loadCategories() {
-    if (busy)
+    // Neu laden würde laufende Aufträge von ihren Tabellenzeilen trennen.
+    if (jobs.some(isActive) || categories.some((c) => c.counting)) {
+        await ensureSwal().catch(() => undefined);
+        if (typeof Swal !== "undefined") {
+            await withDialog(() => Swal.fire({ icon: "info", title: "Bitte warten", text: "Aktualisieren ist erst möglich, wenn alle laufenden Vorgänge beendet sind." }));
+        }
         return;
+    }
     showResult(renderLoading());
     try {
         repositoryId = repositoryId || await fetchRepositoryId();
         categories = await fetchCategories(repositoryId);
-        rerender();
+        showResult(renderShell());
     }
     catch (error) {
         logger.error(`Kategorien konnten nicht geladen werden: ${getErrorMessage(error)}`);
