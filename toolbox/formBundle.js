@@ -5590,7 +5590,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // .github/workflows/publish-bundles.yml stempelt bei jeder inhaltlichen
 // Änderung den nächsten Stand (veröffentlichter Stand + 1) ins veröffentlichte
 // Bundle, ohne den Quellcode zu ändern.
-const TOOLBOX_VERSION_COUNTER = 53;
+const TOOLBOX_VERSION_COUNTER = 54;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -5675,14 +5675,31 @@ function describeRollout(target, parts, verb) {
 function resolveDefault(spec) {
     return (spec.default ?? "").replace(/\{origin\}/g, window.location.origin);
 }
+// Variablen mit dem Standardwert "{origin}" (z.B. die Base-URI) ergeben sich
+// aus der Domäne, auf der die Toolbox läuft - sie werden automatisch gesetzt
+// und nicht abgefragt.
+function isAutomatic(spec) {
+    return (spec.default ?? "").trim() === "{origin}";
+}
+function automaticValues(script) {
+    return script.customerVariables
+        .filter(isAutomatic)
+        .map((spec) => ({ key: spec.key, value: resolveDefault(spec), encrypted: spec.encrypted }));
+}
 // Fragt die customerVariables der übergebenen Scripts in EINEM Swal-Dialog
 // ab - gruppiert nach Script, da jedes Script eigene Werte hat. Liefert
 // undefined, wenn der Dialog abgebrochen wurde.
 async function promptCustomerVariables(target, scripts) {
+    // Nur Scripts mit mindestens einer abzufragenden Variable zeigen; die
+    // automatischen Variablen werden unten ohne Dialog ergänzt.
+    const prompted = scripts.filter((script) => script.customerVariables.some((spec) => !isAutomatic(spec)));
+    if (prompted.length === 0) {
+        return new Map(scripts.map((script) => [script.name, automaticValues(script)]));
+    }
     const groups = scripts
         .map((script, scriptIndex) => {
         const fields = script.customerVariables
-            .map((spec, varIndex) => `
+            .map((spec, varIndex) => isAutomatic(spec) ? "" : `
 <div class="tbx-cv-field">
   <label class="tbx-cv-label" for="tbx-cv-${scriptIndex}-${varIndex}">${escapeHtml(spec.label)}</label>
   <input id="tbx-cv-${scriptIndex}-${varIndex}" class="swal2-input tbx-cv-input" type="${spec.encrypted ? "password" : "text"}"
@@ -5690,6 +5707,8 @@ async function promptCustomerVariables(target, scripts) {
   ${spec.description ? `<div class="tbx-cv-desc">${escapeHtml(spec.description)}</div>` : ""}
 </div>`)
             .join("");
+        if (!fields.trim())
+            return "";
         return `
 <fieldset class="tbx-cv-group">
   <legend class="tbx-cv-legend">Script: ${escapeHtml(script.name)}</legend>
@@ -5720,6 +5739,10 @@ ${groups}`,
             for (const [scriptIndex, script] of scripts.entries()) {
                 const scriptValues = [];
                 for (const [varIndex, spec] of script.customerVariables.entries()) {
+                    if (isAutomatic(spec)) {
+                        scriptValues.push({ key: spec.key, value: resolveDefault(spec), encrypted: spec.encrypted });
+                        continue;
+                    }
                     const input = document.getElementById(`tbx-cv-${scriptIndex}-${varIndex}`);
                     const value = input?.value.trim() ?? "";
                     if (value === "") {

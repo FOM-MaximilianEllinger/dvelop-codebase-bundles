@@ -474,7 +474,7 @@ let logger = (0, logger_1.getLogger)();
  * .github/workflows/publish-bundles.yml stempelt beim Publish in BEIDE Bundles
  * denselben nächsten Stand (der Wert hier ist nur ein Platzhalter).
  */
-const VERSION_COUNTER = 2;
+const VERSION_COUNTER = 3;
 const APP = "classcon-documentreader";
 const SQL_QUERY = `SELECT
   YEAR(doc.LogTime) AS Year,
@@ -561,8 +561,11 @@ function columnNames(data) {
 }
 function toRow(entry, columns) {
     let record;
-    if (Array.isArray(entry) && columns) {
-        record = Object.fromEntries(columns.map((name, i) => [name, entry[i]]));
+    // Format von sqlResult: { headers: [...], rows: [{ cells: [...] }] } -
+    // Werte als Text in derselben Reihenfolge wie headers.
+    const cells = Array.isArray(entry) ? entry : Array.isArray(entry?.cells) ? entry.cells : undefined;
+    if (cells && columns) {
+        record = Object.fromEntries(columns.map((name, i) => [name, cells[i]]));
     }
     else if (entry && typeof entry === "object") {
         record = entry;
