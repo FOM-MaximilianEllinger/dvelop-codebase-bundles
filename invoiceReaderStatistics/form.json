@@ -1,0 +1,14 @@
+{
+  "display": "form",
+  "components": [
+    {
+      "type": "htmlelement",
+      "tag": "div",
+      "key": "result",
+      "label": "Rechnungsleser-Auswertung",
+      "input": false,
+      "tableView": false,
+      "content": "<p>Auswertung wird geladen…</p>"
+    }
+  ]
+}

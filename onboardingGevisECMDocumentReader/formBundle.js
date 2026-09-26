@@ -2553,7 +2553,7 @@ const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-do
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 18;
+const VERSION_COUNTER = 19;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -3857,7 +3857,7 @@ const styles = `
   .onb-key { display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 12px; }
   .onb-field { display: flex; flex-direction: column; gap: 2px; }
   .onb-field label { font-size: 0.75em; font-weight: 600; color: #495057; margin: 0; }
-  .onb-key-input { width: 340px; max-width: 100%; }
+  .onb-key-input { flex: 1 1 340px; min-width: 0; }
   .onb-key .btn, .onb-actions .btn { white-space: nowrap; }
   .onb-message { border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.9em; }
   .onb-message-info { background: #e7f1ff; color: #084298; border: 1px solid #b6d4fe; }
@@ -3882,15 +3882,15 @@ const styles = `
   .onb-badge-error { background: #f8d7da; color: #842029; }
   .onb-action { text-align: right; white-space: nowrap; }
   .onb-actions { display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
-  .onb-config { max-width: 640px; }
+  .onb-config { width: 100%; }
   .onb-config-block { margin-bottom: 18px; }
   .onb-config-block[hidden] { display: none; }
   .onb-company-wrap { overflow-x: auto; }
-  .onb-company-table { border-collapse: collapse; font-size: 0.85em; }
+  .onb-company-table { border-collapse: collapse; font-size: 0.85em; width: 100%; }
   .onb-company-table th { text-align: left; padding: 2px 4px; white-space: nowrap; font-weight: 600; }
   .onb-company-table td { padding: 2px; }
-  .onb-company-table input { min-width: 110px; }
-  .onb-veo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 12px; max-width: 720px; }
+  .onb-company-table input { min-width: 110px; width: 100%; }
+  .onb-veo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 12px; }
   .onb-veo-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85em; margin: 0; }
   .onb-veo-wide { grid-column: 1 / -1; }
   .onb-config-title { font-weight: 600; margin-bottom: 2px; }

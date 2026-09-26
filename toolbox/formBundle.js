@@ -5481,6 +5481,23 @@ exports.targetForms = [
         formDefinitionPath: "invoiceReaderCleanup/form.json",
     },
     {
+        type: "combined",
+        id: "invoiceReaderStatistics",
+        name: "Rechnungsleser-Auswertung",
+        description: "Zeigt, wie viele Rechnungen der Rechnungsleser je Mandant und Monat verarbeitet hat – mit Filter und Export als CSV/Excel.",
+        formId: "cc9d6f5c-b26d-53d9-b61d-a279ee3ad34c",
+        bundlePath: "invoiceReaderStatistics/formBundle.js",
+        formDefinitionPath: "invoiceReaderStatistics/form.json",
+        scripts: [
+            {
+                name: "Rechnungsleser-Auswertung",
+                description: "Zeigt, wie viele Rechnungen der Rechnungsleser je Mandant und Monat verarbeitet hat – mit Filter und Export als CSV/Excel.",
+                bundlePath: "invoiceReaderStatistics/scripts/script.js",
+                customerVariables: [{ "key": "baseUri", "label": "Base-URI", "encrypted": false, "description": "Adresse des Mandanten, dessen Rechnungsleser ausgewertet wird.", "default": "{origin}" }, { "key": "apiKey", "label": "API-Key", "encrypted": true, "description": "API-Key eines Benutzers mit Zugriff auf den Webindex-Designer des Rechnungslesers." }],
+            },
+        ],
+    },
+    {
         type: "form",
         id: "onboardingGevisECMDocumentReader",
         name: "Onboarding gevis ECM Rechnungsleser",
@@ -5573,7 +5590,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // .github/workflows/publish-bundles.yml stempelt bei jeder inhaltlichen
 // Änderung den nächsten Stand (veröffentlichter Stand + 1) ins veröffentlichte
 // Bundle, ohne den Quellcode zu ändern.
-const TOOLBOX_VERSION_COUNTER = 52;
+const TOOLBOX_VERSION_COUNTER = 53;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
