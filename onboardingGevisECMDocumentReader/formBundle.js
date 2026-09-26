@@ -2,6 +2,128 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
+/***/ "../../helper/classcon-documentreader/getFeatures.ts"
+/*!***********************************************************!*\
+  !*** ../../helper/classcon-documentreader/getFeatures.ts ***!
+  \***********************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getDocumentReaderFeatures = getDocumentReaderFeatures;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Liefert die Features (Kacheln) des Rechnungslesers - analog zu
+ * classconorderconfirmations/getFeatures. Die URL eines Features endet auf
+ * die Subscription-ID.
+ *
+ * @param baseUri - The base URI of the API.
+ * @param token - Optional bearer token; ohne Token wird die Browser-Session genutzt.
+ */
+async function getDocumentReaderFeatures(baseUri, token) {
+    const url = `${baseUri}/classcon-documentreader/getFeatures`;
+    const headers = {
+        ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Accept-Language": "de-DE",
+    };
+    const options = {
+        method: "GET",
+        headers,
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/classcon-documentreader/setDocumentProcessingConfiguration.ts"
+/*!**********************************************************************************!*\
+  !*** ../../helper/classcon-documentreader/setDocumentProcessingConfiguration.ts ***!
+  \**********************************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.setDocumentProcessingConfiguration = setDocumentProcessingConfiguration;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Schaltet eine Verarbeitungs-Einstellung des Rechnungslesers ein oder aus -
+ * wie die Oberfläche: POST /classcon-documentreader/Configuration/DocumentProcessing
+ * als Formulardaten
+ *   subscriptionID=<id>&configuration={"Name":"<name>","Active":<true|false>}
+ * z.B. Name "DuplicateCheck" für die Dublettenprüfung.
+ *
+ * @param baseUri - The base URI of the API endpoint.
+ * @param token - Optional bearer token; ohne Token wird die Browser-Session genutzt.
+ * @param subscriptionId - Subscription-ID des Rechnungslesers.
+ * @param name - Name der Einstellung, z.B. "DuplicateCheck".
+ * @param active - Einstellung aktivieren (true) oder deaktivieren (false).
+ */
+async function setDocumentProcessingConfiguration(baseUri, token, subscriptionId, name, active) {
+    const url = `${baseUri}/classcon-documentreader/Configuration/DocumentProcessing`;
+    const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    };
+    const body = new URLSearchParams({
+        subscriptionID: subscriptionId,
+        configuration: JSON.stringify({ Name: name, Active: active }),
+    }).toString();
+    const options = {
+        method: "POST",
+        headers,
+        body,
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/dash/getApps.ts"
+/*!************************************!*\
+  !*** ../../helper/dash/getApps.ts ***!
+  \************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Target = void 0;
+exports.getApps = getApps;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+var Target;
+(function (Target) {
+    Target["Blank"] = "_blank";
+    Target["DapiNavigate"] = "dapi_navigate";
+    Target["Empty"] = "";
+})(Target || (exports.Target = Target = {}));
+/**
+ * Retrieves the list of available apps from the dashboard API.
+ *
+ * @param baseUri - The base URI of the API endpoint.
+ * @param token - The bearer token used for authentication.
+ * @returns A promise that resolves to an `ApiResponse` containing the `GetApps` data.
+ */
+async function getApps(baseUri, token) {
+    const url = `${baseUri}/dash/api/appsmenu`;
+    const headers = {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/json",
+        "Content-Type": "application/json; charset=utf-8",
+    };
+    const options = {
+        method: "GET",
+        headers
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
 /***/ "../../helper/dms/createSourceMapping.ts"
 /*!***********************************************!*\
   !*** ../../helper/dms/createSourceMapping.ts ***!
@@ -144,155 +266,6 @@ async function getRepositories(baseUri, token) {
 
 /***/ },
 
-/***/ "../../helper/dmsConfig/createEvent.ts"
-/*!*********************************************!*\
-  !*** ../../helper/dmsConfig/createEvent.ts ***!
-  \*********************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.EventType = void 0;
-exports.createEvent = createEvent;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-var EventType;
-(function (EventType) {
-    EventType["PreSearch"] = "presearch";
-    EventType["PostSearch"] = "postsearch";
-    EventType["ValidateImport"] = "validateimport";
-    EventType["PreImport"] = "preimport";
-    EventType["PostImport"] = "postimport";
-    EventType["PreNewVersion"] = "prenewversion";
-    EventType["PostNewVersion"] = "postnewversion";
-    EventType["ValidateUpdateProperties"] = "validateupdateproperties";
-    EventType["PreUpdateProperties"] = "preupdateproperties";
-    EventType["PostUpdateProperties"] = "postupdateproperties";
-    EventType["PreLink"] = "prelink";
-    EventType["PostLink"] = "postlink";
-    EventType["PreDelete"] = "predelete";
-    EventType["PostDelete"] = "postdelete";
-    EventType["PreTransfer"] = "pretransfer";
-    EventType["PostTransfer"] = "posttransfer";
-    EventType["PreGeneratedDocument"] = "pregenerateddocument";
-    EventType["PostGeneratedDocument"] = "postgenerateddocument";
-    EventType["PreReleaseDocument"] = "prereleasedocument";
-    EventType["PostReleaseDocument"] = "postreleasedocument";
-})(EventType || (exports.EventType = EventType = {}));
-/**
- * Creates an event in the DMS configuration for a specified repository.
- *
- * @template T - The type of the response expected from the API.
- * @param {string} baseUri - The base URI of the DMS configuration API.
- * @param {string} token - The authorization token to access the API.
- * @param {string} repositoryId - The ID of the repository where the event will be created.
- * @param {EventType} eventType - The type of the event to be created.
- * @param {Event} event - The event data to be sent in the request body.
- * @returns {Promise<ApiResponse<T>>} A promise that resolves to the API response of type `T`.
- */
-async function createEvent(baseUri, token, repositoryId, eventType, event) {
-    const url = `${baseUri}/dmsconfig/r/${repositoryId}/events/${eventType}`;
-    const headers = {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-    };
-    const options = {
-        method: "POST",
-        headers,
-        body: JSON.stringify(event)
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
-}
-
-
-/***/ },
-
-/***/ "../../helper/dmsConfig/getEvents.ts"
-/*!*******************************************!*\
-  !*** ../../helper/dmsConfig/getEvents.ts ***!
-  \*******************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.Key = exports.HandleResponse = void 0;
-exports.getEvents = getEvents;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-var HandleResponse;
-(function (HandleResponse) {
-    HandleResponse["None"] = "NONE";
-    HandleResponse["Status"] = "STATUS";
-    HandleResponse["StatusAndBody"] = "STATUS_AND_BODY";
-})(HandleResponse || (exports.HandleResponse = HandleResponse = {}));
-var Key;
-(function (Key) {
-    Key["Category"] = "CATEGORY";
-})(Key || (exports.Key = Key = {}));
-/**
- * Fetches the events for a specific repository from the DMS configuration.
- *
- * @param baseUri - The base URI of the DMS configuration API.
- * @param token - The authorization token to access the API.
- * @param repositoryId - The ID of the repository for which events are to be retrieved.
- * @returns A promise that resolves to an `ApiResponse` containing the events data.
- */
-async function getEvents(baseUri, token, repositoryId) {
-    const url = `${baseUri}/dmsconfig/r/${repositoryId}/events`;
-    const headers = {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-    };
-    const options = {
-        method: "GET",
-        headers,
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
-}
-
-
-/***/ },
-
-/***/ "../../helper/dmsConfig/updateEvent.ts"
-/*!*********************************************!*\
-  !*** ../../helper/dmsConfig/updateEvent.ts ***!
-  \*********************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.updateEvent = updateEvent;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-/**
- * Aktualisiert einen bestehenden Webhook (PUT auf dessen "_links.self" aus
- * getEvents).
- *
- * @param baseUri - The base URI of the DMS configuration API.
- * @param token - The authorization token to access the API.
- * @param existing - Bestehender Webhook aus getEvents.
- * @param event - Neue Einstellungen des Webhooks.
- */
-async function updateEvent(baseUri, token, existing, event) {
-    const href = existing._links?.self?.href;
-    if (!href) {
-        throw new Error("Für den Webhook liefert die API keinen Link zum Aktualisieren.");
-    }
-    const headers = {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        Accept: "application/json",
-        "Content-Type": "application/json",
-    };
-    const options = {
-        method: "PUT",
-        headers,
-        body: JSON.stringify({ ...event, id: existing.id }),
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(new URL(href, baseUri).toString(), options);
-}
-
-
-/***/ },
-
 /***/ "../../helper/emailinbound/createEmailinboundProfile.ts"
 /*!**************************************************************!*\
   !*** ../../helper/emailinbound/createEmailinboundProfile.ts ***!
@@ -389,6 +362,87 @@ async function updateEmailinboundProfile(baseUri, token, existing, payload) {
         method: "PUT",
         headers,
         body: JSON.stringify(payload),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/eventbridge/setDmspostimport.ts"
+/*!****************************************************!*\
+  !*** ../../helper/eventbridge/setDmspostimport.ts ***!
+  \****************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.setDmspostimport = setDmspostimport;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Enables the "dmspostimport" event in the EventBridge configuration by sending a PATCH request.
+ *
+ * @template T - The expected response type.
+ * @param baseUri - The base URI of the API endpoint.
+ * @param token - The bearer token used for authorization.
+ * @returns A promise that resolves to an `ApiResponse<T>` containing the API response.
+ */
+async function setDmspostimport(baseUri, token, activated) {
+    const url = `${baseUri}/eventbridge/config/events`;
+    const headers = {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    };
+    const body = {
+        events: [
+            { id: "dmspostimport", enabled: activated },
+        ]
+    };
+    const options = {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(body),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/eventbridge/synchronizeEventbride.ts"
+/*!*********************************************************!*\
+  !*** ../../helper/eventbridge/synchronizeEventbride.ts ***!
+  \*********************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.synchronizeEventbride = synchronizeEventbride;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Synchronizes the Eventbridge configuration for a given repository by sending a refresh request.
+ *
+ * @template T - The expected response type.
+ * @param baseUri - The base URI of the API endpoint.
+ * @param token - The bearer token used for authentication.
+ * @param repositoryId - The ID of the repository to synchronize.
+ * @returns A promise that resolves to an `ApiResponse<T>` containing the response data.
+ */
+async function synchronizeEventbride(baseUri, token, repositoryId) {
+    const url = `${baseUri}/eventbridge/config/dms/refresh`;
+    const headers = {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    };
+    const body = {
+        id: repositoryId,
+    };
+    const options = {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
     };
     return await (0, performHttpRequest_1.performHttpRequest)(url, options);
 }
@@ -805,6 +859,37 @@ async function performHttpRequest(url, options) {
 
 /***/ },
 
+/***/ "../../helper/scripting/createScript.ts"
+/*!**********************************************!*\
+  !*** ../../helper/scripting/createScript.ts ***!
+  \**********************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.createScript = createScript;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+async function createScript(baseUri, token, name) {
+    const url = `${baseUri}/scripting/script`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const body = {
+        name: name
+    };
+    const options = {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
 /***/ "../../helper/scripting/getAllScripts.ts"
 /*!***********************************************!*\
   !*** ../../helper/scripting/getAllScripts.ts ***!
@@ -852,34 +937,6 @@ async function getScriptVersion(baseUri, token, scriptId) {
     const options = {
         method: "GET",
         headers,
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
-}
-
-
-/***/ },
-
-/***/ "../../helper/scripting/importScript.ts"
-/*!**********************************************!*\
-  !*** ../../helper/scripting/importScript.ts ***!
-  \**********************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.importScript = importScript;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-async function importScript(baseUri, token, payload) {
-    const url = `${baseUri}/scripting/import`;
-    const headers = {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-    };
-    const options = {
-        method: "PUT",
-        headers,
-        body: JSON.stringify(payload),
     };
     return await (0, performHttpRequest_1.performHttpRequest)(url, options);
 }
@@ -1441,7 +1498,6 @@ const createBatchProfile_1 = __webpack_require__(/*! ../../../../helper/inbound/
 const updateBatchProfile_1 = __webpack_require__(/*! ../../../../helper/inbound/updateBatchProfile */ "../../helper/inbound/updateBatchProfile.ts");
 const updateEmailinboundProfile_1 = __webpack_require__(/*! ../../../../helper/emailinbound/updateEmailinboundProfile */ "../../helper/emailinbound/updateEmailinboundProfile.ts");
 const getMappingContainers_1 = __webpack_require__(/*! ../../../../helper/dms/getMappingContainers */ "../../helper/dms/getMappingContainers.ts");
-const updateEvent_1 = __webpack_require__(/*! ../../../../helper/dmsConfig/updateEvent */ "../../helper/dmsConfig/updateEvent.ts");
 const getScriptVersion_1 = __webpack_require__(/*! ../../../../helper/scripting/getScriptVersion */ "../../helper/scripting/getScriptVersion.ts");
 const patchScript_1 = __webpack_require__(/*! ../../../../helper/scripting/patchScript */ "../../helper/scripting/patchScript.ts");
 const getGroups_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getGroups */ "../../helper/identityprovider/getGroups.ts");
@@ -1455,16 +1511,21 @@ const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExpo
 const getRepositories_1 = __webpack_require__(/*! ../../../../helper/dms/getRepositories */ "../../helper/dms/getRepositories.ts");
 const createSourceMapping_1 = __webpack_require__(/*! ../../../../helper/dms/createSourceMapping */ "../../helper/dms/createSourceMapping.ts");
 const getAllScripts_1 = __webpack_require__(/*! ../../../../helper/scripting/getAllScripts */ "../../helper/scripting/getAllScripts.ts");
-const importScript_1 = __webpack_require__(/*! ../../../../helper/scripting/importScript */ "../../helper/scripting/importScript.ts");
-const getEvents_1 = __webpack_require__(/*! ../../../../helper/dmsConfig/getEvents */ "../../helper/dmsConfig/getEvents.ts");
-const createEvent_1 = __webpack_require__(/*! ../../../../helper/dmsConfig/createEvent */ "../../helper/dmsConfig/createEvent.ts");
+const createScript_1 = __webpack_require__(/*! ../../../../helper/scripting/createScript */ "../../helper/scripting/createScript.ts");
+const setDmspostimport_1 = __webpack_require__(/*! ../../../../helper/eventbridge/setDmspostimport */ "../../helper/eventbridge/setDmspostimport.ts");
+const synchronizeEventbride_1 = __webpack_require__(/*! ../../../../helper/eventbridge/synchronizeEventbride */ "../../helper/eventbridge/synchronizeEventbride.ts");
+const getApps_1 = __webpack_require__(/*! ../../../../helper/dash/getApps */ "../../helper/dash/getApps.ts");
+const getFeatures_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/getFeatures */ "../../helper/classcon-documentreader/getFeatures.ts");
+const setDocumentProcessingConfiguration_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/setDocumentProcessingConfiguration */ "../../helper/classcon-documentreader/setDocumentProcessingConfiguration.ts");
 const getCurrentUserInformation_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getCurrentUserInformation */ "../../helper/identityprovider/getCurrentUserInformation.ts");
 const createAPIKey_1 = __webpack_require__(/*! ../../../../helper/identityprovider/createAPIKey */ "../../helper/identityprovider/createAPIKey.ts");
 const getAllUsers_1 = __webpack_require__(/*! ../../../../helper/identityprovider/getAllUsers */ "../../helper/identityprovider/getAllUsers.ts");
 const batchProfileMail_json_1 = __importDefault(__webpack_require__(/*! ../data/batchProfileMail.json */ "./src/data/batchProfileMail.json"));
 const batchProfileScan_json_1 = __importDefault(__webpack_require__(/*! ../data/batchProfileScan.json */ "./src/data/batchProfileScan.json"));
 const webindexDesignerForm_json_1 = __importDefault(__webpack_require__(/*! ../data/webindexDesignerForm.json */ "./src/data/webindexDesignerForm.json"));
-const scriptGutschriftenVerschieben_json_1 = __importDefault(__webpack_require__(/*! ../data/scriptGutschriftenVerschieben.json */ "./src/data/scriptGutschriftenVerschieben.json"));
+// Beim Build zuerst aus src/scripts/gutschriftenVerschieben.ts gebaut (siehe
+// "build" in package.json) und hier als Text eingebunden.
+const gutschriftenVerschieben_js_raw_1 = __importDefault(__webpack_require__(/*! ../../dist/scripts/gutschriftenVerschieben.js?raw */ "./dist/scripts/gutschriftenVerschieben.js?raw"));
 /**
  * Onboarding gevis ECM Rechnungsleser (ehemals
  * projects/OnboardingGevisECMDocumentReader - dort als lokales Node-Script
@@ -1474,8 +1535,8 @@ const scriptGutschriftenVerschieben_json_1 = __importDefault(__webpack_require__
  * vorhanden ist (→ auf die Vorlage aktualisieren) und lässt sich einzeln
  * ausführen; gesammelt geht "Alle fehlenden anlegen" bzw. "Alles anlegen /
  * aktualisieren". Nicht aktualisiert werden bestehende Gruppen (Mitglieder
- * blieben sonst nicht erhalten) und die hinterlegten API-Keys in Script
- * (customerVariables) und Webhook.
+ * blieben sonst nicht erhalten) und der hinterlegte API-Key im Skript
+ * (customerVariables).
  *
  * Schritt 1 legt die Berechtigungsgruppe fest (neu anlegen oder vorhandene
  * per Dropdown wählen, direkt in der Zeile des Schritts); Stapelprofile und
@@ -1489,7 +1550,7 @@ const scriptGutschriftenVerschieben_json_1 = __importDefault(__webpack_require__
  *
  * Alle Aufrufe laufen mit dem im Formular eingegebenen (oder hier neu
  * erstellten) API-Key - der wird außerdem beim Neuanlegen im Gutschriften-
- * Script und im Webhook hinterlegt. Der Key wird nirgends im Formular
+ * Skript hinterlegt. Der Key wird nirgends im Formular
  * gespeichert, nur im Speicher dieser Seite.
  *
  * Nicht übernommen: die im alten Script auskommentierten gevis-R-Schritte
@@ -1507,7 +1568,7 @@ const scriptGutschriftenVerschieben_json_1 = __importDefault(__webpack_require__
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 6;
+const VERSION_COUNTER = 7;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -1521,7 +1582,16 @@ const GROUP_FRUEHES_SCANNEN_NAME = "gevis ECM Frühes Scannen";
 const PROFILE_MAIL_NAME = "Frühes Scannen (Mail)";
 const PROFILE_SCAN_NAME = "Frühes Scannen (Scan)";
 const CREDIT_MEMO_SCRIPT_NAME = "Rechnungsleser Gutschriften verschieben";
-const CREDIT_MEMO_CATEGORY_ID = "fc3d3e6d-46f6-4fcd-84e3-db79e14b2751";
+// Eingabeparameter der Aktion - muss zu DOC_ID_INPUT in
+// src/scripts/gutschriftenVerschieben.ts passen.
+const CREDIT_MEMO_INPUT_DOC_ID = "DocId";
+// Werte, die beim Neuanlegen des Skripts hinterlegt werden (aus dem bisherigen
+// Script-Export übernommen); der API-Key kommt aus der Konfigurationsseite.
+const CREDIT_MEMO_VARIABLES = [
+    { key: "categoryCreditMemoGUID", value: "52a84dbc-31bf-4351-9c16-4852dc2e816d", encrypted: false },
+    { key: "fieldDocumentTypeGUID", value: "717f4480-f16c-4838-96a3-f69a01eb41f1", encrypted: false },
+    { key: "fieldDocumentTypeValueMatch", value: "CreditAdvice", encrypted: false },
+];
 const API_KEY_LABEL = "Onboarding Gevis ECM Document Reader";
 const MAILBOXES = [
     { mailbox: "fruehesscannenmail", description: PROFILE_MAIL_NAME, profileName: PROFILE_MAIL_NAME },
@@ -1545,7 +1615,7 @@ const SOURCE_MAPPING = {
         { source: "VatRate1", destination: "8a23cfb1-a13f-40b4-aec9-126b451f3b22", isSystemProperty: false, regexIgnoreCase: false, type: 0 },
         { source: "VatRate2", destination: "81f354c2-a6ef-492a-bbda-a7eefe5bb9dd", isSystemProperty: false, regexIgnoreCase: false, type: 0 },
         { source: "Barcode", destination: "property_document_number", isSystemProperty: true, regexIgnoreCase: false, type: 0 },
-        { source: "DocumentType", destination: "ed5c47ce-716a-4182-986f-dffa4135b7cf", isSystemProperty: false, regexIgnoreCase: false, type: 0 },
+        { source: "DocumentType", destination: "717f4480-f16c-4838-96a3-f69a01eb41f1", isSystemProperty: false, regexIgnoreCase: false, type: 0 },
     ],
 };
 async function ensureSwal() {
@@ -1643,9 +1713,6 @@ async function findCreditMemoScriptId(apiKey) {
     const scripts = (await (0, getAllScripts_1.getAllScripts)(BASE_URI, apiKey)).body ?? [];
     return scripts.find((script) => script.name === CREDIT_MEMO_SCRIPT_NAME)?.id;
 }
-function scriptRunUri(scriptId) {
-    return `${BASE_URI}/scripting/script/${scriptId}/run`;
-}
 // Gruppennamen tolerant vergleichen: Groß-/Kleinschreibung, mehrfache
 // Leerzeichen und unterschiedlich kodierte Umlaute ("ü" als ein Zeichen oder
 // als "u" + Trema) sollen keinen Unterschied machen.
@@ -1700,6 +1767,31 @@ function newGroupBody(name, id, userMembers) {
 // Berechtigungsgruppe aus Schritt 1: neu anlegen (Name frei wählbar) oder
 // eine vorhandene Gruppe verwenden. Sie wird in den Stapelprofilen und
 // Postfächern berechtigt.
+// Eventbridge-Schritt in dieser Sitzung ausgeführt (siehe Schritt "eventbridge").
+let eventbridgeDone = false;
+// Dublettenprüfung in dieser Sitzung ausgeschaltet (siehe Schritt "duplicateCheck").
+let duplicateCheckDisabled = false;
+// Subscription-ID des Rechnungslesers: aus der Kachel "classcon-documentreader/
+// indexing" im App-Menü (wie im bisherigen Onboarding-Script), ersatzweise aus
+// den Features des Rechnungslesers - die URL endet jeweils auf die ID.
+let documentReaderSubscriptionId = "";
+async function findDocumentReaderSubscriptionId(apiKey) {
+    if (documentReaderSubscriptionId) {
+        return documentReaderSubscriptionId;
+    }
+    const fromApps = await (0, getApps_1.getApps)(BASE_URI, apiKey)
+        .then((r) => r.body.widgets?.find((w) => w.id === "classcon-documentreader/indexing")?.target_uri?.split("/").pop())
+        .catch(() => undefined);
+    const fromFeatures = fromApps ? undefined : await (0, getFeatures_1.getDocumentReaderFeatures)(BASE_URI, apiKey)
+        .then((r) => r.body.features?.find((f) => f.url?.includes("classcon-documentreader"))?.url?.split("/").pop())
+        .catch(() => undefined);
+    const subscriptionId = fromApps || fromFeatures;
+    if (!subscriptionId) {
+        throw new Error("Subscription-ID des Rechnungslesers nicht gefunden - ist der Rechnungsleser im Mandanten gebucht?");
+    }
+    documentReaderSubscriptionId = subscriptionId;
+    return subscriptionId;
+}
 let availableGroups = [];
 let groupMode = "new";
 let newGroupName = GROUP_FRUEHES_SCANNEN_NAME;
@@ -1835,29 +1927,6 @@ async function findSourceMapping(apiKey) {
     const repositoryId = await getRepositoryId(apiKey);
     const containers = (await (0, getMappingContainers_1.getMappingContainers)(BASE_URI, apiKey, repositoryId)).body.containers ?? [];
     return { repositoryId, existing: containers.find((c) => c.sourceId === SOURCE_MAPPING.sourceId) };
-}
-async function findCreditMemoWebhookEntry(apiKey, scriptId) {
-    const events = (await (0, getEvents_1.getEvents)(BASE_URI, apiKey, await getRepositoryId(apiKey))).body;
-    const uri = scriptRunUri(scriptId);
-    for (const [eventType, event] of Object.entries(events._embedded ?? {})) {
-        const webhook = (event._embedded?.webhooks ?? []).find((w) => w.uri === uri);
-        if (webhook) {
-            return { eventType, webhook };
-        }
-    }
-    return undefined;
-}
-function creditMemoEvent(scriptId, webhookApiKey) {
-    return {
-        description: "Gutschriften des Rechnungslesers verschieben",
-        uri: scriptRunUri(scriptId),
-        enabled: true,
-        timeout: 10000,
-        retry: false,
-        restrictions: [{ key: "CATEGORY", value: CREDIT_MEMO_CATEGORY_ID }],
-        apiKey: webhookApiKey,
-        handleResponse: "NONE",
-    };
 }
 const steps = [
     {
@@ -2054,62 +2123,86 @@ const steps = [
     },
     {
         id: "creditMemoScript",
-        title: "Script „Gutschriften verschieben“",
-        description: `„${CREDIT_MEMO_SCRIPT_NAME}“ - wird importiert (API-Key und Kategorien werden dabei hinterlegt) bzw. bei einem vorhandenen Script nur der Code aktualisiert; hinterlegte Werte bleiben unverändert.`,
+        title: "Skript „Gutschriften verschieben“",
+        description: `„${CREDIT_MEMO_SCRIPT_NAME}“ als Aktion mit Eingabeparameter „${CREDIT_MEMO_INPUT_DOC_ID}“ - beim Anlegen werden API-Key und Kategorien hinterlegt, bei einem vorhandenen Skript nur Code und Aktion aktualisiert; hinterlegte Werte bleiben unverändert.`,
         async check(apiKey) {
-            return (await findCreditMemoScriptId(apiKey)) ? exists("Vorhanden - Code wird aktualisiert.") : missing("Script fehlt.");
+            return (await findCreditMemoScriptId(apiKey)) ? exists("Vorhanden - Code und Aktion werden aktualisiert.") : missing("Skript fehlt.");
         },
         async run(apiKey) {
-            const scriptId = await findCreditMemoScriptId(apiKey);
-            if (scriptId) {
-                // Nur den Code - customerVariables (u.a. der verschlüsselte API-Key)
-                // werden bei einem vorhandenen Script NIE mitgeschickt.
-                const versionId = (await (0, getScriptVersion_1.getScriptVersion)(BASE_URI, apiKey, scriptId)).body[0]?.id;
-                if (!versionId) {
-                    throw new Error(`Für „${CREDIT_MEMO_SCRIPT_NAME}“ wurde keine Version gefunden.`);
+            let scriptId = await findCreditMemoScriptId(apiKey);
+            const createdNow = !scriptId;
+            if (!scriptId) {
+                scriptId = (await (0, createScript_1.createScript)(BASE_URI, apiKey, CREDIT_MEMO_SCRIPT_NAME)).body.id;
+                if (!scriptId) {
+                    throw new Error(`„${CREDIT_MEMO_SCRIPT_NAME}“ konnte nicht angelegt werden (keine Id).`);
                 }
-                await (0, patchScript_1.patchScript)(BASE_URI, apiKey, scriptId, versionId, { content: scriptGutschriftenVerschieben_json_1.default.content });
-                return "Script-Code aktualisiert.";
             }
-            const script = JSON.parse(JSON.stringify(scriptGutschriftenVerschieben_json_1.default));
-            const apiKeyVariable = script.customerVariables?.find((entry) => entry.key === "apiKey");
-            if (apiKeyVariable) {
-                apiKeyVariable.value = apiKey;
+            const versionId = (await (0, getScriptVersion_1.getScriptVersion)(BASE_URI, apiKey, scriptId)).body[0]?.id;
+            if (!versionId) {
+                throw new Error(`Für „${CREDIT_MEMO_SCRIPT_NAME}“ wurde keine Version gefunden.`);
             }
-            await (0, importScript_1.importScript)(BASE_URI, apiKey, script);
-            return "Script importiert.";
+            const body = {
+                content: gutschriftenVerschieben_js_raw_1.default,
+                actionEnabled: true,
+                action: {
+                    display_name: { de: CREDIT_MEMO_SCRIPT_NAME },
+                    description: { de: "Verschiebt eine Gutschrift des Rechnungslesers in die Gutschrift-Kategorie bzw. kennzeichnet das Dokument als Rechnung." },
+                    volatile: true,
+                    execution_mode: "Synchron",
+                    input_properties: [
+                        { id: CREDIT_MEMO_INPUT_DOC_ID, type: "String", title: { de: "Dokument-ID" }, required: true },
+                    ],
+                    output_properties: [],
+                },
+            };
+            // customerVariables (u.a. der verschlüsselte API-Key) NUR bei einem in
+            // diesem Aufruf neu angelegten Skript - ein vorhandener Key wird nie
+            // überschrieben oder geleert.
+            if (createdNow) {
+                body.customerVariables = [
+                    { key: "apiKey", value: apiKey, encrypted: true },
+                    ...CREDIT_MEMO_VARIABLES,
+                ];
+            }
+            await (0, patchScript_1.patchScript)(BASE_URI, apiKey, scriptId, versionId, body);
+            return createdNow ? "Skript als Aktion angelegt." : "Code und Aktion aktualisiert.";
         },
     },
     {
-        id: "webhook",
-        title: "Webhook „Gutschriften verschieben“",
-        description: "Ruft das Script nach dem Import von Gutschriften (Kategorie) im DMS auf - benötigt das Script. Ein vorhandener Webhook wird aktualisiert, sein hinterlegter API-Key bleibt erhalten.",
-        async check(apiKey) {
-            const scriptId = await findCreditMemoScriptId(apiKey);
-            if (!scriptId) {
-                return missing("Script fehlt noch.");
-            }
-            return (await findCreditMemoWebhookEntry(apiKey, scriptId))
-                ? exists("Vorhanden - Einstellungen werden aktualisiert.")
-                : missing("Webhook fehlt.");
+        id: "eventbridge",
+        title: "Eventbridge",
+        description: "Aktiviert das DMS-Ereignis „dmspostimport“ in der Eventbridge und synchronisiert sie einmal mit dem DMS-Repository - Beides ist beliebig wiederholbar.",
+        async check() {
+            // Die Eventbridge-Konfiguration lässt sich nicht auslesen - der Schritt
+            // gilt erst als erledigt, wenn er in dieser Sitzung gelaufen ist, damit
+            // auch "Alle fehlenden anlegen" ihn sicher ausführt.
+            return eventbridgeDone
+                ? done("In dieser Sitzung aktiviert und synchronisiert.")
+                : missing("Wird aktiviert und synchronisiert.");
         },
         async run(apiKey) {
-            const scriptId = await findCreditMemoScriptId(apiKey);
-            if (!scriptId) {
-                throw new Error(`Script „${CREDIT_MEMO_SCRIPT_NAME}“ nicht gefunden - bitte zuerst das Script importieren.`);
-            }
-            const found = await findCreditMemoWebhookEntry(apiKey, scriptId);
-            if (found) {
-                // Hinterlegten API-Key nie überschreiben/leeren: liefert die API ihn
-                // nicht mit, wird der Webhook nicht angefasst.
-                if (!found.webhook.apiKey) {
-                    return "Vorhanden - nicht aktualisiert, da der hinterlegte API-Key sonst überschrieben würde.";
-                }
-                await (0, updateEvent_1.updateEvent)(BASE_URI, apiKey, found.webhook, creditMemoEvent(scriptId, found.webhook.apiKey));
-                return "Webhook aktualisiert.";
-            }
-            await (0, createEvent_1.createEvent)(BASE_URI, apiKey, await getRepositoryId(apiKey), createEvent_1.EventType.PostImport, creditMemoEvent(scriptId, apiKey));
-            return "Webhook angelegt.";
+            await (0, setDmspostimport_1.setDmspostimport)(BASE_URI, apiKey, true);
+            await (0, synchronizeEventbride_1.synchronizeEventbride)(BASE_URI, apiKey, await getRepositoryId(apiKey));
+            eventbridgeDone = true;
+            return "„dmspostimport“ aktiviert, Synchronisierung ausgeführt.";
+        },
+    },
+    {
+        id: "duplicateCheck",
+        title: "Dublettenprüfung ausschalten",
+        description: "Schaltet die Dublettenprüfung („DuplicateCheck“) in der Dokumentverarbeitung des Rechnungslesers aus. Beliebig wiederholbar.",
+        async check() {
+            // Der aktuelle Stand lässt sich nicht auslesen - erledigt erst, wenn der
+            // Schritt in dieser Sitzung gelaufen ist (wie beim Eventbridge-Schritt).
+            return duplicateCheckDisabled
+                ? done("In dieser Sitzung ausgeschaltet.")
+                : missing("Wird ausgeschaltet.");
+        },
+        async run(apiKey) {
+            const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
+            await (0, setDocumentProcessingConfiguration_1.setDocumentProcessingConfiguration)(BASE_URI, apiKey, subscriptionId, "DuplicateCheck", false);
+            duplicateCheckDisabled = true;
+            return "Dublettenprüfung ausgeschaltet.";
         },
     },
 ];
@@ -2370,7 +2463,7 @@ function renderConfigPage() {
     <div class="onb-body onb-config">
       <div class="onb-config-block">
         <div class="onb-config-title">API-Key</div>
-        <div class="onb-config-desc">Mit diesem Key wird eingerichtet; er wird außerdem im Gutschriften-Script und im Webhook hinterlegt.</div>
+        <div class="onb-config-desc">Mit diesem Key wird eingerichtet; er wird außerdem im Gutschriften-Skript hinterlegt.</div>
         <div class="onb-key">
           <input id="onb-api-key" type="password" autocomplete="off" class="form-control form-control-sm onb-key-input" data-onb-key placeholder="API-Key eingeben…" aria-label="API-Key" value="${escapeHtml(apiKey)}">
           <button type="button" class="btn btn-sm btn-outline-secondary" data-onb-action="create-key" title="Legt für einen Benutzer einen neuen API-Key an">Neuen API-Key erstellen</button>
@@ -2763,6 +2856,16 @@ window.formInit = function (form, data) {
 
 /***/ },
 
+/***/ "./dist/scripts/gutschriftenVerschieben.js?raw"
+/*!*****************************************************!*\
+  !*** ./dist/scripts/gutschriftenVerschieben.js?raw ***!
+  \*****************************************************/
+(module) {
+
+module.exports = "/******/ (() => { // webpackBootstrap\n/******/ \t\"use strict\";\n/******/ \tvar __webpack_modules__ = ({\n\n/***/ \"../../helper/dms/getRepositories.ts\"\n/*!*******************************************!*\\\n  !*** ../../helper/dms/getRepositories.ts ***!\n  \\*******************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.getRepositories = getRepositories;\nconst performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ \"../../helper/performHttpRequest/performHttpRequest.ts\");\nasync function getRepositories(baseUri, token) {\n    const url = `${baseUri}/dms/r`;\n    const headers = {\n        \"Authorization\": `Bearer ${token}`,\n        \"Accept\": \"application/json\",\n        \"Content-Type\": \"application/json\",\n    };\n    const options = {\n        method: \"GET\",\n        headers,\n    };\n    return await (0, performHttpRequest_1.performHttpRequest)(url, options);\n}\n\n\n/***/ },\n\n/***/ \"../../helper/dms/getSpecificDocument.ts\"\n/*!***********************************************!*\\\n  !*** ../../helper/dms/getSpecificDocument.ts ***!\n  \\***********************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.getSpecificDocument = getSpecificDocument;\nconst performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ \"../../helper/performHttpRequest/performHttpRequest.ts\");\n/**\n * Retrieves a specific document from the DMS (Document Management System) using the provided parameters.\n *\n * @param baseUri - The base URI of the DMS API.\n * @param token - The authorization token to access the DMS API.\n * @param repositoryId - The ID of the repository where the document is stored.\n * @param documentId - The ID of the specific document to retrieve.\n * @returns A promise that resolves to an `ApiResponse` containing the `GetSpecificDocument` data.\n *\n * @throws Will throw an error if the HTTP request fails or the response is invalid.\n */\nasync function getSpecificDocument(baseUri, token, repositoryId, documentId) {\n    const url = `${baseUri}/dms/r/${repositoryId}/o2/${documentId}`;\n    const headers = {\n        \"Authorization\": `Bearer ${token}`,\n        \"Accept\": \"application/json\",\n        \"Content-Type\": \"application/json\",\n    };\n    const options = {\n        method: \"GET\",\n        headers\n    };\n    return await (0, performHttpRequest_1.performHttpRequest)(url, options);\n}\n\n\n/***/ },\n\n/***/ \"../../helper/dms/updateDocument.ts\"\n/*!******************************************!*\\\n  !*** ../../helper/dms/updateDocument.ts ***!\n  \\******************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.updateDocument = updateDocument;\nconst performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ \"../../helper/performHttpRequest/performHttpRequest.ts\");\nasync function updateDocument(baseUri, token, repositoryId, documentId, sourceCategory, sourceProperties) {\n    const url = `${baseUri}/dms/r/${repositoryId}/o2m/${documentId}`;\n    const headers = {\n        Authorization: `Bearer ${token}`,\n        Accept: \"application/json\",\n        \"Content-Type\": \"application/json\",\n    };\n    const body = {\n        sourceCategory: sourceCategory,\n        sourceId: `/dms/r/${repositoryId}/source`,\n        sourceProperties: sourceProperties,\n    };\n    const options = {\n        method: \"PUT\",\n        headers,\n        body: JSON.stringify(body),\n    };\n    return await (0, performHttpRequest_1.performHttpRequest)(url, options);\n}\n\n\n/***/ },\n\n/***/ \"../../helper/performHttpRequest/performHttpRequest.ts\"\n/*!*************************************************************!*\\\n  !*** ../../helper/performHttpRequest/performHttpRequest.ts ***!\n  \\*************************************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.performHttpRequest = performHttpRequest;\nconst logger_1 = __webpack_require__(/*! ../utils/logger */ \"../../helper/utils/logger.ts\");\n/**\n * Performs an HTTP request and returns a structured response.\n*\n* @template T - The expected type of the response body.\n* @param {string} url - The URL to which the request is sent.\n* @param {RequestInit} options - The options for the HTTP request, such as method, headers, and body.\n* @returns {Promise<ApiResponse<T>>} A promise that resolves to an `ApiResponse` object containing the response details.\n* @throws {Error} Throws an error if the HTTP response status is not OK (status code outside the range 200-299).\n*\n* The function attempts to parse the response body based on the `Content-Type` header:\n* - If the `Content-Type` includes \"application/json\", it parses the body as JSON.\n* - Otherwise, it parses the body as plain text.\n*\n* If the response is not OK, the function throws an error with the status code and error message.\n*/\nconst logger = (0, logger_1.getLogger)();\nasync function performHttpRequest(url, options) {\n    let body = {};\n    let errorMessage = \"\";\n    let response;\n    logger.debug(`[Request] ${options.method} ${url} | Headers: ${JSON.stringify(options.headers)} | Body: ${!(options.body instanceof Uint8Array) && options.body !== undefined\n        ? options.body\n        : \"[Binary body omitted]\"}`);\n    try {\n        response = await fetch(url, options);\n    }\n    catch (err) {\n        throw new Error(`Network error during fetch: ${err.message}`);\n    }\n    const contentType = response.headers.get(\"content-type\") || \"\";\n    const parseBody = async () => {\n        try {\n            if (contentType.includes(\"application/json\") || contentType.includes('application/hal+json')) {\n                return await response.json();\n            }\n            else if (contentType.includes(\"application/octet-stream\") ||\n                contentType.includes(\"application/pdf\")) {\n                const arrayBuffer = await response.arrayBuffer();\n                return new Uint8Array(arrayBuffer);\n            }\n            else {\n                return await response.text();\n            }\n        }\n        catch (e) {\n            return undefined;\n        }\n    };\n    if (response.ok) {\n        const result = await parseBody();\n        if (result !== undefined) {\n            body = result;\n        }\n    }\n    else {\n        const errorBody = await parseBody();\n        errorMessage =\n            typeof errorBody === \"string\" ? errorBody : JSON.stringify(errorBody);\n        throw new Error(`HTTP error! status: ${response.status}, message: ${errorMessage}`);\n    }\n    return {\n        status: response.status,\n        statusText: response.statusText,\n        body: body,\n        bodyUsed: response.bodyUsed,\n        headers: response.headers,\n        ok: response.ok,\n        redirected: response.redirected,\n        type: response.type,\n        url: response.url,\n    };\n}\n\n\n/***/ },\n\n/***/ \"../../helper/utils/logger.ts\"\n/*!************************************!*\\\n  !*** ../../helper/utils/logger.ts ***!\n  \\************************************/\n(__unused_webpack_module, exports) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.Logger = exports.LogLevel = void 0;\nexports.initLogger = initLogger;\nexports.getLogger = getLogger;\nvar LogLevel;\n(function (LogLevel) {\n    LogLevel[LogLevel[\"DEBUG\"] = 0] = \"DEBUG\";\n    LogLevel[LogLevel[\"INFO\"] = 1] = \"INFO\";\n    LogLevel[LogLevel[\"WARN\"] = 2] = \"WARN\";\n    LogLevel[LogLevel[\"ERROR\"] = 3] = \"ERROR\";\n})(LogLevel || (exports.LogLevel = LogLevel = {}));\nclass Logger {\n    constructor(options = {}) {\n        this.level = options.level ?? LogLevel.INFO;\n        this.showTimestamp = options.showTimestamp ?? true;\n    }\n    formatMessage(level, message) {\n        const paddedLevel = level.toUpperCase().padEnd(5, ' ');\n        const timestamp = this.showTimestamp\n            ? `[${new Date().toISOString()}] `\n            : \"\";\n        return `${timestamp}${paddedLevel}: ${message}`;\n    }\n    debug(message, ...args) {\n        if (this.level <= LogLevel.DEBUG) {\n            console.debug(this.formatMessage(\"debug\", message), ...args);\n        }\n    }\n    info(message, ...args) {\n        if (this.level <= LogLevel.INFO) {\n            console.info(this.formatMessage(\"info\", message), ...args);\n        }\n    }\n    warn(message, ...args) {\n        if (this.level <= LogLevel.WARN) {\n            console.warn(this.formatMessage(\"warn\", message), ...args);\n        }\n    }\n    error(message, ...args) {\n        if (this.level <= LogLevel.ERROR) {\n            console.error(this.formatMessage(\"error\", message), ...args);\n        }\n    }\n    setLevel(newLevel) {\n        this.level = newLevel;\n    }\n}\nexports.Logger = Logger;\nlet loggerInstance;\nfunction initLogger(level = LogLevel.INFO, showTimestamp = true) {\n    if (!loggerInstance) {\n        loggerInstance = new Logger({ level, showTimestamp });\n    }\n    return loggerInstance;\n}\nfunction getLogger() {\n    // Fallback: falls noch niemand initLogger() aufgerufen hat\n    if (!loggerInstance) {\n        loggerInstance = new Logger({ level: LogLevel.DEBUG, showTimestamp: true });\n    }\n    return loggerInstance;\n}\n\n\n/***/ },\n\n/***/ \"./src/scripts/gutschriftenVerschieben.ts\"\n/*!************************************************!*\\\n  !*** ./src/scripts/gutschriftenVerschieben.ts ***!\n  \\************************************************/\n(module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nconst getRepositories_1 = __webpack_require__(/*! ../../../../helper/dms/getRepositories */ \"../../helper/dms/getRepositories.ts\");\nconst getSpecificDocument_1 = __webpack_require__(/*! ../../../../helper/dms/getSpecificDocument */ \"../../helper/dms/getSpecificDocument.ts\");\nconst updateDocument_1 = __webpack_require__(/*! ../../../../helper/dms/updateDocument */ \"../../helper/dms/updateDocument.ts\");\nconst logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ \"../../helper/utils/logger.ts\");\n/**\n * \"Rechnungsleser Gutschriften verschieben\" (ehemals\n * projects/_OLD/moveDocumentsOfDocumentReader/script.mjs, bisher nur per\n * DMS-Webhook aufgerufen): prüft beim Dokument mit der übergebenen DocId die\n * Dokumentart des Rechnungslesers und\n *  - verschiebt Gutschriften (Wert = fieldDocumentTypeValueMatch, z.B.\n *    \"CreditAdvice\") in die Kategorie categoryCreditMemoGUID und setzt die\n *    Dokumentart auf \"Gutschrift\",\n *  - setzt bei allen anderen Dokumenten die Dokumentart auf \"Rechnung\"\n *    (Kategorie bleibt).\n *\n * Wird vom Onboarding-Formular (src/forms/form.ts) als Process-Studio-Aktion\n * mit dem Eingabeparameter \"DocId\" angelegt; der Code wird beim Build als\n * Text ins Formular-Bundle übernommen (siehe build/webpack.form.config.js).\n * Aus Kompatibilität wird auch der Body eines DMS-Webhooks ({ doc: { id } })\n * verstanden.\n *\n * customerVariables (werden vom Formular nur beim Neuanlegen gesetzt):\n * apiKey, categoryCreditMemoGUID, fieldDocumentTypeGUID,\n * fieldDocumentTypeValueMatch.\n */\nconst logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);\n/** Name des Eingabeparameters der Aktion. */\nconst DOC_ID_INPUT = \"DocId\";\nmodule.exports = async (req, res) => {\n    try {\n        const body = parseBody(req);\n        const documentId = body?.[DOC_ID_INPUT] ?? body?.docId ?? body?.doc?.id;\n        if (!documentId) {\n            respond(res, 400, { success: false, message: `Eingabeparameter \"${DOC_ID_INPUT}\" fehlt.` });\n            return;\n        }\n        const baseUri = req.get(\"x-dv-baseuri\");\n        const apiKey = req.var(\"apiKey\");\n        const categoryCreditMemo = req.var(\"categoryCreditMemoGUID\");\n        const fieldDocumentType = req.var(\"fieldDocumentTypeGUID\");\n        const valueMatch = req.var(\"fieldDocumentTypeValueMatch\");\n        const repositoryId = (await (0, getRepositories_1.getRepositories)(baseUri, apiKey)).body.repositories[0]?.id;\n        if (!repositoryId) {\n            throw new Error(\"Kein DMS-Repository gefunden.\");\n        }\n        const document = (await (0, getSpecificDocument_1.getSpecificDocument)(baseUri, apiKey, repositoryId, documentId)).body;\n        const documentType = document.objectProperties?.find((property) => property.id === fieldDocumentType)?.value;\n        const isCreditMemo = documentType === valueMatch;\n        const targetCategory = isCreditMemo ? categoryCreditMemo : document.category;\n        if (!targetCategory) {\n            throw new Error(`Kategorie von Dokument ${documentId} konnte nicht ermittelt werden.`);\n        }\n        await (0, updateDocument_1.updateDocument)(baseUri, apiKey, repositoryId, documentId, targetCategory, {\n            properties: [{ key: fieldDocumentType, values: [isCreditMemo ? \"Gutschrift\" : \"Rechnung\"] }],\n        });\n        const message = isCreditMemo\n            ? `Dokument ${documentId} als Gutschrift in Kategorie ${categoryCreditMemo} verschoben.`\n            : `Dokument ${documentId} ist keine Gutschrift (Dokumentart \"${documentType ?? \"\"}\"), als Rechnung gekennzeichnet.`;\n        logger.info(message);\n        respond(res, 200, { success: true, creditMemo: isCreditMemo, message });\n    }\n    catch (error) {\n        const message = error instanceof Error ? error.message : String(error);\n        logger.error(`Fehler: ${message}`);\n        respond(res, 500, { success: false, message });\n    }\n};\nfunction parseBody(req) {\n    try {\n        return req.json?.() ?? {};\n    }\n    catch {\n        return {};\n    }\n}\nfunction respond(res, status, body) {\n    res.status(status).set(\"Content-Type\", \"application/json\").send(JSON.stringify(body));\n}\n\n\n/***/ }\n\n/******/ \t});\n/************************************************************************/\n/******/ \t// The module cache\n/******/ \tconst __webpack_module_cache__ = {};\n/******/ \t\n/******/ \t// The require function\n/******/ \tfunction __webpack_require__(moduleId) {\n/******/ \t\t// Check if module is in cache\n/******/ \t\tconst cachedModule = __webpack_module_cache__[moduleId];\n/******/ \t\tif (cachedModule !== undefined) {\n/******/ \t\t\treturn cachedModule.exports;\n/******/ \t\t}\n/******/ \t\t// Create a new module (and put it into the cache)\n/******/ \t\tconst module = __webpack_module_cache__[moduleId] = {\n/******/ \t\t\t// no module.id needed\n/******/ \t\t\t// no module.loaded needed\n/******/ \t\t\texports: {}\n/******/ \t\t};\n/******/ \t\n/******/ \t\t// Execute the module function\n/******/ \t\tif (!(moduleId in __webpack_modules__)) {\n/******/ \t\t\tdelete __webpack_module_cache__[moduleId];\n/******/ \t\t\tconst e = new Error(\"Cannot find module '\" + moduleId + \"'\");\n/******/ \t\t\te.code = 'MODULE_NOT_FOUND';\n/******/ \t\t\tthrow e;\n/******/ \t\t}\n/******/ \t\t__webpack_modules__[moduleId](module, module.exports, __webpack_require__);\n/******/ \t\n/******/ \t\t// Return the exports of the module\n/******/ \t\treturn module.exports;\n/******/ \t}\n/******/ \t\n/************************************************************************/\n/******/ \t\n/******/ \t// startup\n/******/ \t// Load entry module and return exports\n/******/ \t// This entry module is referenced by other modules so it can't be inlined\n/******/ \tlet __webpack_exports__ = __webpack_require__(\"./src/scripts/gutschriftenVerschieben.ts\");\n/******/ \tmodule.exports = __webpack_exports__;\n/******/ \t\n/******/ })()\n;\n//# sourceMappingURL=gutschriftenVerschieben.js.map";
+
+/***/ },
+
 /***/ "./src/data/batchProfileMail.json"
 /*!****************************************!*\
   !*** ./src/data/batchProfileMail.json ***!
@@ -2780,16 +2883,6 @@ module.exports = /*#__PURE__*/JSON.parse('{"name":"Frühes Scannen (Mail)","auth
 (module) {
 
 module.exports = /*#__PURE__*/JSON.parse('{"name":"Frühes Scannen (Scan)","authorizedGroups":[{"id":"C7D335FA-C1A1-4BB3-80F6-A1A6415DAE27","displayName":"Alle","elementType":1}],"authorizedBatchIdpElements":[{"id":"DA68014B-8FAF-48DA-904B-F8B360D0B803","displayName":"Ersteller*in des Stapels","elementType":0}],"errorNotificationRecipients":[{"id":"005B1D7A-0899-481F-9E61-DE43C90F1381","displayName":"Bereits berechtigte Gruppen und Personen","elementType":1}],"authorizedDeleteBatchIdpElements":[{"id":"DA68014B-8FAF-48DA-904B-F8B360D0B803","displayName":"Ersteller*in des Stapels","elementType":0},{"id":"005B1D7A-0899-481F-9E61-DE43C90F1381","displayName":"Bereits berechtigte Gruppen und Personen","elementType":1}],"importProfile":{"defaultCategoryId":null,"categoryRules":null},"mailBodyCategoryRule":{"ruleType":0,"active":false,"categoryId":"likeDefaultCategory"},"emailHandling":{"import":"3","placeBody":"0","importInlineAttachments":false},"properties":{"documentProperties":[],"batchProperties":[]},"exportProfile":{"primaryExportFile":"4","automatedExport":false,"exportSystemId":"classcon-documentreader-0189e289-edcc-48ae-974e-3edde2029063_ExportImportProcess","showExportSystemInstantly":false,"exportAdditionalAttachments":true},"allowPageEditing":true,"respectSignature":true,"guiRestrictions":{"addPagesAvailable":true,"deletePagesAvailable":true,"movePagesAvailable":true,"rotatePagesAvailable":true,"editDocumentsAvailable":true,"editDocumentPropertiesAvailable":true},"splittingProfile":{"active":true,"barcodeProfileId":null,"regEx":null,"removePage":false,"splittingMode":"0","maxPageCount":null,"regExForSplitting":null},"pageProcessing":{"barcodeRecognition":true,"textRecognition":true,"searchablePdf":true},"compression":{"active":false,"compression":"-1"},"documentProcessing":{"kiProcessing":true,"llmProcessing":false},"fileImportRules":{"type":0,"regExRules":[".*\\\\.exe$",".*\\\\.dll$",".*\\\\.msi$",".*\\\\.js$",".*\\\\.jar$",".*\\\\.ear$",".*\\\\.war$",".*\\\\.mpkg$",".*\\\\.php\\\\d?$",".*\\\\.sh$",".*\\\\.swf$",".*\\\\.pm$",".*\\\\.pl$",".*\\\\.ps1$",".*\\\\.com$",".*\\\\.bat$",".*\\\\.cmd$",".*\\\\.vbs$",".*\\\\.vbe$",".*\\\\.jse$",".*\\\\.wsf$",".*\\\\.wsh$",".*\\\\.msc$",".*\\\\.p7c$",".*\\\\.p7m$",".*\\\\.p7s$",".*\\\\.crt$",".*\\\\.der$",".*\\\\.cer$",".*\\\\.pem$",".*\\\\.ics$",".*\\\\.bin$",".*\\\\.vcf$"]},"newRegEx":null}');
-
-/***/ },
-
-/***/ "./src/data/scriptGutschriftenVerschieben.json"
-/*!*****************************************************!*\
-  !*** ./src/data/scriptGutschriftenVerschieben.json ***!
-  \*****************************************************/
-(module) {
-
-module.exports = /*#__PURE__*/JSON.parse('{"id":"d5795100-1f19-46e1-8c7f-8888ec9ce5b6","name":"Rechnungsleser Gutschriften verschieben","changelog":"","creationDate":"2025-02-11T13:02:29Z","changeDate":"2025-03-31T14:38:11Z","author":"1B8DE68A-2C75-45F0-B649-635EA4619060","dev":true,"released":false,"scriptId":"3fa4300f-97ba-4628-904d-e7353c2c2861","actionEnabled":false,"action":{"id":"3fa4300f-97ba-4628-904d-e7353c2c2861-d5795100-1f19-46e1-8c7f-8888ec9ce5b6","display_name":{"de":""},"tags":null,"description":{"de":""},"endpoint":"/scripting/script/3fa4300f-97ba-4628-904d-e7353c2c2861/version/d5795100-1f19-46e1-8c7f-8888ec9ce5b6/run","execution_mode":"Synchron","input_properties":null,"output_properties":null,"volatile":true},"dependencies":null,"customerVariables":[{"key":"apiKey","value":"","encrypted":true},{"key":"categoryCreditMemoGUID","value":"52a84dbc-31bf-4351-9c16-4852dc2e816d","encrypted":false},{"key":"fieldDocumentTypeGUID","value":"717f4480-f16c-4838-96a3-f69a01eb41f1","encrypted":false},{"key":"fieldDocumentTypeValueMatch","value":"CreditAdvice","encrypted":false}],"content":"(()=>{\\"use strict\\";const t={DEBUG:\\"DEBUG\\",INFO:\\"INFO\\",WARN:\\"WARN\\",ERROR:\\"ERROR\\"};let e=t.DEBUG;function s(s,n=t.INFO){const o=[t.DEBUG,t.INFO,t.WARN,t.ERROR],a=o.indexOf(e);o.indexOf(n)>=a&&console.log(`[${n}] ${s}`)}function n(s){Object.values(t).includes(s)?e=s:console.warn(`Invalid log level: ${s}`)}async function o(e,n,o,a=null){const i={method:n,headers:o};if(a)if(\\"application/json\\"===o[\\"Content-Type\\"]||\\"application/hal+json\\"===o[\\"Content-Type\\"])i.body=JSON.stringify(a);else{if(\\"application/octet-stream\\"!==o[\\"Content-Type\\"])throw new Error(\\"Unsupported Content-Type or body format.\\");i.body=a}s(`Performing HTTP request to URL: ${e}\\\\nRequest options: ${JSON.stringify({...i,body:a&&(\\"object\\"==typeof a?a:JSON.parse(a))},null,2)}`,t.DEBUG);const r=await fetch(e,i);if(!r.ok)return await async function(e){const n=e.clone();let o,a;try{o=await n.text()}catch(n){return void s(`$Statuscode: ${e.status} Unable to read the response body.`,t.ERROR)}if(!o.trim())return void s(`Statuscode: ${e.status} Response body is empty.`,t.ERROR);try{a=JSON.parse(o)}catch(n){return void s(`Statuscode: ${e.status} Body is not valid JSON: ${o}`,t.ERROR)}const i=Object.entries(a).map((([t,e])=>`${t.charAt(0).toUpperCase()+t.slice(1)}: ${e}`)).join(\\" \\");s(`Statuscode: ${e.status} Errordetails: ${i}`,t.ERROR)}(r),r.ok;const c=r.headers.get(\\"Content-Type\\");switch(n){case\\"GET\\":if(s(`Response Content-Type: ${c}`,t.DEBUG),c.includes(\\"application/json\\")||c.includes(\\"application/hal+json\\")){let e=await r.json();return s(`Response: ${r.status} ${r.statusText}`,t.DEBUG),e}if(c.includes(\\"text/\\")){let e=await r.text();return s(`Response: ${r.status} ${r.statusText}`,t.DEBUG),e}if(c.includes(\\"application/octet-stream\\")||c.includes(\\"image/\\")||c.includes(\\"application/pdf\\"))return s(`Response: ${r.status} ${r.statusText}`,t.DEBUG),await r.arrayBuffer();throw new Error(`Unsupported Content-Type: ${c}`);case\\"POST\\":if(null!=c){if(s(`Response Content-Type: ${c}`,t.DEBUG),c.includes(\\"application/json\\")||c.includes(\\"application/hal+json\\")){let e=await r.json();return s(`Response: ${r.status} ${r.statusText}`,t.DEBUG),e}if(c.includes(\\"text/\\")){let e=await r.text();return s(`Response: ${r.status} ${r.statusText}`,t.DEBUG),e}if(c.includes(\\"application/octet-stream\\")||c.includes(\\"image/\\")||c.includes(\\"application/pdf\\"))return s(`Response: ${r.status} ${r.statusText}`,t.DEBUG),await r.arrayBuffer();throw new Error(`Unsupported Content-Type: ${c}`)}case\\"PUT\\":case\\"DELETE\\":return r;default:throw new Error(`Unsupported HTTP method: ${n}`)}}class a{constructor(t){this.AuthSessionId=t.AuthSessionId,this.Expire=t.Expire}}async function i(t,e,s,n,a,i,r){const c=`${t}/dms/r/${s}/o2m/${n}`,u={Authorization:`Bearer ${e}`,Accept:\\"application/hal+json\\",\\"Content-Type\\":\\"application/hal+json\\"},p={sourceCategory:a,sourceId:i,sourceProperties:r};return(await o(c,\\"PUT\\",u,p)).ok??!0}n(t.ERROR),module.exports=async(e,r)=>{try{n(t.DEBUG);let c=e.json();s(`Request Body Below:\\\\n        ${JSON.stringify(c)}`,t.INFO);const u=e.get(\\"x-dv-baseuri\\"),p=e.var(\\"apiKey\\"),l=e.var(\\"categoryCreditMemoGUID\\"),d=e.var(\\"fieldDocumentTypeGUID\\"),y=e.var(\\"fieldDocumentTypeValueMatch\\"),$=c.doc.id,h=c.doc.categoryId,f=(await async function(t,e){const s=`${t}/identityprovider/login`,n={Authorization:`Bearer ${e}`,Accept:\\"application/hal+json\\",\\"Content-Type\\":\\"application/hal+json\\"};return new a(await o(s,\\"GET\\",n))}(u,p)).AuthSessionId,R=(await async function(t,e){const s=`${t}/dms/r`,n={Authorization:`Bearer ${e}`,Accept:\\"application/hal+json\\",\\"Content-Type\\":\\"application/hal+json\\"};return await o(s,\\"GET\\",n)}(u,f)).repositories[0].id;let T=c.doc.properties.find((t=>t.id==d)).value;if(T==y){s(`Document Type matched: ${T} with ${y}`,t.INFO);const e={properties:[{key:d,values:[\\"Gutschrift\\"]}]};await i(u,f,R,$,l,`/dms/r/${R}/source`,e)?r.status(200).set(\\"Content-Type\\",\\"text\\").send(\\"Successfully switched category\\"):r.status(500).set(\\"Content-Type\\",\\"text\\").send(\\"Failed to switch category\\")}else{const e={properties:[{key:d,values:[\\"Rechnung\\"]}]};await i(u,f,R,$,h,`/dms/r/${R}/source`,e)?r.status(200).set(\\"Content-Type\\",\\"text\\").send(\\"Successfully switched field DocumentType\\"):r.status(500).set(\\"Content-Type\\",\\"text\\").send(\\"Failed to switch DocumenType\\"),s(`Document Type did not match: ${T} with ${y}`,t.INFO),r.status(200).set(\\"Content-Type\\",\\"text\\").send(\\"Document Type does not match\\")}}catch(e){s(`Error: ${e}`,t.ERROR),r.status(500).set(\\"Content-Type\\",\\"text\\").send(e)}}})();"}');
 
 /***/ },
 
