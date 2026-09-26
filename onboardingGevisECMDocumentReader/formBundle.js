@@ -92,6 +92,46 @@ async function saveD3EndpointService(baseUri, token, subscriptionId, settings) {
 
 /***/ },
 
+/***/ "../../helper/classcon-documentreader/endpointServices.ts"
+/*!****************************************************************!*\
+  !*** ../../helper/classcon-documentreader/endpointServices.ts ***!
+  \****************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getConfiguredEndpointServices = getConfiguredEndpointServices;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Liefert die Namen der im Rechnungsleser eingerichteten Zielsysteme, z.B.
+ * ["D3EndpointService", "MetadataEndpointService"].
+ *
+ * Quelle ist die Übersichtsseite "Zielsysteme"
+ * (GET /classcon-documentreader/Configuration?subscriptionId=...), die jedes
+ * eingerichtete Zielsystem als <li class="mdc-list-item" id="<Name>"> listet.
+ * Die Details eines Zielsystems liefert GET
+ * /classcon-documentreader/Configuration/<Name>?subscriptionId=... (siehe
+ * d3EndpointService.ts / metadataEndpointService.ts).
+ */
+async function getConfiguredEndpointServices(baseUri, token, subscriptionId) {
+    const response = await (0, performHttpRequest_1.performHttpRequest)(`${baseUri}/classcon-documentreader/Configuration?subscriptionId=${encodeURIComponent(subscriptionId)}`, {
+        method: "GET",
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), Accept: "text/html" },
+    });
+    if (typeof response.body !== "string" || typeof DOMParser === "undefined") {
+        throw new Error("Die Zielsysteme des Rechnungslesers konnten nicht gelesen werden.");
+    }
+    const doc = new DOMParser().parseFromString(response.body, "text/html");
+    // Nur Einträge MIT id - die Auswahllisten der Seite (Exportformat usw.)
+    // nutzen dieselbe Klasse, aber data-value statt id.
+    return Array.from(doc.querySelectorAll(".mdc-list-group li.mdc-list-item[id]"))
+        .map((item) => item.getAttribute("id") ?? "")
+        .filter(Boolean);
+}
+
+
+/***/ },
+
 /***/ "../../helper/classcon-documentreader/extensionPoints.ts"
 /*!***************************************************************!*\
   !*** ../../helper/classcon-documentreader/extensionPoints.ts ***!
@@ -2068,6 +2108,7 @@ const preExport_js_raw_1 = __importDefault(__webpack_require__(/*! ../../dist/sc
 const Rechnungsleser_Gutschriften_verschieben_v1_bpmn_raw_1 = __importDefault(__webpack_require__(/*! ../data/Rechnungsleser Gutschriften verschieben_v1.bpmn?raw */ "./src/data/Rechnungsleser Gutschriften verschieben_v1.bpmn?raw"));
 const processComponents_1 = __webpack_require__(/*! ../../../../helper/processstudio/processComponents */ "../../helper/processstudio/processComponents.ts");
 const d3EndpointService_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/d3EndpointService */ "../../helper/classcon-documentreader/d3EndpointService.ts");
+const endpointServices_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/endpointServices */ "../../helper/classcon-documentreader/endpointServices.ts");
 const metadataEndpointService_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/metadataEndpointService */ "../../helper/classcon-documentreader/metadataEndpointService.ts");
 const impersonateWhitelist_1 = __webpack_require__(/*! ../../../../helper/identityprovider/impersonateWhitelist */ "../../helper/identityprovider/impersonateWhitelist.ts");
 const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/extensionPoints */ "../../helper/classcon-documentreader/extensionPoints.ts");
@@ -2113,15 +2154,13 @@ const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-do
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 12;
+const VERSION_COUNTER = 13;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
 // Komponenten-Key aus src/forms/form.json.
 const resultKey = "result";
 // Feste Werte aus dem bisherigen Onboarding (Formular bzw. Script).
-const GROUP_RECHNUNGSLESER_ID = "7167794f-3a89-4a2c-9639-f4bc4b7822b3";
-const GROUP_RECHNUNGSLESER_NAME = "Rechnungsleser";
 const ADMIN_GROUP_NAME = "Administrative group for the tenant";
 const GROUP_FRUEHES_SCANNEN_NAME = "gevis ECM Frühes Scannen";
 const PROFILE_MAIL_NAME = "Frühes Scannen (Mail)";
@@ -2378,6 +2417,12 @@ async function targetEndpointSettings(apiKey) {
         D3Owner: "Editor",
         EndpointServiceOutputStructure: "MainDocWithAttachments",
     };
+}
+// Ist das Zielsystem <name> im Rechnungsleser eingerichtet? (Übersichtsseite
+// "Zielsysteme" listet jedes eingerichtete Zielsystem mit seinem Namen als id.)
+async function isEndpointConfigured(apiKey, name) {
+    const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
+    return (await (0, endpointServices_1.getConfiguredEndpointServices)(BASE_URI, apiKey, subscriptionId)).includes(name);
 }
 // Metadaten-Endpunkt (Azure Service Bus) für VEO. Connection String, Queue
 // und GWS-Nr. kommen von der Konfigurationsseite - NIE in den Code schreiben
@@ -2669,24 +2714,6 @@ const steps = [
             return `Gruppe „${name}“ angelegt.`;
         },
     },
-    {
-        id: "groupRechnungsleser",
-        title: `Gruppe „${GROUP_RECHNUNGSLESER_NAME}“`,
-        description: "Berechtigungsgruppe für den Rechnungsleser, der aktuelle Benutzer wird Mitglied. Eine vorhandene Gruppe bleibt unverändert, damit keine Mitglieder verloren gehen.",
-        async check(apiKey) {
-            return findGroup(await loadGroups(apiKey), GROUP_RECHNUNGSLESER_NAME, GROUP_RECHNUNGSLESER_ID)
-                ? done("Gruppe vorhanden.")
-                : missing("Gruppe fehlt.");
-        },
-        async run(apiKey) {
-            if (findGroup(await loadGroups(apiKey), GROUP_RECHNUNGSLESER_NAME, GROUP_RECHNUNGSLESER_ID)) {
-                return "Bereits vorhanden.";
-            }
-            const userId = await getCurrentUserId().catch(() => undefined);
-            await (0, createGroup_1.createGroup)(BASE_URI, apiKey, newGroupBody(GROUP_RECHNUNGSLESER_NAME, GROUP_RECHNUNGSLESER_ID, userId ? [userId] : []));
-            return "Gruppe angelegt.";
-        },
-    },
     batchProfileStep("profileMail", batchProfileMail_json_1.default),
     batchProfileStep("profileScan", batchProfileScan_json_1.default),
     ...MAILBOXES.map(mailboxStep),
@@ -2969,9 +2996,12 @@ const steps = [
         title: "Zielsystem des Rechnungslesers",
         description: "Richtet das Zielsystem (d.3-Endpunkt) ein: dieses DMS-Repository, der API-Key aus der Konfiguration, Besitzer „Editor“, Ausgabe „Hauptdokument mit Anhängen“.",
         async check(apiKey) {
+            if (!(await isEndpointConfigured(apiKey, "D3EndpointService"))) {
+                return missing("Nicht eingerichtet.");
+            }
             const current = await readEndpointService(apiKey);
             if (!current) {
-                return missing("Aktueller Stand nicht lesbar - wird eingerichtet.");
+                return exists("Eingerichtet - Einstellungen nicht lesbar, werden beim Ausführen überschrieben.");
             }
             const target = await targetEndpointSettings(apiKey);
             const sameSettings = current.RepositoryId === target.RepositoryId
@@ -2988,15 +3018,15 @@ const steps = [
                 : missing("Nicht eingerichtet.");
         },
         async beforeRun(apiKey) {
+            if (!(await isEndpointConfigured(apiKey, "D3EndpointService"))) {
+                return true;
+            }
             const current = await readEndpointService(apiKey);
             const target = await targetEndpointSettings(apiKey);
-            if (!current?.RepositoryId && !current?.ApiKey) {
+            if (current && current.RepositoryId === target.RepositoryId && current.ApiKey === target.ApiKey) {
                 return true;
             }
-            if (current.RepositoryId === target.RepositoryId && current.ApiKey === target.ApiKey) {
-                return true;
-            }
-            return confirmWarning("Zielsystem überschreiben?", `Der Rechnungsleser hat bereits ein Zielsystem${current.RepositoryId ? ` (Repository <code>${current.RepositoryId}</code>)` : ""}. Es wird durch dieses Repository und den API-Key aus der Konfiguration ersetzt.`, "Überschreiben");
+            return confirmWarning("Zielsystem überschreiben?", `Der Rechnungsleser hat bereits ein Zielsystem „d.velop documents“${current?.RepositoryId ? ` (Repository <code>${current.RepositoryId}</code>)` : ""}. Es wird durch dieses Repository und den API-Key aus der Konfiguration ersetzt.`, "Überschreiben");
         },
         async run(apiKey) {
             const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
@@ -3010,9 +3040,12 @@ const steps = [
         erp: ["veo"],
         description: "Richtet den Metadaten-Endpunkt des Rechnungslesers für VEO ein: Service Bus Connection String und Queue aus der Konfiguration, Bezug auf das Zielsystem und die Eigenschaften DvelopTenant, GWSNo, ExportType, type, subtype, erptype und CustomerId.",
         async check(apiKey) {
+            if (!(await isEndpointConfigured(apiKey, "MetadataEndpointService"))) {
+                return missing("Nicht eingerichtet.");
+            }
             const current = await readMetadataEndpoint(apiKey);
             if (!current) {
-                return missing("Aktueller Stand nicht lesbar - wird eingerichtet.");
+                return exists("Eingerichtet - Einstellungen nicht lesbar, werden beim Ausführen überschrieben.");
             }
             const target = veoMetadataSettings();
             const same = current.QueueName === target.QueueName
@@ -3029,12 +3062,17 @@ const steps = [
                 : missing("Nicht eingerichtet.");
         },
         async beforeRun(apiKey) {
-            const current = await readMetadataEndpoint(apiKey);
-            const target = veoMetadataSettings();
-            if (!current?.QueueName || current.QueueName === target.QueueName) {
+            if (!(await isEndpointConfigured(apiKey, "MetadataEndpointService"))) {
                 return true;
             }
-            return confirmWarning("Metadaten-Endpunkt überschreiben?", `Der Rechnungsleser sendet aktuell an die Queue <code>${escapeHtml(current.QueueName)}</code>. Sie wird durch <code>${escapeHtml(target.QueueName)}</code> ersetzt.`, "Überschreiben");
+            const current = await readMetadataEndpoint(apiKey);
+            const target = veoMetadataSettings();
+            if (current?.QueueName === target.QueueName) {
+                return true;
+            }
+            return confirmWarning("Metadaten-Endpunkt überschreiben?", current?.QueueName
+                ? `Der Rechnungsleser sendet aktuell an die Queue <code>${escapeHtml(current.QueueName)}</code>. Sie wird durch <code>${escapeHtml(target.QueueName)}</code> ersetzt.`
+                : `Ein Metadaten-Endpunkt ist bereits eingerichtet. Er wird mit der Queue <code>${escapeHtml(target.QueueName)}</code> und den Angaben aus der Konfiguration überschrieben.`, "Überschreiben");
         },
         async run(apiKey) {
             const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
