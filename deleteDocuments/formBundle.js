@@ -10,51 +10,26 @@
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getDeleteHref = getDeleteHref;
-exports.expandDeleteHref = expandDeleteHref;
 exports.deleteDmsObject = deleteDmsObject;
 const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-function headers(token) {
-    return {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        Accept: "application/json",
-    };
-}
 /**
- * Liest den Lösch-Link eines DMS-Objekts (bevorzugt "deleteWithReason",
- * sonst "delete"). undefined = der Benutzer darf das Objekt nicht löschen.
- * Templates wie "{?reason}" bleiben erhalten - siehe expandDeleteHref.
- */
-async function getDeleteHref(baseUri, token, repositoryId, documentId) {
-    const body = (await (0, performHttpRequest_1.performHttpRequest)(`${baseUri}/dms/r/${repositoryId}/o2m/${encodeURIComponent(documentId)}`, { method: "GET", headers: headers(token) })).body;
-    return body._links?.deleteWithReason?.href ?? body._links?.delete?.href;
-}
-/**
- * Setzt den Löschgrund in einen (ggf. templatisierten) Lösch-Link ein:
- * "...{?reason}", "...?reason={reason}" oder ohne Platzhalter (dann wird
- * reason als Query-Parameter angehängt).
- */
-function expandDeleteHref(href, reason) {
-    const encoded = encodeURIComponent(reason);
-    if (href.includes("{?reason}")) {
-        return href.replace("{?reason}", `?reason=${encoded}`);
-    }
-    if (href.includes("{reason}")) {
-        return href.replace("{reason}", encoded);
-    }
-    if (/[?&]reason=/.test(href)) {
-        return href;
-    }
-    return `${href}${href.includes("?") ? "&" : "?"}reason=${encoded}`;
-}
-/**
- * Löscht ein DMS-Objekt über seinen (bereits expandierten) Lösch-Link.
+ * Löscht ein DMS-Objekt - genau wie der DMS-Webclient:
+ * DELETE /dms/r/<repo>/o2/<id> mit JSON-Body { reason }.
+ * Ohne Grund antwortet das DMS mit 400 "Sie müssen einen Grund für diesen
+ * Löschvorgang angeben. [0004002]".
  * Wirft bei HTTP-Fehlern (z.B. 403 ohne Löschrecht, 409/423 gesperrt).
+ *
+ * @param token - API-Key; leer = Browser-Session des angemeldeten Benutzers.
  */
-async function deleteDmsObject(baseUri, token, href) {
-    await (0, performHttpRequest_1.performHttpRequest)(href.startsWith("http") ? href : `${baseUri}${href}`, {
+async function deleteDmsObject(baseUri, token, repositoryId, documentId, reason) {
+    await (0, performHttpRequest_1.performHttpRequest)(`${baseUri}/dms/r/${repositoryId}/o2/${encodeURIComponent(documentId)}`, {
         method: "DELETE",
-        headers: headers(token),
+        headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            Accept: "application/json",
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reason }),
     });
 }
 
@@ -596,7 +571,7 @@ const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExpo
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 2;
+const VERSION_COUNTER = 3;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const GET_HEADERS = { Accept: "application/json" };
@@ -797,13 +772,13 @@ function renderCategories() {
     <div class="ddd-header">
       <div>
         <span class="ddd-title">Dokumente löschen</span>
-        <div class="ddd-hint">Löscht alle Dokumente einer Kategorie oder aller Kategorien - mit dem Rechten des angemeldeten Benutzers.</div>
+        <div class="ddd-hint">Löscht alle Dokumente einer Kategorie oder aller Kategorien - mit den Rechten des angemeldeten Benutzers.</div>
       </div>
       <div class="ddd-controls">
         <input type="search" class="form-control form-control-sm ddd-filter" placeholder="Kategorie suchen…" aria-label="Kategorie suchen">
         <button type="button" class="btn btn-sm btn-outline-secondary" data-ddd-count-all ${busy ? "disabled" : ""}>Alle zählen</button>
         <button type="button" class="btn btn-sm btn-outline-secondary" data-ddd-reload ${busy ? "disabled" : ""}>Aktualisieren</button>
-        <button type="button" class="btn btn-sm btn-danger" data-ddd-delete-all ${busy || !categories.length ? "disabled" : ""}>Alle Kategorien löschen…</button>
+        <button type="button" class="btn btn-sm btn-danger" data-ddd-delete-all ${busy || !categories.length ? "disabled" : ""}>Alle Dokumente aus allen Kategorien löschen…</button>
       </div>
     </div>
     <div class="ddd-body">
@@ -1053,11 +1028,7 @@ async function collectSelection(targets) {
 async function deleteOne(category, documentId, reason) {
     const base = { category: category.name, categoryKey: category.key, documentId };
     try {
-        const href = await (0, deleteDmsObject_1.getDeleteHref)(BASE_URI, undefined, repositoryId, documentId);
-        if (!href) {
-            return { ...base, result: "Fehler", message: "Keine Löschberechtigung (kein Lösch-Link am Dokument)." };
-        }
-        await (0, deleteDmsObject_1.deleteDmsObject)(BASE_URI, undefined, (0, deleteDmsObject_1.expandDeleteHref)(href, reason));
+        await (0, deleteDmsObject_1.deleteDmsObject)(BASE_URI, undefined, repositoryId, documentId, reason);
         return { ...base, result: "gelöscht", message: "" };
     }
     catch (error) {
