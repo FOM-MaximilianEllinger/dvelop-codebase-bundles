@@ -598,12 +598,78 @@ async function synchronizeEventbride(baseUri, token, repositoryId) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getIdentityProviderCsrfToken = getIdentityProviderCsrfToken;
 exports.createAPIKey = createAPIKey;
 const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+const CSRF_KEY = /csrf|requestverificationtoken/i;
+// Base64-artige Tokens, z.B. "XuYY01iV+F5Y5MqoAnjOnWFjCllA/0L4nuacSs/ze8w=".
+const TOKEN_VALUE = /^[A-Za-z0-9+/=_-]{16,}$/;
+// Sucht rekursiv in JSON nach einem Feld wie "antiCsrfToken"/"csrfToken".
+function findCsrfInJson(value) {
+    if (!value || typeof value !== "object")
+        return undefined;
+    for (const [key, entry] of Object.entries(value)) {
+        if (CSRF_KEY.test(key) && typeof entry === "string" && TOKEN_VALUE.test(entry))
+            return entry;
+        const nested = findCsrfInJson(entry);
+        if (nested)
+            return nested;
+    }
+    return undefined;
+}
+// Sucht in HTML nach <meta name="...csrf..." content>, <input name="...csrf..." value>
+// oder einer Zuweisung wie csrfToken: "..." in eingebettetem Script.
+function findCsrfInHtml(html) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    for (const element of Array.from(doc.querySelectorAll("meta[name], input[name]"))) {
+        const name = element.getAttribute("name") ?? "";
+        const value = element.getAttribute("content") ?? element.getAttribute("value") ?? "";
+        if (CSRF_KEY.test(name) && TOKEN_VALUE.test(value))
+            return value;
+    }
+    const match = html.match(/(?:csrf|requestverificationtoken)[\w-]*["']?\s*[:=]\s*["']([A-Za-z0-9+/=_-]{16,})["']/i);
+    return match?.[1];
+}
+/**
+ * Holt das Anti-CSRF-Token der Identityprovider-Konfiguration. Die
+ * Oberfläche schickt es als Header "x-csrf-token" mit - ohne antwortet
+ * POST /identityprovider/config/apikey mit 401 (auch mit gültiger Session).
+ * Quelle ist die Seite zum Anlegen eines API-Keys (Antwort-Header, JSON
+ * oder HTML, je nachdem was der Identityprovider liefert).
+ */
+async function getIdentityProviderCsrfToken(baseUri, token = null) {
+    const response = await fetch(`${baseUri}/identityprovider/config/apikey/create`, {
+        method: "GET",
+        headers: {
+            Accept: "text/html,application/json;q=0.9,*/*;q=0.8",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "same-origin",
+    });
+    if (!response.ok) {
+        throw new Error(`CSRF-Token konnte nicht geladen werden (HTTP ${response.status}).`);
+    }
+    const fromHeader = response.headers.get("x-csrf-token");
+    if (fromHeader)
+        return fromHeader;
+    const text = await response.text();
+    let found;
+    try {
+        found = findCsrfInJson(JSON.parse(text));
+    }
+    catch {
+        found = findCsrfInHtml(text);
+    }
+    if (!found) {
+        throw new Error("CSRF-Token der Identityprovider-Konfiguration nicht gefunden.");
+    }
+    return found;
+}
 /**
  * Legt einen API-Key für einen Benutzer an - wie die Identityprovider-
  * Oberfläche: POST /identityprovider/config/apikey mit
- * {"id":"create","status":"Unconfirmed","userId":"<id>","label":"<label>"}.
+ * {"id":"create","status":"Unconfirmed","userId":"<id>","label":"<label>"}
+ * und Header "x-csrf-token" (siehe getIdentityProviderCsrfToken).
  *
  * @param token - Optional bearer token; ohne Token wird die Browser-Session genutzt.
  */
@@ -612,6 +678,7 @@ async function createAPIKey(baseUri, token = null, input) {
     const headers = {
         Accept: "application/json",
         "Content-Type": "application/json",
+        "x-csrf-token": await getIdentityProviderCsrfToken(baseUri, token),
     };
     if (token) {
         headers.Authorization = `Bearer ${token}`;
@@ -1776,7 +1843,7 @@ const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-do
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 9;
+const VERSION_COUNTER = 10;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
