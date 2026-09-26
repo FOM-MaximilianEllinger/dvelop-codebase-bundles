@@ -283,7 +283,8 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  *    (Kategorie bleibt).
  *
  * Wird vom Onboarding-Formular (src/forms/form.ts) als Process-Studio-Aktion
- * mit dem Eingabeparameter "DocId" angelegt; der Code wird beim Build als
+ * mit dem Eingabeparameter "docId" (wie im BPMN "Rechnungsleser Gutschriften
+ * verschieben" verwendet) angelegt; der Code wird beim Build als
  * Text ins Formular-Bundle übernommen (siehe build/webpack.form.config.js).
  * Aus Kompatibilität wird auch der Body eines DMS-Webhooks ({ doc: { id } })
  * verstanden.
@@ -294,11 +295,11 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  */
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 /** Name des Eingabeparameters der Aktion. */
-const DOC_ID_INPUT = "DocId";
+const DOC_ID_INPUT = "docId";
 module.exports = async (req, res) => {
     try {
         const body = parseBody(req);
-        const documentId = body?.[DOC_ID_INPUT] ?? body?.docId ?? body?.doc?.id;
+        const documentId = body?.[DOC_ID_INPUT] ?? body?.DocId ?? body?.doc?.id;
         if (!documentId) {
             respond(res, 400, { success: false, message: `Eingabeparameter "${DOC_ID_INPUT}" fehlt.` });
             return;

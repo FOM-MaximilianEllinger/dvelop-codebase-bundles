@@ -2,6 +2,146 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
+/***/ "../../helper/classcon-documentreader/extensionPoints.ts"
+/*!***************************************************************!*\
+  !*** ../../helper/classcon-documentreader/extensionPoints.ts ***!
+  \***************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getExtensionPoints = getExtensionPoints;
+exports.saveExtensionPoints = saveExtensionPoints;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+const FIELDS = [
+    "NodeId",
+    "IsActivated",
+    "ExtensionPointType",
+    "ConnectionString",
+    "QueueName",
+    "ScriptingAppEndpoint",
+    "ScriptingEngineProfile",
+];
+function extensionPointsUrl(baseUri, subscriptionId) {
+    return `${baseUri}/classcon-documentreader/Configuration/ExtensionPoints?subscriptionId=${encodeURIComponent(subscriptionId)}`;
+}
+function toExtensionPoint(raw) {
+    // Schlüssel ohne Rücksicht auf Groß-/Kleinschreibung (JSON kann camelCase sein).
+    const lookup = new Map(Object.entries(raw).map(([key, value]) => [key.toLowerCase(), value]));
+    const text = (field) => {
+        const value = lookup.get(field.toLowerCase());
+        return value === undefined || value === null ? "" : String(value);
+    };
+    return {
+        NodeId: text("NodeId"),
+        IsActivated: ["true", "on", "1"].includes(text("IsActivated").toLowerCase()),
+        ExtensionPointType: text("ExtensionPointType"),
+        ConnectionString: text("ConnectionString"),
+        QueueName: text("QueueName"),
+        ScriptingAppEndpoint: text("ScriptingAppEndpoint"),
+        ScriptingEngineProfile: text("ScriptingEngineProfile"),
+    };
+}
+// JSON-Antwort: Liste direkt oder unter "ExtensionPoints"/"extensionPoints".
+function parseJson(body) {
+    const data = body;
+    const list = Array.isArray(data) ? data : data?.ExtensionPoints ?? data?.extensionPoints;
+    return Array.isArray(list) ? list.map(toExtensionPoint) : undefined;
+}
+// HTML-Antwort (Konfigurationsseite): Formularfelder "ExtensionPoints[i].<Feld>"
+// auslesen. Checkboxen (IsActivated) über ihren checked-Zustand, da ASP.NET
+// daneben ein verstecktes Feld "false" mit demselben Namen rendert.
+function parseHtml(html) {
+    if (typeof DOMParser === "undefined") {
+        return undefined;
+    }
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const entries = new Map();
+    const checkboxes = new Set();
+    doc.querySelectorAll("input[name], select[name], textarea[name]")
+        .forEach((element) => {
+        const match = element.name.match(/^ExtensionPoints\[(\d+)\]\.(\w+)$/);
+        if (!match)
+            return;
+        const index = Number(match[1]);
+        const field = match[2];
+        const entry = entries.get(index) ?? {};
+        entries.set(index, entry);
+        // Ohne instanceof (anderer Fenster-Kontext möglich), daher über type.
+        const type = element.tagName === "INPUT" ? element.type : "";
+        if (type === "checkbox") {
+            checkboxes.add(element.name);
+            entry[field] = element.checked ? "true" : "false";
+        }
+        else if (type === "radio") {
+            if (element.checked)
+                entry[field] = element.value;
+        }
+        else if (!checkboxes.has(element.name)) {
+            // Verstecktes "false" hinter einer Checkbox wird oben übersprungen;
+            // steht es davor, überschreibt die Checkbox den Wert anschließend.
+            entry[field] = element.value;
+        }
+    });
+    if (entries.size === 0) {
+        return undefined;
+    }
+    return [...entries.keys()].sort((a, b) => a - b).map((index) => toExtensionPoint(entries.get(index)));
+}
+/**
+ * Liest ALLE Extension Points eines Rechnungslesers
+ * (GET /classcon-documentreader/Configuration/ExtensionPoints?subscriptionId=...).
+ * Versteht eine JSON-Antwort sowie die HTML-Konfigurationsseite (nur im
+ * Browser). Wirft, wenn keine Einträge erkennbar sind - saveExtensionPoints
+ * darf nie mit einer unvollständigen Liste aufgerufen werden, sonst würden
+ * die übrigen Extension Points überschrieben.
+ */
+async function getExtensionPoints(baseUri, token, subscriptionId) {
+    const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json, text/html;q=0.9",
+    };
+    const response = await (0, performHttpRequest_1.performHttpRequest)(extensionPointsUrl(baseUri, subscriptionId), { method: "GET", headers });
+    const points = typeof response.body === "string"
+        ? parseHtml(response.body) ?? (() => { try {
+            return parseJson(JSON.parse(response.body));
+        }
+        catch {
+            return undefined;
+        } })()
+        : parseJson(response.body);
+    if (!points || points.length === 0) {
+        throw new Error("Die Extension Points des Rechnungslesers konnten nicht gelesen werden - es wird nichts gespeichert.");
+    }
+    return points;
+}
+/**
+ * Speichert die KOMPLETTE Liste der Extension Points (POST, Formulardaten
+ * "ExtensionPoints[i].<Feld>" wie die Konfigurationsseite). Immer vorher mit
+ * getExtensionPoints laden und nur den gewünschten Eintrag ändern.
+ */
+async function saveExtensionPoints(baseUri, token, subscriptionId, points) {
+    const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    };
+    const body = new URLSearchParams();
+    points.forEach((point, index) => {
+        for (const field of FIELDS) {
+            body.append(`ExtensionPoints[${index}].${field}`, String(point[field] ?? ""));
+        }
+    });
+    return await (0, performHttpRequest_1.performHttpRequest)(extensionPointsUrl(baseUri, subscriptionId), {
+        method: "POST",
+        headers,
+        body: body.toString(),
+    });
+}
+
+
+/***/ },
+
 /***/ "../../helper/classcon-documentreader/getFeatures.ts"
 /*!***********************************************************!*\
   !*** ../../helper/classcon-documentreader/getFeatures.ts ***!
@@ -859,6 +999,70 @@ async function performHttpRequest(url, options) {
 
 /***/ },
 
+/***/ "../../helper/processstudio/processComponents.ts"
+/*!*******************************************************!*\
+  !*** ../../helper/processstudio/processComponents.ts ***!
+  \*******************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.resolveComponent = resolveComponent;
+exports.componentExists = componentExists;
+exports.deployProcess = deployProcess;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+function jsonHeaders(token) {
+    return {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+}
+/**
+ * Lässt Process Studio eine Komponente (z.B. BPMN-Inhalt) auflösen/prüfen -
+ * wie der Import in der Oberfläche vor dem Deployment:
+ * POST /processstudio/components/resolve mit { type, content }.
+ */
+async function resolveComponent(baseUri, token, type, content) {
+    return await (0, performHttpRequest_1.performHttpRequest)(`${baseUri}/processstudio/components/resolve`, {
+        method: "POST",
+        headers: jsonHeaders(token),
+        body: JSON.stringify({ type, content }),
+    });
+}
+/**
+ * Prüft, ob eine Komponente schon existiert:
+ * POST /processstudio/components/exists mit { id, name, type }.
+ * Die Antwort wird tolerant ausgewertet (true bzw. { exists: true }).
+ */
+async function componentExists(baseUri, token, id, name, type) {
+    const response = await (0, performHttpRequest_1.performHttpRequest)(`${baseUri}/processstudio/components/exists`, {
+        method: "POST",
+        headers: jsonHeaders(token),
+        body: JSON.stringify({ id, name, type }),
+    });
+    const body = response.body;
+    if (typeof body === "boolean")
+        return body;
+    if (typeof body === "string")
+        return body.trim().toLowerCase() === "true";
+    return body?.exists === true || body?.idExists === true || body?.nameExists === true;
+}
+/**
+ * Deployt einen BPMN-Prozess (neue Version, falls er schon existiert):
+ * POST /processstudio/components/process/deployment mit { type: "process", content }.
+ */
+async function deployProcess(baseUri, token, content) {
+    return await (0, performHttpRequest_1.performHttpRequest)(`${baseUri}/processstudio/components/process/deployment`, {
+        method: "POST",
+        headers: jsonHeaders(token),
+        body: JSON.stringify({ type: "process", content }),
+    });
+}
+
+
+/***/ },
+
 /***/ "../../helper/scripting/createScript.ts"
 /*!**********************************************!*\
   !*** ../../helper/scripting/createScript.ts ***!
@@ -1526,6 +1730,10 @@ const webindexDesignerForm_json_1 = __importDefault(__webpack_require__(/*! ../d
 // Beim Build zuerst aus src/scripts/gutschriftenVerschieben.ts gebaut (siehe
 // "build" in package.json) und hier als Text eingebunden.
 const gutschriftenVerschieben_js_raw_1 = __importDefault(__webpack_require__(/*! ../../dist/scripts/gutschriftenVerschieben.js?raw */ "./dist/scripts/gutschriftenVerschieben.js?raw"));
+const preExport_js_raw_1 = __importDefault(__webpack_require__(/*! ../../dist/scripts/preExport.js?raw */ "./dist/scripts/preExport.js?raw"));
+const Rechnungsleser_Gutschriften_verschieben_v1_bpmn_raw_1 = __importDefault(__webpack_require__(/*! ../data/Rechnungsleser Gutschriften verschieben_v1.bpmn?raw */ "./src/data/Rechnungsleser Gutschriften verschieben_v1.bpmn?raw"));
+const processComponents_1 = __webpack_require__(/*! ../../../../helper/processstudio/processComponents */ "../../helper/processstudio/processComponents.ts");
+const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/extensionPoints */ "../../helper/classcon-documentreader/extensionPoints.ts");
 /**
  * Onboarding gevis ECM Rechnungsleser (ehemals
  * projects/OnboardingGevisECMDocumentReader - dort als lokales Node-Script
@@ -1568,7 +1776,7 @@ const gutschriftenVerschieben_js_raw_1 = __importDefault(__webpack_require__(/*!
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 7;
+const VERSION_COUNTER = 8;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -1582,9 +1790,14 @@ const GROUP_FRUEHES_SCANNEN_NAME = "gevis ECM Frühes Scannen";
 const PROFILE_MAIL_NAME = "Frühes Scannen (Mail)";
 const PROFILE_SCAN_NAME = "Frühes Scannen (Scan)";
 const CREDIT_MEMO_SCRIPT_NAME = "Rechnungsleser Gutschriften verschieben";
+// Skript für den Extension Point "vor dem Export" des Rechnungslesers
+// (src/scripts/preExport.ts).
+const PRE_EXPORT_SCRIPT_NAME = "Rechnungsleser PreExport";
+const BEFORE_EXPORT_NODE_ID = "IR_Business_BeforeExportHook";
+const BEFORE_EXPORT_PROFILE = "PreExportScript";
 // Eingabeparameter der Aktion - muss zu DOC_ID_INPUT in
 // src/scripts/gutschriftenVerschieben.ts passen.
-const CREDIT_MEMO_INPUT_DOC_ID = "DocId";
+const CREDIT_MEMO_INPUT_DOC_ID = "docId";
 // Werte, die beim Neuanlegen des Skripts hinterlegt werden (aus dem bisherigen
 // Script-Export übernommen); der API-Key kommt aus der Konfigurationsseite.
 const CREDIT_MEMO_VARIABLES = [
@@ -1709,6 +1922,51 @@ async function getRepositoryId(apiKey) {
     }
     return repositoryId;
 }
+async function findScriptIdByName(apiKey, name) {
+    const scripts = (await (0, getAllScripts_1.getAllScripts)(BASE_URI, apiKey)).body ?? [];
+    return scripts.find((script) => script.name === name)?.id;
+}
+function scriptRunUrl(scriptId) {
+    return `${BASE_URI}/scripting/script/${scriptId}/run`;
+}
+// Soll-Zustand des Extension Points "vor dem Export": aktiv, ScriptingApp,
+// ruft das PreExport-Skript auf.
+function isBeforeExportConfigured(point, endpoint) {
+    return !!point && point.IsActivated && point.ExtensionPointType === "ScriptingApp" && point.ScriptingAppEndpoint === endpoint;
+}
+// Prozess-Id und -Name aus dem BPMN (<bpmn:process id="..." name="...">).
+function bpmnProcessInfo(bpmn) {
+    const tag = bpmn.match(/<bpmn:process\b[^>]*>/)?.[0] ?? "";
+    const id = tag.match(/\bid="([^"]+)"/)?.[1];
+    const name = tag.match(/\bname="([^"]+)"/)?.[1];
+    if (!id || !name) {
+        throw new Error("Prozess-Id/-Name im BPMN nicht gefunden.");
+    }
+    return { id, name };
+}
+// Das BPMN ruft die Aktion "Gutschriften verschieben" über die Id aus dem
+// Mandanten auf, in dem es modelliert wurde ("scripting_<script>-<version>").
+// Vor dem Hochladen durch die Aktions-Id des Skripts in DIESEM Mandanten
+// ersetzen.
+async function bpmnForTenant(apiKey) {
+    const scriptId = await findCreditMemoScriptId(apiKey);
+    if (!scriptId) {
+        throw new Error(`Skript „${CREDIT_MEMO_SCRIPT_NAME}“ nicht gefunden - bitte zuerst das Skript anlegen.`);
+    }
+    const version = (await (0, getScriptVersion_1.getScriptVersion)(BASE_URI, apiKey, scriptId)).body[0];
+    if (!version?.id) {
+        throw new Error(`Für „${CREDIT_MEMO_SCRIPT_NAME}“ wurde keine Version gefunden.`);
+    }
+    if (!version.actionEnabled) {
+        throw new Error(`„${CREDIT_MEMO_SCRIPT_NAME}“ ist noch keine Aktion - bitte zuerst den Skript-Schritt ausführen.`);
+    }
+    const actionId = `scripting_${version.action?.id ?? `${scriptId}-${version.id}`}`;
+    const pattern = /(<camunda:inputParameter name="actionId">)scripting_[^<]+(<\/camunda:inputParameter>)/g;
+    if (!pattern.test(Rechnungsleser_Gutschriften_verschieben_v1_bpmn_raw_1.default)) {
+        throw new Error("Im BPMN wurde kein Aufruf einer Skript-Aktion gefunden.");
+    }
+    return Rechnungsleser_Gutschriften_verschieben_v1_bpmn_raw_1.default.replace(pattern, `$1${actionId}$2`);
+}
 async function findCreditMemoScriptId(apiKey) {
     const scripts = (await (0, getAllScripts_1.getAllScripts)(BASE_URI, apiKey)).body ?? [];
     return scripts.find((script) => script.name === CREDIT_MEMO_SCRIPT_NAME)?.id;
@@ -1768,7 +2026,8 @@ function newGroupBody(name, id, userMembers) {
 // eine vorhandene Gruppe verwenden. Sie wird in den Stapelprofilen und
 // Postfächern berechtigt.
 // Eventbridge-Schritt in dieser Sitzung ausgeführt (siehe Schritt "eventbridge").
-let eventbridgeDone = false;
+let eventbridgeHookDone = false;
+let eventbridgeSyncDone = false;
 // Dublettenprüfung in dieser Sitzung ausgeschaltet (siehe Schritt "duplicateCheck").
 let duplicateCheckDisabled = false;
 // Subscription-ID des Rechnungslesers: aus der Kachel "classcon-documentreader/
@@ -2169,22 +2428,134 @@ const steps = [
         },
     },
     {
-        id: "eventbridge",
-        title: "Eventbridge",
-        description: "Aktiviert das DMS-Ereignis „dmspostimport“ in der Eventbridge und synchronisiert sie einmal mit dem DMS-Repository - Beides ist beliebig wiederholbar.",
+        id: "preExportScript",
+        title: `Skript „${PRE_EXPORT_SCRIPT_NAME}“`,
+        description: "Wird vom Rechnungsleser vor dem Export aufgerufen: setzt DocumentType auf den ERP-Code (Gutschrift 3, sonst 2) und Rechnungstyp auf Rechnung / Gutschrift / Rechnungskorrektur. Ein vorhandenes Skript bekommt nur den aktuellen Code.",
+        async check(apiKey) {
+            return (await findScriptIdByName(apiKey, PRE_EXPORT_SCRIPT_NAME))
+                ? exists("Vorhanden - Code wird aktualisiert.")
+                : missing("Skript fehlt.");
+        },
+        async run(apiKey) {
+            let scriptId = await findScriptIdByName(apiKey, PRE_EXPORT_SCRIPT_NAME);
+            const createdNow = !scriptId;
+            if (!scriptId) {
+                scriptId = (await (0, createScript_1.createScript)(BASE_URI, apiKey, PRE_EXPORT_SCRIPT_NAME)).body.id;
+                if (!scriptId) {
+                    throw new Error(`„${PRE_EXPORT_SCRIPT_NAME}“ konnte nicht angelegt werden (keine Id).`);
+                }
+            }
+            const versionId = (await (0, getScriptVersion_1.getScriptVersion)(BASE_URI, apiKey, scriptId)).body[0]?.id;
+            if (!versionId) {
+                throw new Error(`Für „${PRE_EXPORT_SCRIPT_NAME}“ wurde keine Version gefunden.`);
+            }
+            await (0, patchScript_1.patchScript)(BASE_URI, apiKey, scriptId, versionId, { content: preExport_js_raw_1.default });
+            return createdNow ? "Skript angelegt." : "Code aktualisiert.";
+        },
+    },
+    {
+        id: "beforeExportHook",
+        title: "Extension Point „vor dem Export“",
+        description: `Hinterlegt das Skript „${PRE_EXPORT_SCRIPT_NAME}“ im Rechnungsleser (${BEFORE_EXPORT_NODE_ID}, ScriptingApp). Alle übrigen Extension Points bleiben unverändert - sie werden vorher gelesen und unverändert mitgesendet.`,
+        async check(apiKey) {
+            const scriptId = await findScriptIdByName(apiKey, PRE_EXPORT_SCRIPT_NAME);
+            if (!scriptId) {
+                return missing("Skript fehlt noch.");
+            }
+            const points = await (0, extensionPoints_1.getExtensionPoints)(BASE_URI, apiKey, await findDocumentReaderSubscriptionId(apiKey));
+            const point = points.find((p) => p.NodeId === BEFORE_EXPORT_NODE_ID);
+            if (isBeforeExportConfigured(point, scriptRunUrl(scriptId))) {
+                return done("Aktiv, ruft das PreExport-Skript auf.");
+            }
+            return point?.ScriptingAppEndpoint
+                ? exists(`Aktuell: ${point.IsActivated ? "aktiv" : "inaktiv"}, ${point.ScriptingAppEndpoint} - wird auf das PreExport-Skript umgestellt.`)
+                : missing(point ? "Nicht hinterlegt." : `${BEFORE_EXPORT_NODE_ID} nicht gefunden - wird ergänzt.`);
+        },
+        async run(apiKey) {
+            const scriptId = await findScriptIdByName(apiKey, PRE_EXPORT_SCRIPT_NAME);
+            if (!scriptId) {
+                throw new Error(`Skript „${PRE_EXPORT_SCRIPT_NAME}“ nicht gefunden - bitte zuerst das Skript anlegen.`);
+            }
+            const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
+            // Erst ALLE Extension Points lesen (wirft, wenn das nicht klappt) und nur
+            // den BeforeExportHook ändern - der POST ersetzt die komplette Liste.
+            const points = await (0, extensionPoints_1.getExtensionPoints)(BASE_URI, apiKey, subscriptionId);
+            const endpoint = scriptRunUrl(scriptId);
+            const index = points.findIndex((p) => p.NodeId === BEFORE_EXPORT_NODE_ID);
+            if (index >= 0 && isBeforeExportConfigured(points[index], endpoint)) {
+                return "Bereits hinterlegt.";
+            }
+            const updated = {
+                ...(index >= 0 ? points[index] : { ConnectionString: "", QueueName: "" }),
+                NodeId: BEFORE_EXPORT_NODE_ID,
+                IsActivated: true,
+                ExtensionPointType: "ScriptingApp",
+                ScriptingAppEndpoint: endpoint,
+                ScriptingEngineProfile: (index >= 0 && points[index].ScriptingEngineProfile) || BEFORE_EXPORT_PROFILE,
+            };
+            const next = [...points];
+            if (index >= 0) {
+                next[index] = updated;
+            }
+            else {
+                next.push(updated);
+            }
+            await (0, extensionPoints_1.saveExtensionPoints)(BASE_URI, apiKey, subscriptionId, next);
+            return "PreExport-Skript hinterlegt und aktiviert.";
+        },
+    },
+    {
+        id: "eventbridgeHook",
+        title: "Eventbridge: DMS-Ereignis aktivieren",
+        description: "Aktiviert das DMS-Ereignis „dmspostimport“ in der Eventbridge. Beliebig wiederholbar.",
         async check() {
-            // Die Eventbridge-Konfiguration lässt sich nicht auslesen - der Schritt
-            // gilt erst als erledigt, wenn er in dieser Sitzung gelaufen ist, damit
-            // auch "Alle fehlenden anlegen" ihn sicher ausführt.
-            return eventbridgeDone
-                ? done("In dieser Sitzung aktiviert und synchronisiert.")
-                : missing("Wird aktiviert und synchronisiert.");
+            // Die Eventbridge-Konfiguration lässt sich nicht auslesen - erledigt
+            // erst, wenn der Schritt in dieser Sitzung gelaufen ist, damit auch
+            // "Alle fehlenden anlegen" ihn sicher ausführt.
+            return eventbridgeHookDone
+                ? done("In dieser Sitzung aktiviert.")
+                : missing("Wird aktiviert.");
         },
         async run(apiKey) {
             await (0, setDmspostimport_1.setDmspostimport)(BASE_URI, apiKey, true);
+            eventbridgeHookDone = true;
+            return "„dmspostimport“ aktiviert.";
+        },
+    },
+    {
+        id: "eventbridgeSync",
+        title: "Eventbridge synchronisieren",
+        description: "Synchronisiert die Eventbridge einmal mit dem DMS-Repository. Beliebig wiederholbar.",
+        async check() {
+            return eventbridgeSyncDone
+                ? done("In dieser Sitzung synchronisiert.")
+                : missing("Wird synchronisiert.");
+        },
+        async run(apiKey) {
             await (0, synchronizeEventbride_1.synchronizeEventbride)(BASE_URI, apiKey, await getRepositoryId(apiKey));
-            eventbridgeDone = true;
-            return "„dmspostimport“ aktiviert, Synchronisierung ausgeführt.";
+            eventbridgeSyncDone = true;
+            return "Synchronisierung ausgeführt.";
+        },
+    },
+    {
+        id: "creditMemoProcess",
+        title: `Prozess „${bpmnProcessInfo(Rechnungsleser_Gutschriften_verschieben_v1_bpmn_raw_1.default).name}“`,
+        description: "Startet bei der Ablage einer Gutschrift (Eventbridge „dmspostimport“) die Aktion „Gutschriften verschieben“ - benötigt Skript und Eventbridge. Die Aktions-Id im BPMN wird beim Hochladen auf das Skript dieses Mandanten gesetzt; ein vorhandener Prozess bekommt eine neue Version.",
+        async check(apiKey) {
+            const { id, name } = bpmnProcessInfo(Rechnungsleser_Gutschriften_verschieben_v1_bpmn_raw_1.default);
+            return (await (0, processComponents_1.componentExists)(BASE_URI, apiKey, id, name, "process"))
+                ? exists("Vorhanden - wird als neue Version deployt.")
+                : missing("Prozess fehlt.");
+        },
+        async run(apiKey) {
+            const content = await bpmnForTenant(apiKey);
+            const { id, name } = bpmnProcessInfo(content);
+            const existedBefore = await (0, processComponents_1.componentExists)(BASE_URI, apiKey, id, name, "process");
+            // Wie der Import in Process Studio: erst auflösen lassen (meldet z.B.
+            // fehlende Aktionen), dann deployen.
+            await (0, processComponents_1.resolveComponent)(BASE_URI, apiKey, "process", content);
+            await (0, processComponents_1.deployProcess)(BASE_URI, apiKey, content);
+            return existedBefore ? "Neue Version deployt." : "Prozess deployt.";
         },
     },
     {
@@ -2862,7 +3233,27 @@ window.formInit = function (form, data) {
   \*****************************************************/
 (module) {
 
-module.exports = "/******/ (() => { // webpackBootstrap\n/******/ \t\"use strict\";\n/******/ \tvar __webpack_modules__ = ({\n\n/***/ \"../../helper/dms/getRepositories.ts\"\n/*!*******************************************!*\\\n  !*** ../../helper/dms/getRepositories.ts ***!\n  \\*******************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.getRepositories = getRepositories;\nconst performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ \"../../helper/performHttpRequest/performHttpRequest.ts\");\nasync function getRepositories(baseUri, token) {\n    const url = `${baseUri}/dms/r`;\n    const headers = {\n        \"Authorization\": `Bearer ${token}`,\n        \"Accept\": \"application/json\",\n        \"Content-Type\": \"application/json\",\n    };\n    const options = {\n        method: \"GET\",\n        headers,\n    };\n    return await (0, performHttpRequest_1.performHttpRequest)(url, options);\n}\n\n\n/***/ },\n\n/***/ \"../../helper/dms/getSpecificDocument.ts\"\n/*!***********************************************!*\\\n  !*** ../../helper/dms/getSpecificDocument.ts ***!\n  \\***********************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.getSpecificDocument = getSpecificDocument;\nconst performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ \"../../helper/performHttpRequest/performHttpRequest.ts\");\n/**\n * Retrieves a specific document from the DMS (Document Management System) using the provided parameters.\n *\n * @param baseUri - The base URI of the DMS API.\n * @param token - The authorization token to access the DMS API.\n * @param repositoryId - The ID of the repository where the document is stored.\n * @param documentId - The ID of the specific document to retrieve.\n * @returns A promise that resolves to an `ApiResponse` containing the `GetSpecificDocument` data.\n *\n * @throws Will throw an error if the HTTP request fails or the response is invalid.\n */\nasync function getSpecificDocument(baseUri, token, repositoryId, documentId) {\n    const url = `${baseUri}/dms/r/${repositoryId}/o2/${documentId}`;\n    const headers = {\n        \"Authorization\": `Bearer ${token}`,\n        \"Accept\": \"application/json\",\n        \"Content-Type\": \"application/json\",\n    };\n    const options = {\n        method: \"GET\",\n        headers\n    };\n    return await (0, performHttpRequest_1.performHttpRequest)(url, options);\n}\n\n\n/***/ },\n\n/***/ \"../../helper/dms/updateDocument.ts\"\n/*!******************************************!*\\\n  !*** ../../helper/dms/updateDocument.ts ***!\n  \\******************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.updateDocument = updateDocument;\nconst performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ \"../../helper/performHttpRequest/performHttpRequest.ts\");\nasync function updateDocument(baseUri, token, repositoryId, documentId, sourceCategory, sourceProperties) {\n    const url = `${baseUri}/dms/r/${repositoryId}/o2m/${documentId}`;\n    const headers = {\n        Authorization: `Bearer ${token}`,\n        Accept: \"application/json\",\n        \"Content-Type\": \"application/json\",\n    };\n    const body = {\n        sourceCategory: sourceCategory,\n        sourceId: `/dms/r/${repositoryId}/source`,\n        sourceProperties: sourceProperties,\n    };\n    const options = {\n        method: \"PUT\",\n        headers,\n        body: JSON.stringify(body),\n    };\n    return await (0, performHttpRequest_1.performHttpRequest)(url, options);\n}\n\n\n/***/ },\n\n/***/ \"../../helper/performHttpRequest/performHttpRequest.ts\"\n/*!*************************************************************!*\\\n  !*** ../../helper/performHttpRequest/performHttpRequest.ts ***!\n  \\*************************************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.performHttpRequest = performHttpRequest;\nconst logger_1 = __webpack_require__(/*! ../utils/logger */ \"../../helper/utils/logger.ts\");\n/**\n * Performs an HTTP request and returns a structured response.\n*\n* @template T - The expected type of the response body.\n* @param {string} url - The URL to which the request is sent.\n* @param {RequestInit} options - The options for the HTTP request, such as method, headers, and body.\n* @returns {Promise<ApiResponse<T>>} A promise that resolves to an `ApiResponse` object containing the response details.\n* @throws {Error} Throws an error if the HTTP response status is not OK (status code outside the range 200-299).\n*\n* The function attempts to parse the response body based on the `Content-Type` header:\n* - If the `Content-Type` includes \"application/json\", it parses the body as JSON.\n* - Otherwise, it parses the body as plain text.\n*\n* If the response is not OK, the function throws an error with the status code and error message.\n*/\nconst logger = (0, logger_1.getLogger)();\nasync function performHttpRequest(url, options) {\n    let body = {};\n    let errorMessage = \"\";\n    let response;\n    logger.debug(`[Request] ${options.method} ${url} | Headers: ${JSON.stringify(options.headers)} | Body: ${!(options.body instanceof Uint8Array) && options.body !== undefined\n        ? options.body\n        : \"[Binary body omitted]\"}`);\n    try {\n        response = await fetch(url, options);\n    }\n    catch (err) {\n        throw new Error(`Network error during fetch: ${err.message}`);\n    }\n    const contentType = response.headers.get(\"content-type\") || \"\";\n    const parseBody = async () => {\n        try {\n            if (contentType.includes(\"application/json\") || contentType.includes('application/hal+json')) {\n                return await response.json();\n            }\n            else if (contentType.includes(\"application/octet-stream\") ||\n                contentType.includes(\"application/pdf\")) {\n                const arrayBuffer = await response.arrayBuffer();\n                return new Uint8Array(arrayBuffer);\n            }\n            else {\n                return await response.text();\n            }\n        }\n        catch (e) {\n            return undefined;\n        }\n    };\n    if (response.ok) {\n        const result = await parseBody();\n        if (result !== undefined) {\n            body = result;\n        }\n    }\n    else {\n        const errorBody = await parseBody();\n        errorMessage =\n            typeof errorBody === \"string\" ? errorBody : JSON.stringify(errorBody);\n        throw new Error(`HTTP error! status: ${response.status}, message: ${errorMessage}`);\n    }\n    return {\n        status: response.status,\n        statusText: response.statusText,\n        body: body,\n        bodyUsed: response.bodyUsed,\n        headers: response.headers,\n        ok: response.ok,\n        redirected: response.redirected,\n        type: response.type,\n        url: response.url,\n    };\n}\n\n\n/***/ },\n\n/***/ \"../../helper/utils/logger.ts\"\n/*!************************************!*\\\n  !*** ../../helper/utils/logger.ts ***!\n  \\************************************/\n(__unused_webpack_module, exports) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.Logger = exports.LogLevel = void 0;\nexports.initLogger = initLogger;\nexports.getLogger = getLogger;\nvar LogLevel;\n(function (LogLevel) {\n    LogLevel[LogLevel[\"DEBUG\"] = 0] = \"DEBUG\";\n    LogLevel[LogLevel[\"INFO\"] = 1] = \"INFO\";\n    LogLevel[LogLevel[\"WARN\"] = 2] = \"WARN\";\n    LogLevel[LogLevel[\"ERROR\"] = 3] = \"ERROR\";\n})(LogLevel || (exports.LogLevel = LogLevel = {}));\nclass Logger {\n    constructor(options = {}) {\n        this.level = options.level ?? LogLevel.INFO;\n        this.showTimestamp = options.showTimestamp ?? true;\n    }\n    formatMessage(level, message) {\n        const paddedLevel = level.toUpperCase().padEnd(5, ' ');\n        const timestamp = this.showTimestamp\n            ? `[${new Date().toISOString()}] `\n            : \"\";\n        return `${timestamp}${paddedLevel}: ${message}`;\n    }\n    debug(message, ...args) {\n        if (this.level <= LogLevel.DEBUG) {\n            console.debug(this.formatMessage(\"debug\", message), ...args);\n        }\n    }\n    info(message, ...args) {\n        if (this.level <= LogLevel.INFO) {\n            console.info(this.formatMessage(\"info\", message), ...args);\n        }\n    }\n    warn(message, ...args) {\n        if (this.level <= LogLevel.WARN) {\n            console.warn(this.formatMessage(\"warn\", message), ...args);\n        }\n    }\n    error(message, ...args) {\n        if (this.level <= LogLevel.ERROR) {\n            console.error(this.formatMessage(\"error\", message), ...args);\n        }\n    }\n    setLevel(newLevel) {\n        this.level = newLevel;\n    }\n}\nexports.Logger = Logger;\nlet loggerInstance;\nfunction initLogger(level = LogLevel.INFO, showTimestamp = true) {\n    if (!loggerInstance) {\n        loggerInstance = new Logger({ level, showTimestamp });\n    }\n    return loggerInstance;\n}\nfunction getLogger() {\n    // Fallback: falls noch niemand initLogger() aufgerufen hat\n    if (!loggerInstance) {\n        loggerInstance = new Logger({ level: LogLevel.DEBUG, showTimestamp: true });\n    }\n    return loggerInstance;\n}\n\n\n/***/ },\n\n/***/ \"./src/scripts/gutschriftenVerschieben.ts\"\n/*!************************************************!*\\\n  !*** ./src/scripts/gutschriftenVerschieben.ts ***!\n  \\************************************************/\n(module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nconst getRepositories_1 = __webpack_require__(/*! ../../../../helper/dms/getRepositories */ \"../../helper/dms/getRepositories.ts\");\nconst getSpecificDocument_1 = __webpack_require__(/*! ../../../../helper/dms/getSpecificDocument */ \"../../helper/dms/getSpecificDocument.ts\");\nconst updateDocument_1 = __webpack_require__(/*! ../../../../helper/dms/updateDocument */ \"../../helper/dms/updateDocument.ts\");\nconst logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ \"../../helper/utils/logger.ts\");\n/**\n * \"Rechnungsleser Gutschriften verschieben\" (ehemals\n * projects/_OLD/moveDocumentsOfDocumentReader/script.mjs, bisher nur per\n * DMS-Webhook aufgerufen): prüft beim Dokument mit der übergebenen DocId die\n * Dokumentart des Rechnungslesers und\n *  - verschiebt Gutschriften (Wert = fieldDocumentTypeValueMatch, z.B.\n *    \"CreditAdvice\") in die Kategorie categoryCreditMemoGUID und setzt die\n *    Dokumentart auf \"Gutschrift\",\n *  - setzt bei allen anderen Dokumenten die Dokumentart auf \"Rechnung\"\n *    (Kategorie bleibt).\n *\n * Wird vom Onboarding-Formular (src/forms/form.ts) als Process-Studio-Aktion\n * mit dem Eingabeparameter \"DocId\" angelegt; der Code wird beim Build als\n * Text ins Formular-Bundle übernommen (siehe build/webpack.form.config.js).\n * Aus Kompatibilität wird auch der Body eines DMS-Webhooks ({ doc: { id } })\n * verstanden.\n *\n * customerVariables (werden vom Formular nur beim Neuanlegen gesetzt):\n * apiKey, categoryCreditMemoGUID, fieldDocumentTypeGUID,\n * fieldDocumentTypeValueMatch.\n */\nconst logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);\n/** Name des Eingabeparameters der Aktion. */\nconst DOC_ID_INPUT = \"DocId\";\nmodule.exports = async (req, res) => {\n    try {\n        const body = parseBody(req);\n        const documentId = body?.[DOC_ID_INPUT] ?? body?.docId ?? body?.doc?.id;\n        if (!documentId) {\n            respond(res, 400, { success: false, message: `Eingabeparameter \"${DOC_ID_INPUT}\" fehlt.` });\n            return;\n        }\n        const baseUri = req.get(\"x-dv-baseuri\");\n        const apiKey = req.var(\"apiKey\");\n        const categoryCreditMemo = req.var(\"categoryCreditMemoGUID\");\n        const fieldDocumentType = req.var(\"fieldDocumentTypeGUID\");\n        const valueMatch = req.var(\"fieldDocumentTypeValueMatch\");\n        const repositoryId = (await (0, getRepositories_1.getRepositories)(baseUri, apiKey)).body.repositories[0]?.id;\n        if (!repositoryId) {\n            throw new Error(\"Kein DMS-Repository gefunden.\");\n        }\n        const document = (await (0, getSpecificDocument_1.getSpecificDocument)(baseUri, apiKey, repositoryId, documentId)).body;\n        const documentType = document.objectProperties?.find((property) => property.id === fieldDocumentType)?.value;\n        const isCreditMemo = documentType === valueMatch;\n        const targetCategory = isCreditMemo ? categoryCreditMemo : document.category;\n        if (!targetCategory) {\n            throw new Error(`Kategorie von Dokument ${documentId} konnte nicht ermittelt werden.`);\n        }\n        await (0, updateDocument_1.updateDocument)(baseUri, apiKey, repositoryId, documentId, targetCategory, {\n            properties: [{ key: fieldDocumentType, values: [isCreditMemo ? \"Gutschrift\" : \"Rechnung\"] }],\n        });\n        const message = isCreditMemo\n            ? `Dokument ${documentId} als Gutschrift in Kategorie ${categoryCreditMemo} verschoben.`\n            : `Dokument ${documentId} ist keine Gutschrift (Dokumentart \"${documentType ?? \"\"}\"), als Rechnung gekennzeichnet.`;\n        logger.info(message);\n        respond(res, 200, { success: true, creditMemo: isCreditMemo, message });\n    }\n    catch (error) {\n        const message = error instanceof Error ? error.message : String(error);\n        logger.error(`Fehler: ${message}`);\n        respond(res, 500, { success: false, message });\n    }\n};\nfunction parseBody(req) {\n    try {\n        return req.json?.() ?? {};\n    }\n    catch {\n        return {};\n    }\n}\nfunction respond(res, status, body) {\n    res.status(status).set(\"Content-Type\", \"application/json\").send(JSON.stringify(body));\n}\n\n\n/***/ }\n\n/******/ \t});\n/************************************************************************/\n/******/ \t// The module cache\n/******/ \tconst __webpack_module_cache__ = {};\n/******/ \t\n/******/ \t// The require function\n/******/ \tfunction __webpack_require__(moduleId) {\n/******/ \t\t// Check if module is in cache\n/******/ \t\tconst cachedModule = __webpack_module_cache__[moduleId];\n/******/ \t\tif (cachedModule !== undefined) {\n/******/ \t\t\treturn cachedModule.exports;\n/******/ \t\t}\n/******/ \t\t// Create a new module (and put it into the cache)\n/******/ \t\tconst module = __webpack_module_cache__[moduleId] = {\n/******/ \t\t\t// no module.id needed\n/******/ \t\t\t// no module.loaded needed\n/******/ \t\t\texports: {}\n/******/ \t\t};\n/******/ \t\n/******/ \t\t// Execute the module function\n/******/ \t\tif (!(moduleId in __webpack_modules__)) {\n/******/ \t\t\tdelete __webpack_module_cache__[moduleId];\n/******/ \t\t\tconst e = new Error(\"Cannot find module '\" + moduleId + \"'\");\n/******/ \t\t\te.code = 'MODULE_NOT_FOUND';\n/******/ \t\t\tthrow e;\n/******/ \t\t}\n/******/ \t\t__webpack_modules__[moduleId](module, module.exports, __webpack_require__);\n/******/ \t\n/******/ \t\t// Return the exports of the module\n/******/ \t\treturn module.exports;\n/******/ \t}\n/******/ \t\n/************************************************************************/\n/******/ \t\n/******/ \t// startup\n/******/ \t// Load entry module and return exports\n/******/ \t// This entry module is referenced by other modules so it can't be inlined\n/******/ \tlet __webpack_exports__ = __webpack_require__(\"./src/scripts/gutschriftenVerschieben.ts\");\n/******/ \tmodule.exports = __webpack_exports__;\n/******/ \t\n/******/ })()\n;\n//# sourceMappingURL=gutschriftenVerschieben.js.map";
+module.exports = "/******/ (() => { // webpackBootstrap\n/******/ \t\"use strict\";\n/******/ \tvar __webpack_modules__ = ({\n\n/***/ \"../../helper/dms/getRepositories.ts\"\n/*!*******************************************!*\\\n  !*** ../../helper/dms/getRepositories.ts ***!\n  \\*******************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.getRepositories = getRepositories;\nconst performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ \"../../helper/performHttpRequest/performHttpRequest.ts\");\nasync function getRepositories(baseUri, token) {\n    const url = `${baseUri}/dms/r`;\n    const headers = {\n        \"Authorization\": `Bearer ${token}`,\n        \"Accept\": \"application/json\",\n        \"Content-Type\": \"application/json\",\n    };\n    const options = {\n        method: \"GET\",\n        headers,\n    };\n    return await (0, performHttpRequest_1.performHttpRequest)(url, options);\n}\n\n\n/***/ },\n\n/***/ \"../../helper/dms/getSpecificDocument.ts\"\n/*!***********************************************!*\\\n  !*** ../../helper/dms/getSpecificDocument.ts ***!\n  \\***********************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.getSpecificDocument = getSpecificDocument;\nconst performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ \"../../helper/performHttpRequest/performHttpRequest.ts\");\n/**\n * Retrieves a specific document from the DMS (Document Management System) using the provided parameters.\n *\n * @param baseUri - The base URI of the DMS API.\n * @param token - The authorization token to access the DMS API.\n * @param repositoryId - The ID of the repository where the document is stored.\n * @param documentId - The ID of the specific document to retrieve.\n * @returns A promise that resolves to an `ApiResponse` containing the `GetSpecificDocument` data.\n *\n * @throws Will throw an error if the HTTP request fails or the response is invalid.\n */\nasync function getSpecificDocument(baseUri, token, repositoryId, documentId) {\n    const url = `${baseUri}/dms/r/${repositoryId}/o2/${documentId}`;\n    const headers = {\n        \"Authorization\": `Bearer ${token}`,\n        \"Accept\": \"application/json\",\n        \"Content-Type\": \"application/json\",\n    };\n    const options = {\n        method: \"GET\",\n        headers\n    };\n    return await (0, performHttpRequest_1.performHttpRequest)(url, options);\n}\n\n\n/***/ },\n\n/***/ \"../../helper/dms/updateDocument.ts\"\n/*!******************************************!*\\\n  !*** ../../helper/dms/updateDocument.ts ***!\n  \\******************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.updateDocument = updateDocument;\nconst performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ \"../../helper/performHttpRequest/performHttpRequest.ts\");\nasync function updateDocument(baseUri, token, repositoryId, documentId, sourceCategory, sourceProperties) {\n    const url = `${baseUri}/dms/r/${repositoryId}/o2m/${documentId}`;\n    const headers = {\n        Authorization: `Bearer ${token}`,\n        Accept: \"application/json\",\n        \"Content-Type\": \"application/json\",\n    };\n    const body = {\n        sourceCategory: sourceCategory,\n        sourceId: `/dms/r/${repositoryId}/source`,\n        sourceProperties: sourceProperties,\n    };\n    const options = {\n        method: \"PUT\",\n        headers,\n        body: JSON.stringify(body),\n    };\n    return await (0, performHttpRequest_1.performHttpRequest)(url, options);\n}\n\n\n/***/ },\n\n/***/ \"../../helper/performHttpRequest/performHttpRequest.ts\"\n/*!*************************************************************!*\\\n  !*** ../../helper/performHttpRequest/performHttpRequest.ts ***!\n  \\*************************************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.performHttpRequest = performHttpRequest;\nconst logger_1 = __webpack_require__(/*! ../utils/logger */ \"../../helper/utils/logger.ts\");\n/**\n * Performs an HTTP request and returns a structured response.\n*\n* @template T - The expected type of the response body.\n* @param {string} url - The URL to which the request is sent.\n* @param {RequestInit} options - The options for the HTTP request, such as method, headers, and body.\n* @returns {Promise<ApiResponse<T>>} A promise that resolves to an `ApiResponse` object containing the response details.\n* @throws {Error} Throws an error if the HTTP response status is not OK (status code outside the range 200-299).\n*\n* The function attempts to parse the response body based on the `Content-Type` header:\n* - If the `Content-Type` includes \"application/json\", it parses the body as JSON.\n* - Otherwise, it parses the body as plain text.\n*\n* If the response is not OK, the function throws an error with the status code and error message.\n*/\nconst logger = (0, logger_1.getLogger)();\nasync function performHttpRequest(url, options) {\n    let body = {};\n    let errorMessage = \"\";\n    let response;\n    logger.debug(`[Request] ${options.method} ${url} | Headers: ${JSON.stringify(options.headers)} | Body: ${!(options.body instanceof Uint8Array) && options.body !== undefined\n        ? options.body\n        : \"[Binary body omitted]\"}`);\n    try {\n        response = await fetch(url, options);\n    }\n    catch (err) {\n        throw new Error(`Network error during fetch: ${err.message}`);\n    }\n    const contentType = response.headers.get(\"content-type\") || \"\";\n    const parseBody = async () => {\n        try {\n            if (contentType.includes(\"application/json\") || contentType.includes('application/hal+json')) {\n                return await response.json();\n            }\n            else if (contentType.includes(\"application/octet-stream\") ||\n                contentType.includes(\"application/pdf\")) {\n                const arrayBuffer = await response.arrayBuffer();\n                return new Uint8Array(arrayBuffer);\n            }\n            else {\n                return await response.text();\n            }\n        }\n        catch (e) {\n            return undefined;\n        }\n    };\n    if (response.ok) {\n        const result = await parseBody();\n        if (result !== undefined) {\n            body = result;\n        }\n    }\n    else {\n        const errorBody = await parseBody();\n        errorMessage =\n            typeof errorBody === \"string\" ? errorBody : JSON.stringify(errorBody);\n        throw new Error(`HTTP error! status: ${response.status}, message: ${errorMessage}`);\n    }\n    return {\n        status: response.status,\n        statusText: response.statusText,\n        body: body,\n        bodyUsed: response.bodyUsed,\n        headers: response.headers,\n        ok: response.ok,\n        redirected: response.redirected,\n        type: response.type,\n        url: response.url,\n    };\n}\n\n\n/***/ },\n\n/***/ \"../../helper/utils/logger.ts\"\n/*!************************************!*\\\n  !*** ../../helper/utils/logger.ts ***!\n  \\************************************/\n(__unused_webpack_module, exports) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.Logger = exports.LogLevel = void 0;\nexports.initLogger = initLogger;\nexports.getLogger = getLogger;\nvar LogLevel;\n(function (LogLevel) {\n    LogLevel[LogLevel[\"DEBUG\"] = 0] = \"DEBUG\";\n    LogLevel[LogLevel[\"INFO\"] = 1] = \"INFO\";\n    LogLevel[LogLevel[\"WARN\"] = 2] = \"WARN\";\n    LogLevel[LogLevel[\"ERROR\"] = 3] = \"ERROR\";\n})(LogLevel || (exports.LogLevel = LogLevel = {}));\nclass Logger {\n    constructor(options = {}) {\n        this.level = options.level ?? LogLevel.INFO;\n        this.showTimestamp = options.showTimestamp ?? true;\n    }\n    formatMessage(level, message) {\n        const paddedLevel = level.toUpperCase().padEnd(5, ' ');\n        const timestamp = this.showTimestamp\n            ? `[${new Date().toISOString()}] `\n            : \"\";\n        return `${timestamp}${paddedLevel}: ${message}`;\n    }\n    debug(message, ...args) {\n        if (this.level <= LogLevel.DEBUG) {\n            console.debug(this.formatMessage(\"debug\", message), ...args);\n        }\n    }\n    info(message, ...args) {\n        if (this.level <= LogLevel.INFO) {\n            console.info(this.formatMessage(\"info\", message), ...args);\n        }\n    }\n    warn(message, ...args) {\n        if (this.level <= LogLevel.WARN) {\n            console.warn(this.formatMessage(\"warn\", message), ...args);\n        }\n    }\n    error(message, ...args) {\n        if (this.level <= LogLevel.ERROR) {\n            console.error(this.formatMessage(\"error\", message), ...args);\n        }\n    }\n    setLevel(newLevel) {\n        this.level = newLevel;\n    }\n}\nexports.Logger = Logger;\nlet loggerInstance;\nfunction initLogger(level = LogLevel.INFO, showTimestamp = true) {\n    if (!loggerInstance) {\n        loggerInstance = new Logger({ level, showTimestamp });\n    }\n    return loggerInstance;\n}\nfunction getLogger() {\n    // Fallback: falls noch niemand initLogger() aufgerufen hat\n    if (!loggerInstance) {\n        loggerInstance = new Logger({ level: LogLevel.DEBUG, showTimestamp: true });\n    }\n    return loggerInstance;\n}\n\n\n/***/ },\n\n/***/ \"./src/scripts/gutschriftenVerschieben.ts\"\n/*!************************************************!*\\\n  !*** ./src/scripts/gutschriftenVerschieben.ts ***!\n  \\************************************************/\n(module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nconst getRepositories_1 = __webpack_require__(/*! ../../../../helper/dms/getRepositories */ \"../../helper/dms/getRepositories.ts\");\nconst getSpecificDocument_1 = __webpack_require__(/*! ../../../../helper/dms/getSpecificDocument */ \"../../helper/dms/getSpecificDocument.ts\");\nconst updateDocument_1 = __webpack_require__(/*! ../../../../helper/dms/updateDocument */ \"../../helper/dms/updateDocument.ts\");\nconst logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ \"../../helper/utils/logger.ts\");\n/**\n * \"Rechnungsleser Gutschriften verschieben\" (ehemals\n * projects/_OLD/moveDocumentsOfDocumentReader/script.mjs, bisher nur per\n * DMS-Webhook aufgerufen): prüft beim Dokument mit der übergebenen DocId die\n * Dokumentart des Rechnungslesers und\n *  - verschiebt Gutschriften (Wert = fieldDocumentTypeValueMatch, z.B.\n *    \"CreditAdvice\") in die Kategorie categoryCreditMemoGUID und setzt die\n *    Dokumentart auf \"Gutschrift\",\n *  - setzt bei allen anderen Dokumenten die Dokumentart auf \"Rechnung\"\n *    (Kategorie bleibt).\n *\n * Wird vom Onboarding-Formular (src/forms/form.ts) als Process-Studio-Aktion\n * mit dem Eingabeparameter \"docId\" (wie im BPMN \"Rechnungsleser Gutschriften\n * verschieben\" verwendet) angelegt; der Code wird beim Build als\n * Text ins Formular-Bundle übernommen (siehe build/webpack.form.config.js).\n * Aus Kompatibilität wird auch der Body eines DMS-Webhooks ({ doc: { id } })\n * verstanden.\n *\n * customerVariables (werden vom Formular nur beim Neuanlegen gesetzt):\n * apiKey, categoryCreditMemoGUID, fieldDocumentTypeGUID,\n * fieldDocumentTypeValueMatch.\n */\nconst logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);\n/** Name des Eingabeparameters der Aktion. */\nconst DOC_ID_INPUT = \"docId\";\nmodule.exports = async (req, res) => {\n    try {\n        const body = parseBody(req);\n        const documentId = body?.[DOC_ID_INPUT] ?? body?.DocId ?? body?.doc?.id;\n        if (!documentId) {\n            respond(res, 400, { success: false, message: `Eingabeparameter \"${DOC_ID_INPUT}\" fehlt.` });\n            return;\n        }\n        const baseUri = req.get(\"x-dv-baseuri\");\n        const apiKey = req.var(\"apiKey\");\n        const categoryCreditMemo = req.var(\"categoryCreditMemoGUID\");\n        const fieldDocumentType = req.var(\"fieldDocumentTypeGUID\");\n        const valueMatch = req.var(\"fieldDocumentTypeValueMatch\");\n        const repositoryId = (await (0, getRepositories_1.getRepositories)(baseUri, apiKey)).body.repositories[0]?.id;\n        if (!repositoryId) {\n            throw new Error(\"Kein DMS-Repository gefunden.\");\n        }\n        const document = (await (0, getSpecificDocument_1.getSpecificDocument)(baseUri, apiKey, repositoryId, documentId)).body;\n        const documentType = document.objectProperties?.find((property) => property.id === fieldDocumentType)?.value;\n        const isCreditMemo = documentType === valueMatch;\n        const targetCategory = isCreditMemo ? categoryCreditMemo : document.category;\n        if (!targetCategory) {\n            throw new Error(`Kategorie von Dokument ${documentId} konnte nicht ermittelt werden.`);\n        }\n        await (0, updateDocument_1.updateDocument)(baseUri, apiKey, repositoryId, documentId, targetCategory, {\n            properties: [{ key: fieldDocumentType, values: [isCreditMemo ? \"Gutschrift\" : \"Rechnung\"] }],\n        });\n        const message = isCreditMemo\n            ? `Dokument ${documentId} als Gutschrift in Kategorie ${categoryCreditMemo} verschoben.`\n            : `Dokument ${documentId} ist keine Gutschrift (Dokumentart \"${documentType ?? \"\"}\"), als Rechnung gekennzeichnet.`;\n        logger.info(message);\n        respond(res, 200, { success: true, creditMemo: isCreditMemo, message });\n    }\n    catch (error) {\n        const message = error instanceof Error ? error.message : String(error);\n        logger.error(`Fehler: ${message}`);\n        respond(res, 500, { success: false, message });\n    }\n};\nfunction parseBody(req) {\n    try {\n        return req.json?.() ?? {};\n    }\n    catch {\n        return {};\n    }\n}\nfunction respond(res, status, body) {\n    res.status(status).set(\"Content-Type\", \"application/json\").send(JSON.stringify(body));\n}\n\n\n/***/ }\n\n/******/ \t});\n/************************************************************************/\n/******/ \t// The module cache\n/******/ \tconst __webpack_module_cache__ = {};\n/******/ \t\n/******/ \t// The require function\n/******/ \tfunction __webpack_require__(moduleId) {\n/******/ \t\t// Check if module is in cache\n/******/ \t\tconst cachedModule = __webpack_module_cache__[moduleId];\n/******/ \t\tif (cachedModule !== undefined) {\n/******/ \t\t\treturn cachedModule.exports;\n/******/ \t\t}\n/******/ \t\t// Create a new module (and put it into the cache)\n/******/ \t\tconst module = __webpack_module_cache__[moduleId] = {\n/******/ \t\t\t// no module.id needed\n/******/ \t\t\t// no module.loaded needed\n/******/ \t\t\texports: {}\n/******/ \t\t};\n/******/ \t\n/******/ \t\t// Execute the module function\n/******/ \t\tif (!(moduleId in __webpack_modules__)) {\n/******/ \t\t\tdelete __webpack_module_cache__[moduleId];\n/******/ \t\t\tconst e = new Error(\"Cannot find module '\" + moduleId + \"'\");\n/******/ \t\t\te.code = 'MODULE_NOT_FOUND';\n/******/ \t\t\tthrow e;\n/******/ \t\t}\n/******/ \t\t__webpack_modules__[moduleId](module, module.exports, __webpack_require__);\n/******/ \t\n/******/ \t\t// Return the exports of the module\n/******/ \t\treturn module.exports;\n/******/ \t}\n/******/ \t\n/************************************************************************/\n/******/ \t\n/******/ \t// startup\n/******/ \t// Load entry module and return exports\n/******/ \t// This entry module is referenced by other modules so it can't be inlined\n/******/ \tlet __webpack_exports__ = __webpack_require__(\"./src/scripts/gutschriftenVerschieben.ts\");\n/******/ \tmodule.exports = __webpack_exports__;\n/******/ \t\n/******/ })()\n;\n//# sourceMappingURL=gutschriftenVerschieben.js.map";
+
+/***/ },
+
+/***/ "./dist/scripts/preExport.js?raw"
+/*!***************************************!*\
+  !*** ./dist/scripts/preExport.js?raw ***!
+  \***************************************/
+(module) {
+
+module.exports = "/******/ (() => { // webpackBootstrap\n/******/ \t\"use strict\";\n/******/ \tvar __webpack_modules__ = ({\n\n/***/ \"../../helper/utils/logger.ts\"\n/*!************************************!*\\\n  !*** ../../helper/utils/logger.ts ***!\n  \\************************************/\n(__unused_webpack_module, exports) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.Logger = exports.LogLevel = void 0;\nexports.initLogger = initLogger;\nexports.getLogger = getLogger;\nvar LogLevel;\n(function (LogLevel) {\n    LogLevel[LogLevel[\"DEBUG\"] = 0] = \"DEBUG\";\n    LogLevel[LogLevel[\"INFO\"] = 1] = \"INFO\";\n    LogLevel[LogLevel[\"WARN\"] = 2] = \"WARN\";\n    LogLevel[LogLevel[\"ERROR\"] = 3] = \"ERROR\";\n})(LogLevel || (exports.LogLevel = LogLevel = {}));\nclass Logger {\n    constructor(options = {}) {\n        this.level = options.level ?? LogLevel.INFO;\n        this.showTimestamp = options.showTimestamp ?? true;\n    }\n    formatMessage(level, message) {\n        const paddedLevel = level.toUpperCase().padEnd(5, ' ');\n        const timestamp = this.showTimestamp\n            ? `[${new Date().toISOString()}] `\n            : \"\";\n        return `${timestamp}${paddedLevel}: ${message}`;\n    }\n    debug(message, ...args) {\n        if (this.level <= LogLevel.DEBUG) {\n            console.debug(this.formatMessage(\"debug\", message), ...args);\n        }\n    }\n    info(message, ...args) {\n        if (this.level <= LogLevel.INFO) {\n            console.info(this.formatMessage(\"info\", message), ...args);\n        }\n    }\n    warn(message, ...args) {\n        if (this.level <= LogLevel.WARN) {\n            console.warn(this.formatMessage(\"warn\", message), ...args);\n        }\n    }\n    error(message, ...args) {\n        if (this.level <= LogLevel.ERROR) {\n            console.error(this.formatMessage(\"error\", message), ...args);\n        }\n    }\n    setLevel(newLevel) {\n        this.level = newLevel;\n    }\n}\nexports.Logger = Logger;\nlet loggerInstance;\nfunction initLogger(level = LogLevel.INFO, showTimestamp = true) {\n    if (!loggerInstance) {\n        loggerInstance = new Logger({ level, showTimestamp });\n    }\n    return loggerInstance;\n}\nfunction getLogger() {\n    // Fallback: falls noch niemand initLogger() aufgerufen hat\n    if (!loggerInstance) {\n        loggerInstance = new Logger({ level: LogLevel.DEBUG, showTimestamp: true });\n    }\n    return loggerInstance;\n}\n\n\n/***/ },\n\n/***/ \"./src/scripts/preExport.ts\"\n/*!**********************************!*\\\n  !*** ./src/scripts/preExport.ts ***!\n  \\**********************************/\n(module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nconst logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ \"../../helper/utils/logger.ts\");\n/**\n * \"Rechnungsleser PreExport\": wird vom Rechnungsleser vor dem Export\n * aufgerufen (Extension Point \"IR_Business_BeforeExportHook\", Typ\n * ScriptingApp, Profil \"PreExportScript\" - hinterlegt vom Onboarding-Formular).\n * Bekommt die Attribute des Dokuments als JSON und liefert sie verändert\n * zurück:\n *  - DocumentType wird zum ERP-Code: CreditAdvice -> \"3\", alles andere\n *    (Invoice, CorrectionOfInvoice, unbekannt) -> \"2\",\n *  - Rechnungstyp bekommt die deutsche Bezeichnung: Invoice -> \"Rechnung\",\n *    CreditAdvice -> \"Gutschrift\", CorrectionOfInvoice -> \"Rechnungskorrektur\"\n *    (bei unbekanntem DocumentType bleibt Rechnungstyp unverändert).\n *\n * Wird der Hook erneut mit einem bereits umgesetzten Dokument aufgerufen\n * (DocumentType ist dann schon \"2\"/\"3\"), greift der Standardfall - der Code\n * bleibt \"2\" bzw. wird aus \"3\" zu \"2\"; daher \"3\" ausdrücklich beibehalten.\n */\nconst logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);\nconst DOCUMENT_TYPE_FIELD = \"DocumentType\";\nconst INVOICE_TYPE_FIELD = \"Rechnungstyp\";\nconst MAPPING = {\n    Invoice: { code: \"2\", text: \"Rechnung\" },\n    CreditAdvice: { code: \"3\", text: \"Gutschrift\" },\n    CorrectionOfInvoice: { code: \"2\", text: \"Rechnungskorrektur\" },\n};\n// Bereits umgesetzte Codes (erneuter Aufruf) nicht verändern.\nconst KNOWN_CODES = new Set([\"2\", \"3\"]);\nmodule.exports = async (req, res) => {\n    try {\n        const body = parseBody(req);\n        const documentType = String(body[DOCUMENT_TYPE_FIELD] ?? \"\");\n        const mapped = MAPPING[documentType];\n        if (mapped) {\n            body[DOCUMENT_TYPE_FIELD] = mapped.code;\n            body[INVOICE_TYPE_FIELD] = mapped.text;\n        }\n        else if (!KNOWN_CODES.has(documentType)) {\n            body[DOCUMENT_TYPE_FIELD] = \"2\";\n        }\n        logger.info(`DocumentType \"${documentType}\" -> \"${body[DOCUMENT_TYPE_FIELD]}\", Rechnungstyp \"${body[INVOICE_TYPE_FIELD] ?? \"\"}\".`);\n        res.status(200).set(\"Content-Type\", \"application/json\").send(JSON.stringify(body));\n    }\n    catch (error) {\n        const message = error instanceof Error ? error.message : String(error);\n        logger.error(`Fehler: ${message}`);\n        res.status(500).set(\"Content-Type\", \"application/json\").send(JSON.stringify({ error: message }));\n    }\n};\nfunction parseBody(req) {\n    try {\n        const body = req.json?.();\n        return body && typeof body === \"object\" ? body : {};\n    }\n    catch {\n        return {};\n    }\n}\n\n\n/***/ }\n\n/******/ \t});\n/************************************************************************/\n/******/ \t// The module cache\n/******/ \tconst __webpack_module_cache__ = {};\n/******/ \t\n/******/ \t// The require function\n/******/ \tfunction __webpack_require__(moduleId) {\n/******/ \t\t// Check if module is in cache\n/******/ \t\tconst cachedModule = __webpack_module_cache__[moduleId];\n/******/ \t\tif (cachedModule !== undefined) {\n/******/ \t\t\treturn cachedModule.exports;\n/******/ \t\t}\n/******/ \t\t// Create a new module (and put it into the cache)\n/******/ \t\tconst module = __webpack_module_cache__[moduleId] = {\n/******/ \t\t\t// no module.id needed\n/******/ \t\t\t// no module.loaded needed\n/******/ \t\t\texports: {}\n/******/ \t\t};\n/******/ \t\n/******/ \t\t// Execute the module function\n/******/ \t\tif (!(moduleId in __webpack_modules__)) {\n/******/ \t\t\tdelete __webpack_module_cache__[moduleId];\n/******/ \t\t\tconst e = new Error(\"Cannot find module '\" + moduleId + \"'\");\n/******/ \t\t\te.code = 'MODULE_NOT_FOUND';\n/******/ \t\t\tthrow e;\n/******/ \t\t}\n/******/ \t\t__webpack_modules__[moduleId](module, module.exports, __webpack_require__);\n/******/ \t\n/******/ \t\t// Return the exports of the module\n/******/ \t\treturn module.exports;\n/******/ \t}\n/******/ \t\n/************************************************************************/\n/******/ \t\n/******/ \t// startup\n/******/ \t// Load entry module and return exports\n/******/ \t// This entry module is referenced by other modules so it can't be inlined\n/******/ \tlet __webpack_exports__ = __webpack_require__(\"./src/scripts/preExport.ts\");\n/******/ \tmodule.exports = __webpack_exports__;\n/******/ \t\n/******/ })()\n;\n//# sourceMappingURL=preExport.js.map";
+
+/***/ },
+
+/***/ "./src/data/Rechnungsleser Gutschriften verschieben_v1.bpmn?raw"
+/*!**********************************************************************!*\
+  !*** ./src/data/Rechnungsleser Gutschriften verschieben_v1.bpmn?raw ***!
+  \**********************************************************************/
+(module) {
+
+module.exports = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" xmlns:camunda=\"http://camunda.org/schema/1.0/bpmn\" xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" xmlns:modeler=\"http://camunda.org/schema/modeler/1.0\" exporter=\"d.velop process modeler\" exporterVersion=\"1.1.0\" expressionLanguage=\"http://www.w3.org/1999/XPath\" id=\"definitions_p-77b509e1-e27b-4696-8ea7-b1eb3875692e\" modeler:executionPlatform=\"Camunda Platform\" modeler:executionPlatformVersion=\"7.15.0\" targetNamespace=\"http://bpmn.io/schema/bpmn\" typeLanguage=\"http://www.w3.org/2001/XMLSchema\">\n    \n  <bpmn:process id=\"p-77b509e1-e27b-4696-8ea7-b1eb3875692e\" isClosed=\"false\" isExecutable=\"true\" name=\"Rechnungsleser Gutschriften verschieben\" processType=\"None\">\n        \n    <bpmn:extensionElements>\n            \n      <camunda:properties>\n                \n        <camunda:property name=\"service:/process/services/actions:in:actionId\" value=\"String\"/>\n                \n        <camunda:property name=\"service:/process/services/actions:in:executingUser\" value=\"Identity\"/>\n                \n        <camunda:property name=\"service:/process/services/actions:in:actionPayload\" value=\"InternalObject\"/>\n                \n        <camunda:property name=\"service:/process/services/actions:out:status\" value=\"Number\"/>\n                \n        <camunda:property name=\"service:/process/services/actions:out:actionOutput\" value=\"InternalObject\"/>\n                \n        <camunda:property name=\"variable:docId*\" value=\"String!\"/>\n              \n      </camunda:properties>\n          \n    </bpmn:extensionElements>\n        \n    <bpmn:startEvent id=\"StartEvent_1\" isInterrupting=\"true\" parallelMultiple=\"false\">\n            \n      <bpmn:extensionElements>\n                \n        <camunda:properties>\n                    \n          <camunda:property name=\"event:0\" value=\"eventbridge_dmspostimport\"/>\n                    \n          <camunda:property name=\"event:0:app\" value=\"eventbridge\"/>\n                    \n          <camunda:property name=\"event:0:name\" value=\"Ablage Gutschrift\"/>\n                    \n          <camunda:property name=\"start:action\" value=\"false\"/>\n                    \n          <camunda:property name=\"event:0:filter\" value=\"{&quot;and&quot;:[{&quot;==&quot;:[{&quot;var&quot;:&quot;doc.categoryId&quot;},&quot;fc3d3e6d-46f6-4fcd-84e3-db79e14b2751&quot;]},{&quot;==&quot;:[{&quot;var&quot;:&quot;doc.properties.717f4480-f16c-4838-96a3-f69a01eb41f1&quot;},&quot;Gutschrift&quot;]}]}\"/>\n                    \n          <camunda:property name=\"event:0:input:docId\" value=\"${input.getValue(&quot;$['doc']['id']&quot;)}\"/>\n                  \n        </camunda:properties>\n              \n      </bpmn:extensionElements>\n            \n      <bpmn:outgoing>Flow_0abuizb</bpmn:outgoing>\n          \n    </bpmn:startEvent>\n        \n    <bpmn:endEvent id=\"Event_1fwwxqz\">\n            \n      <bpmn:incoming>Flow_1mc7kpw</bpmn:incoming>\n          \n    </bpmn:endEvent>\n        \n    <bpmn:sequenceFlow id=\"Flow_0abuizb\" sourceRef=\"StartEvent_1\" targetRef=\"Activity_1k6yh1s\"/>\n        \n    <bpmn:sequenceFlow id=\"Flow_1mc7kpw\" sourceRef=\"Activity_1k6yh1s\" targetRef=\"Event_1fwwxqz\"/>\n        \n    <bpmn:subProcess completionQuantity=\"1\" id=\"Activity_1k6yh1s\" isForCompensation=\"false\" name=\"Gutschriften verschieben\" startQuantity=\"1\" triggeredByEvent=\"false\">\n            \n      <bpmn:documentation textFormat=\"text/plain\">#action</bpmn:documentation>\n            \n      <bpmn:incoming>Flow_0abuizb</bpmn:incoming>\n            \n      <bpmn:outgoing>Flow_1mc7kpw</bpmn:outgoing>\n            \n      <bpmn:startEvent id=\"Activity_0qxarpb-StartEvent-0\" isInterrupting=\"true\" name=\"Gutschriften verschieben (Start)\" parallelMultiple=\"false\"/>\n            \n      <bpmn:sequenceFlow id=\"Activity_0qxarpb-SequenceFlow-0\" sourceRef=\"Activity_0qxarpb-StartEvent-0\" targetRef=\"Activity_0qxarpb-SendTask-0\"/>\n            \n      <bpmn:sendTask camunda:asyncBefore=\"true\" camunda:delegateExpression=\"${asyncService}\" completionQuantity=\"1\" id=\"Activity_0qxarpb-SendTask-0\" implementation=\"##WebService\" isForCompensation=\"false\" name=\"Gutschriften verschieben (Request)\" startQuantity=\"1\">\n                \n        <bpmn:extensionElements>\n                    \n          <camunda:inputOutput>\n                        \n            <camunda:inputParameter name=\"service.uri\">/process/services/actions</camunda:inputParameter>\n                        \n            <camunda:inputParameter name=\"actionId\">scripting_3fa4300f-97ba-4628-904d-e7353c2c2861-d5795100-1f19-46e1-8c7f-8888ec9ce5b6</camunda:inputParameter>\n                        \n            <camunda:inputParameter name=\"actionPayload[$.docId]\">${variables.get('docId')}</camunda:inputParameter>\n                      \n          </camunda:inputOutput>\n                  \n        </bpmn:extensionElements>\n              \n      </bpmn:sendTask>\n            \n      <bpmn:sequenceFlow id=\"Activity_0qxarpb-SequenceFlow-1\" sourceRef=\"Activity_0qxarpb-SendTask-0\" targetRef=\"Activity_0qxarpb-ReceiveTask-0\"/>\n            \n      <bpmn:receiveTask camunda:asyncAfter=\"true\" completionQuantity=\"1\" id=\"Activity_0qxarpb-ReceiveTask-0\" implementation=\"##WebService\" instantiate=\"false\" isForCompensation=\"false\" name=\"Gutschriften verschieben (Response)\" startQuantity=\"1\"/>\n            \n      <bpmn:sequenceFlow id=\"Activity_0qxarpb-SequenceFlow-2\" sourceRef=\"Activity_0qxarpb-ReceiveTask-0\" targetRef=\"Activity_0qxarpb-EndEvent-0\"/>\n            \n      <bpmn:endEvent id=\"Activity_0qxarpb-EndEvent-0\" name=\"Gutschriften verschieben (End)\"/>\n          \n    </bpmn:subProcess>\n      \n  </bpmn:process>\n    \n  <bpmndi:BPMNDiagram id=\"BPMNDiagram_1\">\n        \n    <bpmndi:BPMNPlane bpmnElement=\"p-77b509e1-e27b-4696-8ea7-b1eb3875692e\" id=\"BPMNPlane_1\">\n            \n      <bpmndi:BPMNShape bpmnElement=\"StartEvent_1\" id=\"_BPMNShape_StartEvent_2\">\n                \n        <dc:Bounds height=\"36\" width=\"36\" x=\"200\" y=\"100\"/>\n              \n      </bpmndi:BPMNShape>\n            \n      <bpmndi:BPMNShape bpmnElement=\"Event_1fwwxqz\" id=\"Event_1fwwxqz_di\">\n                \n        <dc:Bounds height=\"36\" width=\"36\" x=\"412\" y=\"100\"/>\n              \n      </bpmndi:BPMNShape>\n            \n      <bpmndi:BPMNShape bpmnElement=\"Activity_1k6yh1s\" id=\"Activity_0qxarpb_di\">\n                \n        <dc:Bounds height=\"80\" width=\"100\" x=\"270\" y=\"78\"/>\n                \n        <bpmndi:BPMNLabel/>\n              \n      </bpmndi:BPMNShape>\n            \n      <bpmndi:BPMNEdge bpmnElement=\"Flow_0abuizb\" id=\"Flow_0abuizb_di\">\n                \n        <di:waypoint x=\"236\" y=\"118\"/>\n                \n        <di:waypoint x=\"270\" y=\"118\"/>\n              \n      </bpmndi:BPMNEdge>\n            \n      <bpmndi:BPMNEdge bpmnElement=\"Flow_1mc7kpw\" id=\"Flow_1mc7kpw_di\">\n                \n        <di:waypoint x=\"370\" y=\"118\"/>\n                \n        <di:waypoint x=\"412\" y=\"118\"/>\n              \n      </bpmndi:BPMNEdge>\n          \n    </bpmndi:BPMNPlane>\n      \n  </bpmndi:BPMNDiagram>\n    \n  <bpmndi:BPMNDiagram id=\"BPMNDiagram_02nsx8j\">\n        \n    <bpmndi:BPMNPlane bpmnElement=\"Activity_1k6yh1s\" id=\"BPMNPlane_1ob96s9\"/>\n      \n  </bpmndi:BPMNDiagram>\n  \n</bpmn:definitions>";
 
 /***/ },
 

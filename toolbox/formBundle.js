@@ -5331,14 +5331,86 @@ function getLogger() {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.PUBLIC_BUNDLE_REPO_BASE_URL = void 0;
+exports.PUBLIC_BUNDLE_REPO_BASE_URL = exports.PUBLIC_BUNDLE_REPO_BRANCH = exports.PUBLIC_BUNDLE_REPO_NAME = exports.PUBLIC_BUNDLE_REPO_OWNER = void 0;
+exports.fetchPublishedFile = fetchPublishedFile;
 // Öffentliches Artefakt-Repo, in das eine GitHub Action bei jedem Push auf main
 // (siehe .github/workflows/publish-bundles.yml) die gebauten Bundles der einzelnen
 // Content-Formular-Projekte kopiert. Öffentlich und ohne Auth abrufbar, deshalb kann
 // sowohl der Browser (form.ts) als auch ein Node-Kontext (deployProjectForm.ts) den
 // aktuellen Stand direkt per HTTP laden.
 // TODO: Owner/Repo/Branch anpassen, falls sich das Artefakt-Repo ändert.
-exports.PUBLIC_BUNDLE_REPO_BASE_URL = "https://raw.githubusercontent.com/FOM-MaximilianEllinger/dvelop-codebase-bundles/main";
+exports.PUBLIC_BUNDLE_REPO_OWNER = "FOM-MaximilianEllinger";
+exports.PUBLIC_BUNDLE_REPO_NAME = "dvelop-codebase-bundles";
+exports.PUBLIC_BUNDLE_REPO_BRANCH = "main";
+const RAW_BASE_URL = `https://raw.githubusercontent.com/${exports.PUBLIC_BUNDLE_REPO_OWNER}/${exports.PUBLIC_BUNDLE_REPO_NAME}`;
+/** Branch-URL - wird vom CDN bis zu 5 Minuten gecacht (max-age=300), daher nur
+ * noch Fallback, siehe fetchPublishedFile. */
+exports.PUBLIC_BUNDLE_REPO_BASE_URL = `${RAW_BASE_URL}/${exports.PUBLIC_BUNDLE_REPO_BRANCH}`;
+// Liefert den SHA des neuesten Commits im Artefakt-Repo (GitHub-API, dort nur
+// 60 Sekunden gecacht). Ohne Anmeldung erlaubt GitHub 60 API-Aufrufe pro Stunde
+// und IP - daher je Seite/Prozess nur einmal pro SHA_CACHE_MS nachfragen.
+const SHA_CACHE_MS = 30000;
+let cachedSha;
+let pendingSha;
+async function resolveLatestSha() {
+    if (cachedSha && Date.now() - cachedSha.at < SHA_CACHE_MS) {
+        return cachedSha.sha;
+    }
+    // Mehrere gleichzeitige Aufrufe (z.B. Versionsprüfung aller Werkzeuge beim
+    // Öffnen der Toolbox) teilen sich EINE Anfrage.
+    pendingSha ?? (pendingSha = (async () => {
+        try {
+            const response = await fetch(`https://api.github.com/repos/${exports.PUBLIC_BUNDLE_REPO_OWNER}/${exports.PUBLIC_BUNDLE_REPO_NAME}/commits/${exports.PUBLIC_BUNDLE_REPO_BRANCH}`, { headers: { Accept: "application/vnd.github.sha" }, cache: "no-store" });
+            const sha = response.ok ? (await response.text()).trim() : "";
+            if (!/^[0-9a-f]{40}$/.test(sha)) {
+                console.warn(`Artefakt-Repo: neuester Commit nicht ermittelbar (Status ${response.status}) - lade über ${exports.PUBLIC_BUNDLE_REPO_BRANCH}.`);
+                return undefined;
+            }
+            cachedSha = { sha, at: Date.now() };
+            return sha;
+        }
+        catch (error) {
+            console.warn(`Artefakt-Repo: neuester Commit nicht ermittelbar (${error}) - lade über ${exports.PUBLIC_BUNDLE_REPO_BRANCH}.`);
+            return undefined;
+        }
+        finally {
+            pendingSha = undefined;
+        }
+    })());
+    return pendingSha;
+}
+async function fetchText(url) {
+    return await fetch(url, { cache: "no-store" });
+}
+/**
+ * Lädt eine veröffentlichte Datei (Bundle, form.json, Script) aus dem
+ * Artefakt-Repo - bevorzugt über die Commit-URL
+ * (raw.githubusercontent.com/<owner>/<repo>/<sha>/<pfad>): die ist je Commit
+ * eindeutig und damit nie veraltet, anders als die Branch-URL, die das CDN bis
+ * zu 5 Minuten alt ausliefert. Fällt auf die Branch-URL zurück, wenn der SHA
+ * nicht ermittelbar ist (z.B. API-Limit) oder die Datei in diesem Commit noch
+ * fehlt.
+ *
+ * @param path - Pfad innerhalb des Artefakt-Repos, z.B. "toolbox/formBundle.js".
+ */
+async function fetchPublishedFile(path) {
+    const sha = await resolveLatestSha();
+    if (sha) {
+        const response = await fetchText(`${RAW_BASE_URL}/${sha}/${path}`);
+        if (response.ok) {
+            return await response.text();
+        }
+        if (response.status !== 404) {
+            throw new Error(`Bundle konnte nicht geladen werden (Status ${response.status}): ${path} @ ${sha}`);
+        }
+    }
+    const url = `${exports.PUBLIC_BUNDLE_REPO_BASE_URL}/${path}`;
+    const response = await fetchText(url);
+    if (!response.ok) {
+        throw new Error(`Bundle konnte nicht geladen werden (Status ${response.status}): ${url}`);
+    }
+    return await response.text();
+}
 
 
 /***/ },
@@ -5492,7 +5564,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // .github/workflows/publish-bundles.yml stempelt bei jeder inhaltlichen
 // Änderung den nächsten Stand (veröffentlichter Stand + 1) ins veröffentlichte
 // Bundle, ohne den Quellcode zu ändern.
-const TOOLBOX_VERSION_COUNTER = 50;
+const TOOLBOX_VERSION_COUNTER = 51;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
@@ -6359,13 +6431,10 @@ async function rolloutParts(target, parts) {
     }
     return true;
 }
+// Über die Commit-URL des neuesten Stands statt der vom CDN gecachten
+// Branch-URL, siehe fetchPublishedFile in ../config/publicBundleRepo.ts.
 async function loadLatestBundle(bundlePath) {
-    const url = `${publicBundleRepo_1.PUBLIC_BUNDLE_REPO_BASE_URL}/${bundlePath}`;
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) {
-        throw new Error(`Bundle konnte nicht geladen werden (Status ${response.status}): ${url}`);
-    }
-    return await response.text();
+    return await (0, publicBundleRepo_1.fetchPublishedFile)(bundlePath);
 }
 
 
