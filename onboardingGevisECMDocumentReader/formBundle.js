@@ -601,69 +601,74 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getIdentityProviderCsrfToken = getIdentityProviderCsrfToken;
 exports.createAPIKey = createAPIKey;
 const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-const CSRF_KEY = /csrf|requestverificationtoken/i;
-// Base64-artige Tokens, z.B. "XuYY01iV+F5Y5MqoAnjOnWFjCllA/0L4nuacSs/ze8w=".
-const TOKEN_VALUE = /^[A-Za-z0-9+/=_-]{16,}$/;
-// Sucht rekursiv in JSON nach einem Feld wie "antiCsrfToken"/"csrfToken".
-function findCsrfInJson(value) {
-    if (!value || typeof value !== "object")
-        return undefined;
-    for (const [key, entry] of Object.entries(value)) {
-        if (CSRF_KEY.test(key) && typeof entry === "string" && TOKEN_VALUE.test(entry))
-            return entry;
-        const nested = findCsrfInJson(entry);
-        if (nested)
-            return nested;
-    }
-    return undefined;
+// Die Identityprovider-Oberfläche liest das Token aus ihrem eigenen HTML:
+// document.querySelector('meta[name="x-csrf-token"]')?.getAttribute("content").
+const CSRF_META_SELECTOR = 'meta[name="x-csrf-token"]';
+// Seiten der Identityprovider-Konfiguration, die das Meta-Tag ausliefern.
+const CSRF_PAGES = ["/identityprovider/config/apikey/create", "/identityprovider/config/apikey", "/identityprovider/config"];
+const IFRAME_TIMEOUT_MS = 15000;
+function readCsrfMeta(doc) {
+    return doc?.querySelector(CSRF_META_SELECTOR)?.getAttribute("content") || undefined;
 }
-// Sucht in HTML nach <meta name="...csrf..." content>, <input name="...csrf..." value>
-// oder einer Zuweisung wie csrfToken: "..." in eingebettetem Script.
-function findCsrfInHtml(html) {
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    for (const element of Array.from(doc.querySelectorAll("meta[name], input[name]"))) {
-        const name = element.getAttribute("name") ?? "";
-        const value = element.getAttribute("content") ?? element.getAttribute("value") ?? "";
-        if (CSRF_KEY.test(name) && TOKEN_VALUE.test(value))
-            return value;
+// Schnellweg: Seite per fetch laden und das Meta-Tag aus dem HTML lesen.
+async function csrfFromFetch(baseUri, path) {
+    try {
+        const response = await fetch(`${baseUri}${path}`, {
+            method: "GET",
+            headers: { Accept: "text/html" },
+            credentials: "same-origin",
+        });
+        if (!response.ok)
+            return undefined;
+        return readCsrfMeta(new DOMParser().parseFromString(await response.text(), "text/html"));
     }
-    const match = html.match(/(?:csrf|requestverificationtoken)[\w-]*["']?\s*[:=]\s*["']([A-Za-z0-9+/=_-]{16,})["']/i);
-    return match?.[1];
+    catch {
+        return undefined;
+    }
+}
+// Fallback: Seite unsichtbar im iframe öffnen (echte Navigation wie im
+// Browser, gleicher Ursprung - x-frame-options SAMEORIGIN erlaubt das) und das
+// Meta-Tag aus dem geladenen Dokument lesen.
+function csrfFromIframe(baseUri, path) {
+    return new Promise((resolve) => {
+        const iframe = document.createElement("iframe");
+        iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
+        iframe.setAttribute("aria-hidden", "true");
+        const finish = (value) => {
+            clearTimeout(timer);
+            iframe.remove();
+            resolve(value);
+        };
+        const timer = setTimeout(() => finish(undefined), IFRAME_TIMEOUT_MS);
+        iframe.onload = () => {
+            try {
+                finish(readCsrfMeta(iframe.contentDocument));
+            }
+            catch {
+                finish(undefined);
+            }
+        };
+        iframe.src = `${baseUri}${path}`;
+        document.body.appendChild(iframe);
+    });
 }
 /**
  * Holt das Anti-CSRF-Token der Identityprovider-Konfiguration. Die
  * Oberfläche schickt es als Header "x-csrf-token" mit - ohne antwortet
  * POST /identityprovider/config/apikey mit 401 (auch mit gültiger Session).
- * Quelle ist die Seite zum Anlegen eines API-Keys (Antwort-Header, JSON
- * oder HTML, je nachdem was der Identityprovider liefert).
+ * Das Token steht im HTML der Konfigurationsseiten als
+ * <meta name="x-csrf-token" content="...">.
  */
-async function getIdentityProviderCsrfToken(baseUri, token = null) {
-    const response = await fetch(`${baseUri}/identityprovider/config/apikey/create`, {
-        method: "GET",
-        headers: {
-            Accept: "text/html,application/json;q=0.9,*/*;q=0.8",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: "same-origin",
-    });
-    if (!response.ok) {
-        throw new Error(`CSRF-Token konnte nicht geladen werden (HTTP ${response.status}).`);
+async function getIdentityProviderCsrfToken(baseUri) {
+    for (const path of CSRF_PAGES) {
+        const token = await csrfFromFetch(baseUri, path);
+        if (token)
+            return token;
     }
-    const fromHeader = response.headers.get("x-csrf-token");
-    if (fromHeader)
-        return fromHeader;
-    const text = await response.text();
-    let found;
-    try {
-        found = findCsrfInJson(JSON.parse(text));
-    }
-    catch {
-        found = findCsrfInHtml(text);
-    }
-    if (!found) {
-        throw new Error("CSRF-Token der Identityprovider-Konfiguration nicht gefunden.");
-    }
-    return found;
+    const token = await csrfFromIframe(baseUri, CSRF_PAGES[0]);
+    if (token)
+        return token;
+    throw new Error("CSRF-Token der Identityprovider-Konfiguration nicht gefunden (meta x-csrf-token).");
 }
 /**
  * Legt einen API-Key für einen Benutzer an - wie die Identityprovider-
@@ -678,7 +683,7 @@ async function createAPIKey(baseUri, token = null, input) {
     const headers = {
         Accept: "application/json",
         "Content-Type": "application/json",
-        "x-csrf-token": await getIdentityProviderCsrfToken(baseUri, token),
+        "x-csrf-token": await getIdentityProviderCsrfToken(baseUri),
     };
     if (token) {
         headers.Authorization = `Bearer ${token}`;
@@ -1843,7 +1848,7 @@ const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-do
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 10;
+const VERSION_COUNTER = 11;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
