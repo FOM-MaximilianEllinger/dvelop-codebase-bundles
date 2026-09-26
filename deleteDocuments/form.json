@@ -1,0 +1,14 @@
+{
+  "display": "form",
+  "components": [
+    {
+      "type": "htmlelement",
+      "tag": "div",
+      "key": "result",
+      "label": "Dokumente löschen",
+      "input": false,
+      "tableView": false,
+      "content": "<p>Kategorien werden geladen…</p>"
+    }
+  ]
+}
