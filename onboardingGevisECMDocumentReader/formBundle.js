@@ -2,6 +2,96 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
+/***/ "../../helper/classcon-documentreader/d3EndpointService.ts"
+/*!*****************************************************************!*\
+  !*** ../../helper/classcon-documentreader/d3EndpointService.ts ***!
+  \*****************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getD3EndpointService = getD3EndpointService;
+exports.saveD3EndpointService = saveD3EndpointService;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+const FIELDS = ["ApiKey", "RepositoryId", "D3Owner", "EndpointServiceOutputStructure"];
+function endpointUrl(baseUri, subscriptionId) {
+    return `${baseUri}/classcon-documentreader/Configuration/D3EndpointService?subscriptionId=${encodeURIComponent(subscriptionId)}`;
+}
+function authHeaders(token) {
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
+// Felder ohne Rücksicht auf Groß-/Kleinschreibung übernehmen (JSON kann camelCase sein).
+function pick(raw) {
+    const lookup = new Map(Object.entries(raw).map(([key, value]) => [key.toLowerCase(), value]));
+    const result = {};
+    for (const field of FIELDS) {
+        const value = lookup.get(field.toLowerCase());
+        if (value !== undefined && value !== null)
+            result[field] = String(value);
+    }
+    return result;
+}
+// HTML-Konfigurationsseite: Formularfelder mit den Namen aus FIELDS auslesen
+// (ohne instanceof - anderer Fenster-Kontext möglich).
+function parseHtml(html) {
+    if (typeof DOMParser === "undefined")
+        return undefined;
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const raw = {};
+    doc.querySelectorAll("input[name], select[name], textarea[name]").forEach((element) => {
+        const type = element.tagName === "INPUT" ? element.type : "";
+        if (type === "radio" && !element.checked)
+            return;
+        if (FIELDS.some((field) => field.toLowerCase() === element.name.toLowerCase())) {
+            raw[element.name] = element.value;
+        }
+    });
+    const result = pick(raw);
+    return Object.keys(result).length ? result : undefined;
+}
+/**
+ * Liest das eingerichtete Zielsystem
+ * (GET /classcon-documentreader/Configuration/D3EndpointService?subscriptionId=...).
+ * Versteht JSON und die HTML-Konfigurationsseite. undefined = nicht lesbar.
+ */
+async function getD3EndpointService(baseUri, token, subscriptionId) {
+    const response = await (0, performHttpRequest_1.performHttpRequest)(endpointUrl(baseUri, subscriptionId), {
+        method: "GET",
+        headers: { ...authHeaders(token), Accept: "application/json, text/html;q=0.9" },
+    });
+    if (typeof response.body === "string") {
+        try {
+            return pick(JSON.parse(response.body));
+        }
+        catch {
+            return parseHtml(response.body);
+        }
+    }
+    return response.body && typeof response.body === "object" ? pick(response.body) : undefined;
+}
+/**
+ * Richtet das Zielsystem ein - wie die Oberfläche: POST als Formulardaten
+ * ApiKey=...&RepositoryId=...&D3Owner=Editor&EndpointServiceOutputStructure=MainDocWithAttachments.
+ */
+async function saveD3EndpointService(baseUri, token, subscriptionId, settings) {
+    const body = new URLSearchParams();
+    for (const field of FIELDS) {
+        body.set(field, settings[field]);
+    }
+    return await (0, performHttpRequest_1.performHttpRequest)(endpointUrl(baseUri, subscriptionId), {
+        method: "POST",
+        headers: {
+            ...authHeaders(token),
+            Accept: "application/json",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        },
+        body: body.toString(),
+    });
+}
+
+
+/***/ },
+
 /***/ "../../helper/classcon-documentreader/extensionPoints.ts"
 /*!***************************************************************!*\
   !*** ../../helper/classcon-documentreader/extensionPoints.ts ***!
@@ -173,6 +263,115 @@ async function getDocumentReaderFeatures(baseUri, token) {
         headers,
     };
     return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/classcon-documentreader/metadataEndpointService.ts"
+/*!***********************************************************************!*\
+  !*** ../../helper/classcon-documentreader/metadataEndpointService.ts ***!
+  \***********************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getMetadataEndpointService = getMetadataEndpointService;
+exports.saveMetadataEndpointService = saveMetadataEndpointService;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+const SCALAR_FIELDS = ["ServiceBusConnectionString", "QueueName", "ReferencedTargetSystem"];
+function endpointUrl(baseUri, subscriptionId) {
+    return `${baseUri}/classcon-documentreader/Configuration/MetadataEndpointService?subscriptionId=${encodeURIComponent(subscriptionId)}`;
+}
+function authHeaders(token) {
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
+// JSON: Felder ohne Rücksicht auf Groß-/Kleinschreibung übernehmen.
+function fromJson(raw) {
+    const lookup = new Map(Object.entries(raw).map(([key, value]) => [key.toLowerCase(), value]));
+    const result = {};
+    for (const field of SCALAR_FIELDS) {
+        const value = lookup.get(field.toLowerCase());
+        if (value !== undefined && value !== null)
+            result[field] = String(value);
+    }
+    const properties = lookup.get("properties");
+    if (Array.isArray(properties)) {
+        result.Properties = properties.map((p) => ({ Name: String(p?.Name ?? p?.name ?? ""), Value: String(p?.Value ?? p?.value ?? "") }));
+    }
+    return result;
+}
+// HTML-Konfigurationsseite: Felder wie im POST ("QueueName",
+// "Properties[i].Name"/"Properties[i].Value") auslesen.
+function fromHtml(html) {
+    if (typeof DOMParser === "undefined")
+        return undefined;
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const result = {};
+    const properties = new Map();
+    doc.querySelectorAll("input[name], select[name], textarea[name]").forEach((element) => {
+        const type = element.tagName === "INPUT" ? element.type : "";
+        if (type === "radio" && !element.checked)
+            return;
+        const property = element.name.match(/^Properties\[(\d+)\]\.(Name|Value)$/i);
+        if (property) {
+            const entry = properties.get(Number(property[1])) ?? { Name: "", Value: "" };
+            entry[property[2].toLowerCase() === "name" ? "Name" : "Value"] = element.value;
+            properties.set(Number(property[1]), entry);
+            return;
+        }
+        const field = SCALAR_FIELDS.find((f) => f.toLowerCase() === element.name.toLowerCase());
+        if (field)
+            result[field] = element.value;
+    });
+    if (properties.size) {
+        result.Properties = [...properties.keys()].sort((a, b) => a - b).map((i) => properties.get(i));
+    }
+    return Object.keys(result).length ? result : undefined;
+}
+/**
+ * Liest den eingerichteten Metadaten-Endpunkt
+ * (GET /classcon-documentreader/Configuration/MetadataEndpointService?subscriptionId=...).
+ * Versteht JSON und die HTML-Konfigurationsseite. undefined = nicht lesbar.
+ */
+async function getMetadataEndpointService(baseUri, token, subscriptionId) {
+    const response = await (0, performHttpRequest_1.performHttpRequest)(endpointUrl(baseUri, subscriptionId), {
+        method: "GET",
+        headers: { ...authHeaders(token), Accept: "application/json, text/html;q=0.9" },
+    });
+    if (typeof response.body === "string") {
+        try {
+            return fromJson(JSON.parse(response.body));
+        }
+        catch {
+            return fromHtml(response.body);
+        }
+    }
+    return response.body && typeof response.body === "object" ? fromJson(response.body) : undefined;
+}
+/**
+ * Richtet den Metadaten-Endpunkt ein - wie die Oberfläche: POST als
+ * Formulardaten ServiceBusConnectionString, QueueName, ReferencedTargetSystem
+ * und Properties[i].Name / Properties[i].Value.
+ */
+async function saveMetadataEndpointService(baseUri, token, subscriptionId, settings) {
+    const body = new URLSearchParams();
+    for (const field of SCALAR_FIELDS) {
+        body.set(field, settings[field]);
+    }
+    settings.Properties.forEach((property, index) => {
+        body.set(`Properties[${index}].Name`, property.Name);
+        body.set(`Properties[${index}].Value`, property.Value);
+    });
+    return await (0, performHttpRequest_1.performHttpRequest)(endpointUrl(baseUri, subscriptionId), {
+        method: "POST",
+        headers: {
+            ...authHeaders(token),
+            Accept: "application/json",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        },
+        body: body.toString(),
+    });
 }
 
 
@@ -868,6 +1067,69 @@ async function getUsers(baseUri, token, startIndex, count) {
         headers,
     };
     return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/identityprovider/impersonateWhitelist.ts"
+/*!*************************************************************!*\
+  !*** ../../helper/identityprovider/impersonateWhitelist.ts ***!
+  \*************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.isAppImpersonationWhitelisted = isAppImpersonationWhitelisted;
+exports.addAppToImpersonationWhitelist = addAppToImpersonationWhitelist;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+const createAPIKey_1 = __webpack_require__(/*! ./createAPIKey */ "../../helper/identityprovider/createAPIKey.ts");
+function whitelistUrl(baseUri) {
+    return `${baseUri}/identityprovider/config/impersonatewhitelist`;
+}
+/**
+ * Prüft, ob eine App als vertrauenswürdige App (Impersonation) eingetragen
+ * ist. Wertet nur eine JSON-Antwort aus (Liste von App-Namen, direkt oder in
+ * einem Feld) - undefined, wenn der Stand nicht eindeutig lesbar ist (z.B.
+ * HTML-Seite, die auch die NICHT eingetragenen Apps auflistet).
+ */
+async function isAppImpersonationWhitelisted(baseUri, app) {
+    try {
+        const response = await fetch(whitelistUrl(baseUri), {
+            method: "GET",
+            headers: { Accept: "application/json" },
+            credentials: "same-origin",
+        });
+        if (!response.ok || !(response.headers.get("content-type") ?? "").includes("json"))
+            return undefined;
+        const body = await response.json();
+        const lists = Array.isArray(body)
+            ? [body]
+            : Object.values(body ?? {}).filter(Array.isArray);
+        if (!lists.length)
+            return undefined;
+        return lists.some((list) => list.some((entry) => (typeof entry === "string" ? entry : entry?.appName ?? entry?.name ?? entry?.id) === app));
+    }
+    catch {
+        return undefined;
+    }
+}
+/**
+ * Trägt eine App als vertrauenswürdige App ein - wie die Identityprovider-
+ * Oberfläche: POST /identityprovider/config/impersonatewhitelist mit
+ * {"addApp":"<app>"} und Header "x-csrf-token". Läuft über die
+ * Browser-Session (Konfigurationsbereich des Identityproviders).
+ */
+async function addAppToImpersonationWhitelist(baseUri, app) {
+    await (0, performHttpRequest_1.performHttpRequest)(whitelistUrl(baseUri), {
+        method: "POST",
+        headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "x-csrf-token": await (0, createAPIKey_1.getIdentityProviderCsrfToken)(baseUri),
+        },
+        body: JSON.stringify({ addApp: app }),
+    });
 }
 
 
@@ -1805,6 +2067,9 @@ const gutschriftenVerschieben_js_raw_1 = __importDefault(__webpack_require__(/*!
 const preExport_js_raw_1 = __importDefault(__webpack_require__(/*! ../../dist/scripts/preExport.js?raw */ "./dist/scripts/preExport.js?raw"));
 const Rechnungsleser_Gutschriften_verschieben_v1_bpmn_raw_1 = __importDefault(__webpack_require__(/*! ../data/Rechnungsleser Gutschriften verschieben_v1.bpmn?raw */ "./src/data/Rechnungsleser Gutschriften verschieben_v1.bpmn?raw"));
 const processComponents_1 = __webpack_require__(/*! ../../../../helper/processstudio/processComponents */ "../../helper/processstudio/processComponents.ts");
+const d3EndpointService_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/d3EndpointService */ "../../helper/classcon-documentreader/d3EndpointService.ts");
+const metadataEndpointService_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/metadataEndpointService */ "../../helper/classcon-documentreader/metadataEndpointService.ts");
+const impersonateWhitelist_1 = __webpack_require__(/*! ../../../../helper/identityprovider/impersonateWhitelist */ "../../helper/identityprovider/impersonateWhitelist.ts");
 const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/extensionPoints */ "../../helper/classcon-documentreader/extensionPoints.ts");
 /**
  * Onboarding gevis ECM Rechnungsleser (ehemals
@@ -1848,7 +2113,7 @@ const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-do
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 11;
+const VERSION_COUNTER = 12;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -2102,6 +2367,57 @@ let eventbridgeHookDone = false;
 let eventbridgeSyncDone = false;
 // Dublettenprüfung in dieser Sitzung ausgeschaltet (siehe Schritt "duplicateCheck").
 let duplicateCheckDisabled = false;
+let impersonationAdded = false;
+// App-Name des Rechnungslesers (vertrauenswürdige App im Identityprovider).
+const DOCUMENT_READER_APP = "classcon-documentreader";
+// Soll-Zustand des Zielsystems (d.3-Endpunkt) des Rechnungslesers.
+async function targetEndpointSettings(apiKey) {
+    return {
+        ApiKey: apiKey,
+        RepositoryId: await getRepositoryId(apiKey),
+        D3Owner: "Editor",
+        EndpointServiceOutputStructure: "MainDocWithAttachments",
+    };
+}
+// Metadaten-Endpunkt (Azure Service Bus) für VEO. Connection String, Queue
+// und GWS-Nr. kommen von der Konfigurationsseite - NIE in den Code schreiben
+// (die Bundles sind öffentlich).
+function veoMetadataSettings() {
+    return {
+        ServiceBusConnectionString: veoConfig.connectionString.trim(),
+        QueueName: veoConfig.queueName.trim(),
+        ReferencedTargetSystem: "D3EndpointService",
+        Properties: [
+            { Name: "DvelopTenant", Value: SUBDOMAIN },
+            { Name: "GWSNo", Value: veoConfig.gwsNo.trim() },
+            { Name: "ExportType", Value: "JSON" },
+            { Name: "type", Value: "docreader" },
+            { Name: "subtype", Value: "rechnung" },
+            { Name: "erptype", Value: "veo" },
+            { Name: "CustomerId", Value: "DynamicProp_debitorMapping" },
+        ],
+    };
+}
+function samePropertyList(a, b) {
+    const key = (list) => list.map((p) => `${p.Name}=${p.Value}`).sort().join("\n");
+    return !!a && key(a) === key(b);
+}
+async function readMetadataEndpoint(apiKey) {
+    try {
+        return await (0, metadataEndpointService_1.getMetadataEndpointService)(BASE_URI, apiKey, await findDocumentReaderSubscriptionId(apiKey));
+    }
+    catch {
+        return undefined;
+    }
+}
+async function readEndpointService(apiKey) {
+    try {
+        return await (0, d3EndpointService_1.getD3EndpointService)(BASE_URI, apiKey, await findDocumentReaderSubscriptionId(apiKey));
+    }
+    catch {
+        return undefined;
+    }
+}
 // Subscription-ID des Rechnungslesers: aus der Kachel "classcon-documentreader/
 // indexing" im App-Menü (wie im bisherigen Onboarding-Script), ersatzweise aus
 // den Features des Rechnungslesers - die URL endet jeweils auf die ID.
@@ -2648,6 +2964,104 @@ const steps = [
             return "Dublettenprüfung ausgeschaltet.";
         },
     },
+    {
+        id: "targetSystem",
+        title: "Zielsystem des Rechnungslesers",
+        description: "Richtet das Zielsystem (d.3-Endpunkt) ein: dieses DMS-Repository, der API-Key aus der Konfiguration, Besitzer „Editor“, Ausgabe „Hauptdokument mit Anhängen“.",
+        async check(apiKey) {
+            const current = await readEndpointService(apiKey);
+            if (!current) {
+                return missing("Aktueller Stand nicht lesbar - wird eingerichtet.");
+            }
+            const target = await targetEndpointSettings(apiKey);
+            const sameSettings = current.RepositoryId === target.RepositoryId
+                && current.D3Owner === target.D3Owner
+                && current.EndpointServiceOutputStructure === target.EndpointServiceOutputStructure;
+            if (sameSettings && current.ApiKey === target.ApiKey) {
+                return done("Eingerichtet.");
+            }
+            if (sameSettings && current.ApiKey) {
+                return exists("Eingerichtet, aber mit einem anderen API-Key - wird auf den aktuellen umgestellt.");
+            }
+            return current.RepositoryId
+                ? exists("Abweichend eingerichtet - wird aktualisiert.")
+                : missing("Nicht eingerichtet.");
+        },
+        async beforeRun(apiKey) {
+            const current = await readEndpointService(apiKey);
+            const target = await targetEndpointSettings(apiKey);
+            if (!current?.RepositoryId && !current?.ApiKey) {
+                return true;
+            }
+            if (current.RepositoryId === target.RepositoryId && current.ApiKey === target.ApiKey) {
+                return true;
+            }
+            return confirmWarning("Zielsystem überschreiben?", `Der Rechnungsleser hat bereits ein Zielsystem${current.RepositoryId ? ` (Repository <code>${current.RepositoryId}</code>)` : ""}. Es wird durch dieses Repository und den API-Key aus der Konfiguration ersetzt.`, "Überschreiben");
+        },
+        async run(apiKey) {
+            const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
+            await (0, d3EndpointService_1.saveD3EndpointService)(BASE_URI, apiKey, subscriptionId, await targetEndpointSettings(apiKey));
+            return "Zielsystem eingerichtet.";
+        },
+    },
+    {
+        id: "metadataEndpoint",
+        title: "Metadaten-Endpunkt VEO (Service Bus)",
+        erp: ["veo"],
+        description: "Richtet den Metadaten-Endpunkt des Rechnungslesers für VEO ein: Service Bus Connection String und Queue aus der Konfiguration, Bezug auf das Zielsystem und die Eigenschaften DvelopTenant, GWSNo, ExportType, type, subtype, erptype und CustomerId.",
+        async check(apiKey) {
+            const current = await readMetadataEndpoint(apiKey);
+            if (!current) {
+                return missing("Aktueller Stand nicht lesbar - wird eingerichtet.");
+            }
+            const target = veoMetadataSettings();
+            const same = current.QueueName === target.QueueName
+                && current.ReferencedTargetSystem === target.ReferencedTargetSystem
+                && samePropertyList(current.Properties, target.Properties);
+            if (same && current.ServiceBusConnectionString === target.ServiceBusConnectionString) {
+                return done(`Eingerichtet (Queue ${target.QueueName}).`);
+            }
+            if (same) {
+                return exists("Eingerichtet, aber mit anderem Connection String - wird aktualisiert.");
+            }
+            return current.QueueName
+                ? exists(`Abweichend eingerichtet (Queue ${current.QueueName}) - wird aktualisiert.`)
+                : missing("Nicht eingerichtet.");
+        },
+        async beforeRun(apiKey) {
+            const current = await readMetadataEndpoint(apiKey);
+            const target = veoMetadataSettings();
+            if (!current?.QueueName || current.QueueName === target.QueueName) {
+                return true;
+            }
+            return confirmWarning("Metadaten-Endpunkt überschreiben?", `Der Rechnungsleser sendet aktuell an die Queue <code>${escapeHtml(current.QueueName)}</code>. Sie wird durch <code>${escapeHtml(target.QueueName)}</code> ersetzt.`, "Überschreiben");
+        },
+        async run(apiKey) {
+            const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
+            await (0, metadataEndpointService_1.saveMetadataEndpointService)(BASE_URI, apiKey, subscriptionId, veoMetadataSettings());
+            return "Metadaten-Endpunkt eingerichtet.";
+        },
+    },
+    {
+        id: "trustedApp",
+        title: "Rechnungsleser als vertrauenswürdige App",
+        description: `Trägt „${DOCUMENT_READER_APP}“ im Identityprovider als vertrauenswürdige App ein (darf im Namen von Benutzern handeln). Läuft mit der Anmeldung des aktuellen Benutzers - dafür sind Administrationsrechte nötig.`,
+        async check() {
+            if (impersonationAdded) {
+                return done("In dieser Sitzung eingetragen.");
+            }
+            const whitelisted = await (0, impersonateWhitelist_1.isAppImpersonationWhitelisted)(BASE_URI, DOCUMENT_READER_APP);
+            if (whitelisted) {
+                return done("Eingetragen.");
+            }
+            return missing(whitelisted === false ? "Nicht eingetragen." : "Wird eingetragen.");
+        },
+        async run() {
+            await (0, impersonateWhitelist_1.addAppToImpersonationWhitelist)(BASE_URI, DOCUMENT_READER_APP);
+            impersonationAdded = true;
+            return "Als vertrauenswürdige App eingetragen.";
+        },
+    },
 ];
 const ERP_OPTIONS = [
     { value: "veo", label: "VEO", description: "gevis ECM mit ERP-System VEO" },
@@ -2656,6 +3070,23 @@ const ERP_OPTIONS = [
 let page = "config";
 let apiKey = "";
 let erpSystem = "";
+// Zusatzangaben für VEO (Metadaten-Endpunkt). Die Queue folgt üblicherweise
+// dem Muster "sbq-scan-in-<mandant>" und ist damit vorbelegt.
+const veoConfig = { gwsNo: "", connectionString: "", queueName: `sbq-scan-in-${SUBDOMAIN}` };
+// Prüft die VEO-Angaben; liefert eine Fehlermeldung oder undefined.
+function validateVeoConfig() {
+    if (!/^\d+$/.test(veoConfig.gwsNo.trim())) {
+        return "Bitte die GWS-Nr. (nur Ziffern) eingeben.";
+    }
+    const connection = veoConfig.connectionString.trim();
+    if (!/^Endpoint=sb:\/\//i.test(connection) || !/SharedAccessKey=/i.test(connection)) {
+        return "Bitte einen gültigen Service Bus Connection String eingeben (beginnt mit \"Endpoint=sb://\", enthält \"SharedAccessKey=\").";
+    }
+    if (!veoConfig.queueName.trim()) {
+        return "Bitte den Queue-Namen eingeben.";
+    }
+    return undefined;
+}
 let currentUserId;
 const statuses = new Map(steps.map((step) => [step.id, { state: "unknown", text: "" }]));
 let busy = false;
@@ -2829,6 +3260,10 @@ const styles = `
   .onb-actions { display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
   .onb-config { max-width: 640px; }
   .onb-config-block { margin-bottom: 18px; }
+  .onb-config-block[hidden] { display: none; }
+  .onb-veo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 12px; max-width: 720px; }
+  .onb-veo-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85em; margin: 0; }
+  .onb-veo-wide { grid-column: 1 / -1; }
   .onb-config-title { font-weight: 600; margin-bottom: 2px; }
   .onb-config-desc { color: #6c757d; font-size: 0.85em; margin-bottom: 6px; }
   .onb-erp-options { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -2916,6 +3351,15 @@ function renderConfigPage() {
         <div class="onb-config-title">ERP-Zielsystem</div>
         <div class="onb-config-desc">An welches ERP-System übergibt der Rechnungsleser?</div>
         <div class="onb-erp-options">${options}</div>
+      </div>
+      <div class="onb-config-block" data-onb-veo-block ${erpSystem === "veo" ? "" : "hidden"}>
+        <div class="onb-config-title">VEO-Anbindung</div>
+        <div class="onb-config-desc">Für den Metadaten-Endpunkt des Rechnungslesers (Azure Service Bus). Mandant: <strong>${escapeHtml(SUBDOMAIN)}</strong></div>
+        <div class="onb-veo-grid">
+          <label>GWS-Nr.<input type="text" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" data-onb-veo="gwsNo" placeholder="z.B. 12345" value="${escapeHtml(veoConfig.gwsNo)}"></label>
+          <label>Queue-Name<input type="text" autocomplete="off" class="form-control form-control-sm" data-onb-veo="queueName" value="${escapeHtml(veoConfig.queueName)}"></label>
+          <label class="onb-veo-wide">Service Bus Connection String<input type="password" autocomplete="off" class="form-control form-control-sm" data-onb-veo="connectionString" placeholder="Endpoint=sb://…;SharedAccessKeyName=…;SharedAccessKey=…" value="${escapeHtml(veoConfig.connectionString)}"></label>
+        </div>
       </div>
       <div data-onb-message></div>
       <div class="onb-actions">
@@ -3185,6 +3629,12 @@ async function goToSteps() {
         refreshView();
         return;
     }
+    const veoError = erpSystem === "veo" ? validateVeoConfig() : undefined;
+    if (veoError) {
+        message = { kind: "error", text: veoError };
+        refreshView();
+        return;
+    }
     let valid = false;
     await withBusy(async () => {
         message = { kind: "info", text: "API-Key wird geprüft…" };
@@ -3243,7 +3693,22 @@ function bindEvents(root) {
             root.querySelectorAll(".onb-erp").forEach((label) => {
                 label.classList.toggle("onb-erp-selected", label.contains(radio));
             });
+            const veoBlock = root.querySelector("[data-onb-veo-block]");
+            if (veoBlock)
+                veoBlock.hidden = erpSystem !== "veo";
             refreshView();
+        });
+    });
+    root.querySelectorAll("input[data-onb-veo]").forEach((input) => {
+        const field = input.dataset.onbVeo;
+        const onChange = () => {
+            veoConfig[field] = input.value;
+        };
+        input.addEventListener("input", onChange);
+        input.addEventListener("change", onChange);
+        input.addEventListener("keydown", (event) => {
+            if (event.key === "Enter")
+                event.preventDefault();
         });
     });
     root.querySelectorAll("button[data-onb-run]").forEach((button) => {
