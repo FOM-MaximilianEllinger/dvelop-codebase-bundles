@@ -417,6 +417,121 @@ async function saveMetadataEndpointService(baseUri, token, subscriptionId, setti
 
 /***/ },
 
+/***/ "../../helper/classcon-documentreader/serviceBusEndpointMapping.ts"
+/*!*************************************************************************!*\
+  !*** ../../helper/classcon-documentreader/serviceBusEndpointMapping.ts ***!
+  \*************************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getServiceBusEndpointMapping = getServiceBusEndpointMapping;
+exports.saveServiceBusEndpointMapping = saveServiceBusEndpointMapping;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+const PREFIX = "ServiceBusMapping.ServiceBusAttributeMappings";
+function mappingUrl(baseUri, subscriptionId, endpointServiceName, documentClass, save) {
+    const params = new URLSearchParams({ subscriptionId });
+    if (save)
+        params.set("saveMapping", "true");
+    params.set("endpointServiceName", endpointServiceName);
+    params.set("documentClass", documentClass);
+    return `${baseUri}/classcon-documentreader/Configuration/ServiceBusEndpointService?${params}`;
+}
+function authHeaders(token) {
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
+// Zeilenenden wie die Oberfläche (Textarea sendet CRLF).
+function toCrlf(text) {
+    return text.replace(/\r?\n/g, "\r\n");
+}
+// HTML-Konfigurationsseite auslesen: Mapping-Zeilen
+// "ServiceBusMapping.ServiceBusAttributeMappings[i].<Feld>", StyleSheet usw.
+function parseHtml(html) {
+    if (typeof DOMParser === "undefined")
+        return undefined;
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const rows = new Map();
+    const scalars = {};
+    doc.querySelectorAll("input[name], textarea[name], select[name]").forEach((element) => {
+        const type = element.tagName === "INPUT" ? element.type : "";
+        if ((type === "radio" || type === "checkbox") && !element.checked)
+            return;
+        const row = element.name.match(/^ServiceBusMapping\.ServiceBusAttributeMappings\[(\d+)\]\.(\w+)$/);
+        if (row) {
+            const entry = rows.get(Number(row[1])) ?? {};
+            entry[row[2]] = element.value;
+            rows.set(Number(row[1]), entry);
+        }
+        else {
+            scalars[element.name] = element.value;
+        }
+    });
+    const result = {};
+    if (rows.size) {
+        result.AttributeMappings = [...rows.keys()].sort((a, b) => a - b).map((i) => {
+            const r = rows.get(i);
+            return {
+                JsonOutputName: r.JsonOutputName ?? "",
+                AttributeName: r.AttributeName ?? "",
+                DefaultValue: r.DefaultValue ?? "",
+                ServiceBusDataType: r.ServiceBusDataType ?? "",
+                Export: (r.Export ?? "").toLowerCase() === "true",
+            };
+        });
+    }
+    if ("StyleSheet" in scalars)
+        result.StyleSheet = scalars.StyleSheet;
+    if ("ServiceBusExportType" in scalars)
+        result.ServiceBusExportType = scalars.ServiceBusExportType;
+    if ("IsCustomTemplate" in scalars)
+        result.IsCustomTemplate = scalars.IsCustomTemplate.toLowerCase() === "true";
+    return Object.keys(result).length ? result : undefined;
+}
+/**
+ * Liest das Export-Mapping eines Zielsystems
+ * (GET /classcon-documentreader/Configuration/ServiceBusEndpointService?subscriptionId=...&endpointServiceName=...&documentClass=...).
+ * undefined = nicht lesbar.
+ */
+async function getServiceBusEndpointMapping(baseUri, token, subscriptionId, endpointServiceName, documentClass) {
+    const response = await (0, performHttpRequest_1.performHttpRequest)(mappingUrl(baseUri, subscriptionId, endpointServiceName, documentClass, false), {
+        method: "GET",
+        headers: { ...authHeaders(token), Accept: "text/html" },
+    });
+    return typeof response.body === "string" ? parseHtml(response.body) : undefined;
+}
+/**
+ * Speichert das Export-Mapping eines Zielsystems - wie die Oberfläche:
+ * POST .../ServiceBusEndpointService?subscriptionId=...&saveMapping=true&endpointServiceName=...&documentClass=...
+ * als Formulardaten (ASP.NET-Liste mit "...Index"-Feldern, StyleSheet usw.).
+ */
+async function saveServiceBusEndpointMapping(baseUri, token, subscriptionId, endpointServiceName, documentClass, mapping) {
+    const body = new URLSearchParams();
+    mapping.AttributeMappings.forEach((row, i) => {
+        body.append(`${PREFIX}.Index`, String(i));
+        body.append(`${PREFIX}[${i}].JsonOutputName`, row.JsonOutputName);
+        body.append(`${PREFIX}[${i}].AttributeName`, row.AttributeName);
+        body.append(`${PREFIX}[${i}].DefaultValue`, row.DefaultValue);
+        body.append(`${PREFIX}[${i}].ServiceBusDataType`, row.ServiceBusDataType);
+        body.append(`${PREFIX}[${i}].Export`, row.Export ? "True" : "False");
+    });
+    body.append("IsCustomTemplate", mapping.IsCustomTemplate ? "true" : "false");
+    body.append("StyleSheet", toCrlf(mapping.StyleSheet));
+    body.append("DefaultStyleSheetName", mapping.DefaultStyleSheetName);
+    body.append("ServiceBusExportType", mapping.ServiceBusExportType);
+    return await (0, performHttpRequest_1.performHttpRequest)(mappingUrl(baseUri, subscriptionId, endpointServiceName, documentClass, true), {
+        method: "POST",
+        headers: {
+            ...authHeaders(token),
+            Accept: "application/json, text/html;q=0.9",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        },
+        body: body.toString(),
+    });
+}
+
+
+/***/ },
+
 /***/ "../../helper/classcon-documentreader/setDocumentProcessingConfiguration.ts"
 /*!**********************************************************************************!*\
   !*** ../../helper/classcon-documentreader/setDocumentProcessingConfiguration.ts ***!
@@ -482,6 +597,93 @@ async function setDocumentProcessingConfiguration(baseUri, token, subscriptionId
         body,
     };
     return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/classcon-documentreader/sftpEndpointService.ts"
+/*!*******************************************************************!*\
+  !*** ../../helper/classcon-documentreader/sftpEndpointService.ts ***!
+  \*******************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getSftpEndpointService = getSftpEndpointService;
+exports.saveSftpEndpointService = saveSftpEndpointService;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+const FIELDS = ["Host", "Port", "User", "Password", "Directory"];
+function endpointUrl(baseUri, subscriptionId) {
+    return `${baseUri}/classcon-documentreader/Configuration/SftpEndpointService?subscriptionId=${encodeURIComponent(subscriptionId)}`;
+}
+function authHeaders(token) {
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
+// Felder ohne Rücksicht auf Groß-/Kleinschreibung übernehmen (JSON kann camelCase sein).
+function pick(raw) {
+    const lookup = new Map(Object.entries(raw).map(([key, value]) => [key.toLowerCase(), value]));
+    const result = {};
+    for (const field of FIELDS) {
+        const value = lookup.get(field.toLowerCase());
+        if (value !== undefined && value !== null)
+            result[field] = String(value);
+    }
+    return result;
+}
+// HTML-Konfigurationsseite: Formularfelder mit den Namen aus FIELDS auslesen.
+function parseHtml(html) {
+    if (typeof DOMParser === "undefined")
+        return undefined;
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const raw = {};
+    doc.querySelectorAll("input[name], textarea[name]").forEach((element) => {
+        if (FIELDS.some((field) => field.toLowerCase() === element.name.toLowerCase())) {
+            raw[element.name] = element.value;
+        }
+    });
+    const result = pick(raw);
+    return Object.keys(result).length ? result : undefined;
+}
+/**
+ * Liest das eingerichtete SFTP-Zielsystem
+ * (GET /classcon-documentreader/Configuration/SftpEndpointService?subscriptionId=...).
+ * Versteht JSON und die HTML-Konfigurationsseite. undefined = nicht lesbar.
+ * Das Kennwort liefert die Seite ggf. nicht (oder maskiert) mit.
+ */
+async function getSftpEndpointService(baseUri, token, subscriptionId) {
+    const response = await (0, performHttpRequest_1.performHttpRequest)(endpointUrl(baseUri, subscriptionId), {
+        method: "GET",
+        headers: { ...authHeaders(token), Accept: "application/json, text/html;q=0.9" },
+    });
+    if (typeof response.body === "string") {
+        try {
+            return pick(JSON.parse(response.body));
+        }
+        catch {
+            return parseHtml(response.body);
+        }
+    }
+    return response.body && typeof response.body === "object" ? pick(response.body) : undefined;
+}
+/**
+ * Richtet das SFTP-Zielsystem ein - wie die Oberfläche: POST als
+ * Formulardaten Host=...&Port=22&User=...&Password=...&Directory=...
+ */
+async function saveSftpEndpointService(baseUri, token, subscriptionId, settings) {
+    const body = new URLSearchParams();
+    for (const field of FIELDS) {
+        body.set(field, settings[field]);
+    }
+    return await (0, performHttpRequest_1.performHttpRequest)(endpointUrl(baseUri, subscriptionId), {
+        method: "POST",
+        headers: {
+            ...authHeaders(token),
+            Accept: "application/json",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        },
+        body: body.toString(),
+    });
 }
 
 
@@ -2161,6 +2363,11 @@ const Rechnungsleser_Gutschriften_verschieben_v1_bpmn_raw_1 = __importDefault(__
 const processComponents_1 = __webpack_require__(/*! ../../../../helper/processstudio/processComponents */ "../../helper/processstudio/processComponents.ts");
 const d3EndpointService_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/d3EndpointService */ "../../helper/classcon-documentreader/d3EndpointService.ts");
 const getEventbridgeConfig_1 = __webpack_require__(/*! ../../../../helper/eventbridge/getEventbridgeConfig */ "../../helper/eventbridge/getEventbridgeConfig.ts");
+const serviceBusEndpointMapping_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/serviceBusEndpointMapping */ "../../helper/classcon-documentreader/serviceBusEndpointMapping.ts");
+// XSLT für den SFTP-Export (gibt das fertige Export-XML aus dem Attribut
+// "exportXML" als Text aus) - als Text ins Bundle eingebunden.
+const sftpExportStylesheet_xsl_raw_1 = __importDefault(__webpack_require__(/*! ../data/sftpExportStylesheet.xsl?raw */ "./src/data/sftpExportStylesheet.xsl?raw"));
+const sftpEndpointService_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/sftpEndpointService */ "../../helper/classcon-documentreader/sftpEndpointService.ts");
 const endpointServices_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/endpointServices */ "../../helper/classcon-documentreader/endpointServices.ts");
 const metadataEndpointService_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/metadataEndpointService */ "../../helper/classcon-documentreader/metadataEndpointService.ts");
 const impersonateWhitelist_1 = __webpack_require__(/*! ../../../../helper/identityprovider/impersonateWhitelist */ "../../helper/identityprovider/impersonateWhitelist.ts");
@@ -2207,7 +2414,7 @@ const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-do
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 15;
+const VERSION_COUNTER = 16;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -2473,6 +2680,42 @@ async function targetEndpointSettings(apiKey) {
 async function isEndpointConfigured(apiKey, name) {
     const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
     return (await (0, endpointServices_1.getConfiguredEndpointServices)(BASE_URI, apiKey, subscriptionId)).includes(name);
+}
+// SFTP-Zielsystem für gevis R-Linie - Werte von der Konfigurationsseite.
+function sftpEndpointSettings() {
+    return {
+        Host: sftpConfig.host.trim(),
+        Port: sftpConfig.port.trim(),
+        User: sftpConfig.user.trim(),
+        Password: sftpConfig.password,
+        Directory: sftpConfig.directory.trim(),
+    };
+}
+// Export-Mapping des SFTP-Zielsystems (Dokumentklasse INV_Standard): das
+// Attribut "exportXML" wird per XSLT unverändert als XML-Datei ausgegeben.
+const SFTP_DOCUMENT_CLASS = "INV_Standard";
+const SFTP_EXPORT_MAPPING = {
+    AttributeMappings: [
+        { JsonOutputName: "exportXML", AttributeName: "exportXML", DefaultValue: "", ServiceBusDataType: "String", Export: true },
+    ],
+    IsCustomTemplate: true,
+    StyleSheet: sftpExportStylesheet_xsl_raw_1.default,
+    DefaultStyleSheetName: "",
+    ServiceBusExportType: "XML",
+};
+// Whitespace-unabhängiger Vergleich des Stylesheets (Zeilenenden/Einrückung
+// können sich beim Speichern ändern).
+function sameStyleSheet(a, b) {
+    const norm = (text) => text.replace(/\s+/g, "");
+    return a !== undefined && norm(a) === norm(b);
+}
+async function readSftpEndpoint(apiKey) {
+    try {
+        return await (0, sftpEndpointService_1.getSftpEndpointService)(BASE_URI, apiKey, await findDocumentReaderSubscriptionId(apiKey));
+    }
+    catch {
+        return undefined;
+    }
 }
 // Metadaten-Endpunkt (Azure Service Bus) für VEO. Connection String, Queue
 // und GWS-Nr. kommen von der Konfigurationsseite - NIE in den Code schreiben
@@ -3080,6 +3323,85 @@ const steps = [
         },
     },
     {
+        id: "sftpEndpoint",
+        title: "SFTP-Zielsystem gevis R-Linie",
+        erp: ["gevisR"],
+        description: "Richtet den SFTP-Server aus der Konfiguration als Zielsystem des Rechnungslesers ein (Host, Port, Benutzer, Kennwort, Verzeichnis).",
+        async check(apiKey) {
+            if (!(await isEndpointConfigured(apiKey, "SftpEndpointService"))) {
+                return missing("Nicht eingerichtet.");
+            }
+            const current = await readSftpEndpoint(apiKey);
+            if (!current) {
+                return exists("Eingerichtet - Einstellungen nicht lesbar, werden beim Ausführen überschrieben.");
+            }
+            const target = sftpEndpointSettings();
+            const same = current.Host === target.Host
+                && current.Port === target.Port
+                && current.User === target.User
+                && current.Directory === target.Directory;
+            // Das Kennwort liefert die Seite nicht zuverlässig mit - nur vergleichen, wenn vorhanden.
+            if (same && (!current.Password || current.Password === target.Password)) {
+                return done(`Eingerichtet (${target.User}@${target.Host}:${target.Port}${target.Directory}).`);
+            }
+            return exists(same
+                ? "Eingerichtet, aber mit anderem Kennwort - wird aktualisiert."
+                : `Abweichend eingerichtet (${current.User ?? "?"}@${current.Host ?? "?"}:${current.Port ?? "?"}${current.Directory ?? ""}) - wird aktualisiert.`);
+        },
+        async beforeRun(apiKey) {
+            if (!(await isEndpointConfigured(apiKey, "SftpEndpointService"))) {
+                return true;
+            }
+            const current = await readSftpEndpoint(apiKey);
+            const target = sftpEndpointSettings();
+            if (current && current.Host === target.Host && current.User === target.User && current.Directory === target.Directory) {
+                return true;
+            }
+            return confirmWarning("SFTP-Zielsystem überschreiben?", current?.Host
+                ? `Der Rechnungsleser übergibt aktuell an <code>${escapeHtml(`${current.User ?? ""}@${current.Host}:${current.Port ?? ""}${current.Directory ?? ""}`)}</code>. Das wird durch <code>${escapeHtml(`${target.User}@${target.Host}:${target.Port}${target.Directory}`)}</code> ersetzt.`
+                : "Ein SFTP-Zielsystem ist bereits eingerichtet. Es wird mit den Angaben aus der Konfiguration überschrieben.", "Überschreiben");
+        },
+        async run(apiKey) {
+            const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
+            await (0, sftpEndpointService_1.saveSftpEndpointService)(BASE_URI, apiKey, subscriptionId, sftpEndpointSettings());
+            return "SFTP-Zielsystem eingerichtet.";
+        },
+    },
+    {
+        id: "sftpExportMapping",
+        title: "SFTP-Zielsystem: Export konfigurieren",
+        erp: ["gevisR"],
+        description: `Konfiguriert den Export des SFTP-Zielsystems für die Dokumentklasse ${SFTP_DOCUMENT_CLASS}: Attribut „exportXML“ wird exportiert und per XSLT-Vorlage als XML-Datei auf den SFTP-Server geschrieben.`,
+        async check(apiKey) {
+            if (!(await isEndpointConfigured(apiKey, "SftpEndpointService"))) {
+                return missing("SFTP-Zielsystem fehlt noch.");
+            }
+            let current;
+            try {
+                current = await (0, serviceBusEndpointMapping_1.getServiceBusEndpointMapping)(BASE_URI, apiKey, await findDocumentReaderSubscriptionId(apiKey), "SftpEndpointService", SFTP_DOCUMENT_CLASS);
+            }
+            catch {
+                current = undefined;
+            }
+            if (!current) {
+                return missing("Aktueller Stand nicht lesbar - wird konfiguriert.");
+            }
+            const exported = current.AttributeMappings?.find((row) => row.JsonOutputName === "exportXML" && row.AttributeName === "exportXML" && row.Export);
+            if (exported && current.ServiceBusExportType === "XML" && sameStyleSheet(current.StyleSheet, sftpExportStylesheet_xsl_raw_1.default)) {
+                return done("Export „exportXML“ als XML konfiguriert.");
+            }
+            return exists("Abweichend konfiguriert - wird auf die Vorlage gesetzt.");
+        },
+        async run(apiKey) {
+            if (!(await isEndpointConfigured(apiKey, "SftpEndpointService"))) {
+                throw new Error("Das SFTP-Zielsystem fehlt noch - bitte zuerst den Schritt „SFTP-Zielsystem gevis R-Linie“ ausführen.");
+            }
+            const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
+            await (0, serviceBusEndpointMapping_1.saveServiceBusEndpointMapping)(BASE_URI, apiKey, subscriptionId, "SftpEndpointService", SFTP_DOCUMENT_CLASS, SFTP_EXPORT_MAPPING);
+            return "Export konfiguriert.";
+        },
+    },
+    {
         id: "trustedApp",
         title: "Rechnungsleser als vertrauenswürdige App",
         description: `Trägt „${DOCUMENT_READER_APP}“ im Identityprovider als vertrauenswürdige App ein (darf im Namen von Benutzern handeln). Läuft mit der Anmeldung des aktuellen Benutzers - dafür sind Administrationsrechte nötig.`,
@@ -3110,6 +3432,26 @@ let erpSystem = "";
 // Zusatzangaben für VEO (Metadaten-Endpunkt). Die Queue folgt üblicherweise
 // dem Muster "sbq-scan-in-<mandant>" und ist damit vorbelegt.
 const veoConfig = { gwsNo: "", connectionString: "", queueName: `sbq-scan-in-${SUBDOMAIN}` };
+// Zusatzangaben für gevis R-Linie (SFTP-Server statt Service Bus). Zugangsdaten
+// nur zur Laufzeit - NIE in den Code schreiben (die Bundles sind öffentlich).
+const sftpConfig = { host: "mt-sftp.gws.ms", port: "22", user: "", password: "", directory: "/out/dms/scandta" };
+// Prüft die SFTP-Angaben; liefert eine Fehlermeldung oder undefined.
+function validateSftpConfig() {
+    if (!sftpConfig.host.trim()) {
+        return "Bitte den SFTP-Host eingeben.";
+    }
+    const port = Number(sftpConfig.port.trim());
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        return "Bitte eine gültige Portnummer (1-65535) eingeben.";
+    }
+    if (!sftpConfig.user.trim() || !sftpConfig.password) {
+        return "Bitte Benutzer und Kennwort für den SFTP-Server eingeben.";
+    }
+    if (!sftpConfig.directory.trim().startsWith("/")) {
+        return "Bitte das Verzeichnis auf dem SFTP-Server eingeben (beginnt mit \"/\").";
+    }
+    return undefined;
+}
 // Prüft die VEO-Angaben; liefert eine Fehlermeldung oder undefined.
 function validateVeoConfig() {
     if (!/^\d+$/.test(veoConfig.gwsNo.trim())) {
@@ -3401,6 +3743,17 @@ function renderConfigPage() {
           <label>GWS-Nr.<input type="text" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" data-onb-veo="gwsNo" placeholder="z.B. 12345" value="${escapeHtml(veoConfig.gwsNo)}"></label>
           <label>Queue-Name<input type="text" autocomplete="off" class="form-control form-control-sm" data-onb-veo="queueName" value="${escapeHtml(veoConfig.queueName)}"></label>
           <label class="onb-veo-wide">Service Bus Connection String<input type="password" autocomplete="off" class="form-control form-control-sm" data-onb-veo="connectionString" placeholder="Endpoint=sb://…;SharedAccessKeyName=…;SharedAccessKey=…" value="${escapeHtml(veoConfig.connectionString)}"></label>
+        </div>
+      </div>
+      <div class="onb-config-block" data-onb-sftp-block ${erpSystem === "gevisR" ? "" : "hidden"}>
+        <div class="onb-config-title">gevis R-Linie – SFTP-Server</div>
+        <div class="onb-config-desc">Hierhin übergibt der Rechnungsleser die Daten für gevis R-Linie.</div>
+        <div class="onb-veo-grid">
+          <label>Host<input type="text" autocomplete="off" class="form-control form-control-sm" data-onb-sftp="host" value="${escapeHtml(sftpConfig.host)}"></label>
+          <label>Port<input type="text" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" data-onb-sftp="port" value="${escapeHtml(sftpConfig.port)}"></label>
+          <label>Benutzer<input type="text" autocomplete="off" class="form-control form-control-sm" data-onb-sftp="user" value="${escapeHtml(sftpConfig.user)}"></label>
+          <label>Kennwort<input type="password" autocomplete="new-password" class="form-control form-control-sm" data-onb-sftp="password" value="${escapeHtml(sftpConfig.password)}"></label>
+          <label class="onb-veo-wide">Verzeichnis<input type="text" autocomplete="off" class="form-control form-control-sm" data-onb-sftp="directory" value="${escapeHtml(sftpConfig.directory)}"></label>
         </div>
       </div>
       <div data-onb-message></div>
@@ -3771,7 +4124,7 @@ async function goToSteps() {
         refreshView();
         return;
     }
-    const veoError = erpSystem === "veo" ? validateVeoConfig() : undefined;
+    const veoError = erpSystem === "veo" ? validateVeoConfig() : erpSystem === "gevisR" ? validateSftpConfig() : undefined;
     if (veoError) {
         message = { kind: "error", text: veoError };
         refreshView();
@@ -3859,6 +4212,9 @@ function bindEvents(root) {
             const veoBlock = root.querySelector("[data-onb-veo-block]");
             if (veoBlock)
                 veoBlock.hidden = erpSystem !== "veo";
+            const sftpBlock = root.querySelector("[data-onb-sftp-block]");
+            if (sftpBlock)
+                sftpBlock.hidden = erpSystem !== "gevisR";
             refreshView();
         });
     });
@@ -3866,6 +4222,18 @@ function bindEvents(root) {
     if (page === "config") {
         void loadGroupChoices();
     }
+    root.querySelectorAll("input[data-onb-sftp]").forEach((input) => {
+        const field = input.dataset.onbSftp;
+        const onChange = () => {
+            sftpConfig[field] = input.value;
+        };
+        input.addEventListener("input", onChange);
+        input.addEventListener("change", onChange);
+        input.addEventListener("keydown", (event) => {
+            if (event.key === "Enter")
+                event.preventDefault();
+        });
+    });
     root.querySelectorAll("input[data-onb-veo]").forEach((input) => {
         const field = input.dataset.onbVeo;
         const onChange = () => {
@@ -3958,6 +4326,16 @@ module.exports = "/******/ (() => { // webpackBootstrap\n/******/ \t\"use strict
 (module) {
 
 module.exports = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" xmlns:camunda=\"http://camunda.org/schema/1.0/bpmn\" xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" xmlns:modeler=\"http://camunda.org/schema/modeler/1.0\" exporter=\"d.velop process modeler\" exporterVersion=\"1.1.0\" expressionLanguage=\"http://www.w3.org/1999/XPath\" id=\"definitions_p-77b509e1-e27b-4696-8ea7-b1eb3875692e\" modeler:executionPlatform=\"Camunda Platform\" modeler:executionPlatformVersion=\"7.15.0\" targetNamespace=\"http://bpmn.io/schema/bpmn\" typeLanguage=\"http://www.w3.org/2001/XMLSchema\">\n    \n  <bpmn:process id=\"p-77b509e1-e27b-4696-8ea7-b1eb3875692e\" isClosed=\"false\" isExecutable=\"true\" name=\"Rechnungsleser Gutschriften verschieben\" processType=\"None\">\n        \n    <bpmn:extensionElements>\n            \n      <camunda:properties>\n                \n        <camunda:property name=\"service:/process/services/actions:in:actionId\" value=\"String\"/>\n                \n        <camunda:property name=\"service:/process/services/actions:in:executingUser\" value=\"Identity\"/>\n                \n        <camunda:property name=\"service:/process/services/actions:in:actionPayload\" value=\"InternalObject\"/>\n                \n        <camunda:property name=\"service:/process/services/actions:out:status\" value=\"Number\"/>\n                \n        <camunda:property name=\"service:/process/services/actions:out:actionOutput\" value=\"InternalObject\"/>\n                \n        <camunda:property name=\"variable:docId*\" value=\"String!\"/>\n              \n      </camunda:properties>\n          \n    </bpmn:extensionElements>\n        \n    <bpmn:startEvent id=\"StartEvent_1\" isInterrupting=\"true\" parallelMultiple=\"false\">\n            \n      <bpmn:extensionElements>\n                \n        <camunda:properties>\n                    \n          <camunda:property name=\"event:0\" value=\"eventbridge_dmspostimport\"/>\n                    \n          <camunda:property name=\"event:0:app\" value=\"eventbridge\"/>\n                    \n          <camunda:property name=\"event:0:name\" value=\"Ablage Gutschrift\"/>\n                    \n          <camunda:property name=\"start:action\" value=\"false\"/>\n                    \n          <camunda:property name=\"event:0:filter\" value=\"{&quot;and&quot;:[{&quot;==&quot;:[{&quot;var&quot;:&quot;doc.categoryId&quot;},&quot;fc3d3e6d-46f6-4fcd-84e3-db79e14b2751&quot;]},{&quot;==&quot;:[{&quot;var&quot;:&quot;doc.properties.717f4480-f16c-4838-96a3-f69a01eb41f1&quot;},&quot;Gutschrift&quot;]}]}\"/>\n                    \n          <camunda:property name=\"event:0:input:docId\" value=\"${input.getValue(&quot;$['doc']['id']&quot;)}\"/>\n                    \n          <camunda:property name=\"event:0:input:process.instance.businessKey\" value=\"${input.getValue(&quot;$['doc']['id']&quot;)}\"/>\n                  \n        </camunda:properties>\n              \n      </bpmn:extensionElements>\n            \n      <bpmn:outgoing>Flow_0abuizb</bpmn:outgoing>\n          \n    </bpmn:startEvent>\n        \n    <bpmn:endEvent id=\"Event_1fwwxqz\">\n            \n      <bpmn:incoming>Flow_1mc7kpw</bpmn:incoming>\n          \n    </bpmn:endEvent>\n        \n    <bpmn:sequenceFlow id=\"Flow_0abuizb\" sourceRef=\"StartEvent_1\" targetRef=\"Activity_1k6yh1s\"/>\n        \n    <bpmn:sequenceFlow id=\"Flow_1mc7kpw\" sourceRef=\"Activity_1k6yh1s\" targetRef=\"Event_1fwwxqz\"/>\n        \n    <bpmn:subProcess completionQuantity=\"1\" id=\"Activity_1k6yh1s\" isForCompensation=\"false\" name=\"Gutschriften verschieben\" startQuantity=\"1\" triggeredByEvent=\"false\">\n            \n      <bpmn:documentation textFormat=\"text/plain\">#action</bpmn:documentation>\n            \n      <bpmn:incoming>Flow_0abuizb</bpmn:incoming>\n            \n      <bpmn:outgoing>Flow_1mc7kpw</bpmn:outgoing>\n            \n      <bpmn:startEvent id=\"Activity_0qxarpb-StartEvent-0\" isInterrupting=\"true\" name=\"Gutschriften verschieben (Start)\" parallelMultiple=\"false\"/>\n            \n      <bpmn:sequenceFlow id=\"Activity_0qxarpb-SequenceFlow-0\" sourceRef=\"Activity_0qxarpb-StartEvent-0\" targetRef=\"Activity_0qxarpb-SendTask-0\"/>\n            \n      <bpmn:sendTask camunda:asyncBefore=\"true\" camunda:delegateExpression=\"${asyncService}\" completionQuantity=\"1\" id=\"Activity_0qxarpb-SendTask-0\" implementation=\"##WebService\" isForCompensation=\"false\" name=\"Gutschriften verschieben (Request)\" startQuantity=\"1\">\n                \n        <bpmn:extensionElements>\n                    \n          <camunda:inputOutput>\n                        \n            <camunda:inputParameter name=\"service.uri\">/process/services/actions</camunda:inputParameter>\n                        \n            <camunda:inputParameter name=\"actionId\">scripting_3fa4300f-97ba-4628-904d-e7353c2c2861-d5795100-1f19-46e1-8c7f-8888ec9ce5b6</camunda:inputParameter>\n                        \n            <camunda:inputParameter name=\"actionPayload[$.docId]\">${variables.get('docId')}</camunda:inputParameter>\n                      \n          </camunda:inputOutput>\n                  \n        </bpmn:extensionElements>\n              \n      </bpmn:sendTask>\n            \n      <bpmn:sequenceFlow id=\"Activity_0qxarpb-SequenceFlow-1\" sourceRef=\"Activity_0qxarpb-SendTask-0\" targetRef=\"Activity_0qxarpb-ReceiveTask-0\"/>\n            \n      <bpmn:receiveTask camunda:asyncAfter=\"true\" completionQuantity=\"1\" id=\"Activity_0qxarpb-ReceiveTask-0\" implementation=\"##WebService\" instantiate=\"false\" isForCompensation=\"false\" name=\"Gutschriften verschieben (Response)\" startQuantity=\"1\"/>\n            \n      <bpmn:sequenceFlow id=\"Activity_0qxarpb-SequenceFlow-2\" sourceRef=\"Activity_0qxarpb-ReceiveTask-0\" targetRef=\"Activity_0qxarpb-EndEvent-0\"/>\n            \n      <bpmn:endEvent id=\"Activity_0qxarpb-EndEvent-0\" name=\"Gutschriften verschieben (End)\"/>\n          \n    </bpmn:subProcess>\n      \n  </bpmn:process>\n    \n  <bpmndi:BPMNDiagram id=\"BPMNDiagram_1\">\n        \n    <bpmndi:BPMNPlane bpmnElement=\"p-77b509e1-e27b-4696-8ea7-b1eb3875692e\" id=\"BPMNPlane_1\">\n            \n      <bpmndi:BPMNShape bpmnElement=\"StartEvent_1\" id=\"_BPMNShape_StartEvent_2\">\n                \n        <dc:Bounds height=\"36\" width=\"36\" x=\"200\" y=\"100\"/>\n              \n      </bpmndi:BPMNShape>\n            \n      <bpmndi:BPMNShape bpmnElement=\"Event_1fwwxqz\" id=\"Event_1fwwxqz_di\">\n                \n        <dc:Bounds height=\"36\" width=\"36\" x=\"412\" y=\"100\"/>\n              \n      </bpmndi:BPMNShape>\n            \n      <bpmndi:BPMNShape bpmnElement=\"Activity_1k6yh1s\" id=\"Activity_0qxarpb_di\">\n                \n        <dc:Bounds height=\"80\" width=\"100\" x=\"270\" y=\"78\"/>\n                \n        <bpmndi:BPMNLabel/>\n              \n      </bpmndi:BPMNShape>\n            \n      <bpmndi:BPMNEdge bpmnElement=\"Flow_0abuizb\" id=\"Flow_0abuizb_di\">\n                \n        <di:waypoint x=\"236\" y=\"118\"/>\n                \n        <di:waypoint x=\"270\" y=\"118\"/>\n              \n      </bpmndi:BPMNEdge>\n            \n      <bpmndi:BPMNEdge bpmnElement=\"Flow_1mc7kpw\" id=\"Flow_1mc7kpw_di\">\n                \n        <di:waypoint x=\"370\" y=\"118\"/>\n                \n        <di:waypoint x=\"412\" y=\"118\"/>\n              \n      </bpmndi:BPMNEdge>\n          \n    </bpmndi:BPMNPlane>\n      \n  </bpmndi:BPMNDiagram>\n    \n  <bpmndi:BPMNDiagram id=\"BPMNDiagram_02nsx8j\">\n        \n    <bpmndi:BPMNPlane bpmnElement=\"Activity_1k6yh1s\" id=\"BPMNPlane_1ob96s9\"/>\n      \n  </bpmndi:BPMNDiagram>\n  \n</bpmn:definitions>";
+
+/***/ },
+
+/***/ "./src/data/sftpExportStylesheet.xsl?raw"
+/*!***********************************************!*\
+  !*** ./src/data/sftpExportStylesheet.xsl?raw ***!
+  \***********************************************/
+(module) {
+
+module.exports = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<xsl:stylesheet xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\" version=\"2.0\"  xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\t\n  \n  <xsl:output method=\"text\"/>\n\t\n  <xsl:template match=\"/root\">\n  <xsl:for-each select=\"exportXML\">\n\t<xsl:value-of select=\"translate(translate(current(),'&lt;','&lt;'), '&gt;', '&gt;')\"/>\n   </xsl:for-each>\n   </xsl:template>\n </xsl:stylesheet>";
 
 /***/ },
 
