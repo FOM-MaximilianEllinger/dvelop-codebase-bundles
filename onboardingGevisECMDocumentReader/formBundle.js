@@ -329,13 +329,71 @@ const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/perfo
 function masterFileIndexUrl(baseUri, subscriptionId) {
     return `${baseUri}/classcon-documentreader/MasterFile/Index/${encodeURIComponent(subscriptionId)}`;
 }
+const TOKEN_NAME = "__RequestVerificationToken";
+const IFRAME_TIMEOUT_MS = 15000;
+// Token im Seitentext suchen: verstecktes Feld (Attribute in beliebiger
+// Reihenfolge), Meta-Tag oder Zuweisung in einem Script.
+function findTokenInHtml(html) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const fromDom = doc.querySelector(`input[name="${TOKEN_NAME}"]`)?.getAttribute("value")
+        ?? doc.querySelector(`meta[name="${TOKEN_NAME}"], meta[name="RequestVerificationToken"]`)?.getAttribute("content");
+    if (fromDom)
+        return fromDom;
+    const patterns = [
+        /name=["']__RequestVerificationToken["'][^>]*value=["']([^"']+)["']/i,
+        /value=["']([^"']+)["'][^>]*name=["']__RequestVerificationToken["']/i,
+        /__RequestVerificationToken["']?\s*[:=,]\s*["']([A-Za-z0-9_\-+/=]{20,})["']/i,
+    ];
+    for (const pattern of patterns) {
+        const match = html.match(pattern);
+        if (match)
+            return match[1];
+    }
+    return undefined;
+}
+// Fallback: Seite unsichtbar im iframe öffnen (gleicher Ursprung), damit auch
+// per Script nachgeladene Formulare vorhanden sind, und das Feld dort lesen.
+function findTokenInIframe(url) {
+    return new Promise((resolve) => {
+        const iframe = document.createElement("iframe");
+        iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
+        iframe.setAttribute("aria-hidden", "true");
+        let poll;
+        const finish = (value) => {
+            clearTimeout(timer);
+            if (poll)
+                clearInterval(poll);
+            iframe.remove();
+            resolve(value);
+        };
+        const timer = setTimeout(() => finish(undefined), IFRAME_TIMEOUT_MS);
+        iframe.onload = () => {
+            // Nachgeladene Teile abwarten: bis zum Timeout alle 250 ms nachsehen.
+            poll = setInterval(() => {
+                try {
+                    const doc = iframe.contentDocument;
+                    const token = doc?.querySelector(`input[name="${TOKEN_NAME}"]`)?.getAttribute("value")
+                        ?? (doc ? findTokenInHtml(doc.documentElement.outerHTML) : undefined);
+                    if (token)
+                        finish(token);
+                }
+                catch {
+                    finish(undefined);
+                }
+            }, 250);
+        };
+        iframe.src = url;
+        document.body.appendChild(iframe);
+    });
+}
 /**
  * Holt das Antiforgery-Token der Stammdaten-Seite
- * (<input name="__RequestVerificationToken" value="..."> in
- * /classcon-documentreader/MasterFile/Index/<subscriptionId>).
+ * (/classcon-documentreader/MasterFile/Index/<subscriptionId>): erst aus dem
+ * HTML, sonst aus der im Hintergrund geöffneten Seite.
  */
 async function getMasterFileRequestToken(baseUri, subscriptionId) {
-    const response = await fetch(masterFileIndexUrl(baseUri, subscriptionId), {
+    const url = masterFileIndexUrl(baseUri, subscriptionId);
+    const response = await fetch(url, {
         method: "GET",
         headers: { Accept: "text/html" },
         credentials: "same-origin",
@@ -343,8 +401,7 @@ async function getMasterFileRequestToken(baseUri, subscriptionId) {
     if (!response.ok) {
         throw new Error(`Stammdaten-Seite des Rechnungslesers nicht erreichbar (HTTP ${response.status}).`);
     }
-    const doc = new DOMParser().parseFromString(await response.text(), "text/html");
-    const token = doc.querySelector('input[name="__RequestVerificationToken"]')?.getAttribute("value");
+    const token = findTokenInHtml(await response.text()) ?? await findTokenInIframe(url);
     if (!token) {
         throw new Error("Sicherheitstoken der Stammdaten-Seite nicht gefunden.");
     }
@@ -2496,7 +2553,7 @@ const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-do
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 17;
+const VERSION_COUNTER = 18;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -2781,94 +2838,82 @@ function emptyCompany() {
 }
 function companyRowHtml(company) {
     const cells = COMPANY_COLUMNS
-        .map((column) => `<td><input type="text" class="swal2-input onb-company-input" data-company-field="${column.key}" value="${escapeHtml(company[column.key] ?? "")}" placeholder="${escapeHtml(column.placeholder)}" aria-label="${escapeHtml(column.label)}"></td>`)
+        .map((column) => `<td><input type="text" class="form-control form-control-sm" data-company-field="${column.key}" value="${escapeHtml(company[column.key] ?? "")}" placeholder="${escapeHtml(column.placeholder)}" aria-label="${escapeHtml(column.label)}"></td>`)
         .join("");
-    return `<tr data-company-row>${cells}<td><button type="button" class="onb-company-remove" data-company-remove title="Zeile entfernen">✕</button></td></tr>`;
+    return `<tr data-company-row>${cells}<td><button type="button" class="btn btn-sm btn-link text-danger p-0" data-company-remove title="Zeile entfernen">✕</button></td></tr>`;
 }
-// Dialog zur Eingabe der Mandanten (beliebig viele Zeilen). Liefert die
-// Mandanten oder undefined bei Abbruch.
-async function askCompanies() {
-    await ensureSwal();
-    const rows = (companies.length ? companies : [emptyCompany()]).map(companyRowHtml).join("");
+// Eingabetabelle der Mandanten auf der Konfigurationsseite.
+function renderCompanyTable() {
     const head = COMPANY_COLUMNS.map((c) => `<th>${escapeHtml(c.label)}${c.required ? " *" : ""}</th>`).join("");
-    const result = await Swal.fire({
-        title: "Stammdaten: Mandanten",
-        width: "min(1200px, 96vw)",
-        html: `
-      <style>
-        .onb-company-wrap { overflow-x: auto; text-align: left; }
-        .onb-company-table { border-collapse: collapse; font-size: 0.8em; width: 100%; }
-        .onb-company-table th { text-align: left; padding: 2px 4px; white-space: nowrap; }
-        .onb-company-table td { padding: 2px; }
-        .onb-company-input.swal2-input { margin: 0; height: 30px; font-size: 1em; padding: 2px 6px; min-width: 90px; width: 100%; }
-        .onb-company-remove { border: 0; background: none; color: #dc3545; cursor: pointer; font-size: 1.1em; }
-      </style>
-      <p style="font-size:0.9em">Alle Mandanten des Kunden eintragen - daraus wird <code>${COMPANY_FILE_NAME}</code> erzeugt und in die Stammdaten des Rechnungslesers hochgeladen. <strong>Die vorhandene Datei wird dabei ersetzt.</strong></p>
-      <div class="onb-company-wrap">
-        <table class="onb-company-table"><thead><tr>${head}<th></th></tr></thead><tbody data-company-body>${rows}</tbody></table>
-      </div>
-      <button type="button" class="swal2-styled" data-company-add style="margin-top:10px;background:#6c757d">+ Mandant hinzufügen</button>`,
-        showCancelButton: true,
-        confirmButtonText: "CSV erzeugen und hochladen",
-        cancelButtonText: "Abbrechen",
-        focusConfirm: false,
-        didOpen: (popup) => {
-            const body = popup.querySelector("[data-company-body]");
-            const bindRemove = (row) => {
-                row.querySelector("[data-company-remove]")?.addEventListener("click", () => {
-                    if (body && body.querySelectorAll("[data-company-row]").length > 1)
-                        row.remove();
-                });
-            };
-            body?.querySelectorAll("[data-company-row]").forEach(bindRemove);
-            popup.querySelector("[data-company-add]")?.addEventListener("click", () => {
-                if (!body)
-                    return;
-                body.insertAdjacentHTML("beforeend", companyRowHtml(emptyCompany()));
-                const added = body.lastElementChild;
-                if (added) {
-                    bindRemove(added);
-                    added.querySelector("input")?.focus();
-                }
+    const rows = (companies.length ? companies : [emptyCompany()]).map(companyRowHtml).join("");
+    return `
+        <div class="onb-company-wrap">
+          <table class="onb-company-table"><thead><tr>${head}<th></th></tr></thead><tbody data-company-body>${rows}</tbody></table>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" data-company-add>+ Mandant hinzufügen</button>`;
+}
+// Liest die Tabelle in "companies" (komplett leere Zeilen zählen nicht).
+function readCompanyTable(root) {
+    companies = Array.from(root.querySelectorAll("[data-company-row]")).map((row) => {
+        const company = emptyCompany();
+        row.querySelectorAll("[data-company-field]").forEach((input) => {
+            company[input.dataset.companyField ?? ""] = input.value.trim();
+        });
+        return company;
+    }).filter((company) => Object.values(company).some(Boolean));
+}
+function bindCompanyTable(root) {
+    const body = root.querySelector("[data-company-body]");
+    if (!body)
+        return;
+    const bindRow = (row) => {
+        row.querySelectorAll("[data-company-field]").forEach((input) => {
+            input.addEventListener("input", () => readCompanyTable(root));
+            input.addEventListener("keydown", (event) => {
+                if (event.key === "Enter")
+                    event.preventDefault();
             });
-        },
-        preConfirm: () => {
-            const popup = Swal.getPopup();
-            const list = Array.from(popup.querySelectorAll("[data-company-row]")).map((row) => {
-                const company = emptyCompany();
-                row.querySelectorAll("[data-company-field]").forEach((input) => {
-                    company[input.dataset.companyField ?? ""] = input.value.trim();
-                });
-                return company;
-            }).filter((company) => Object.values(company).some(Boolean));
-            if (!list.length) {
-                Swal.showValidationMessage("Bitte mindestens einen Mandanten eintragen.");
-                return false;
+        });
+        row.querySelector("[data-company-remove]")?.addEventListener("click", () => {
+            if (body.querySelectorAll("[data-company-row]").length > 1) {
+                row.remove();
             }
-            for (const [index, company] of list.entries()) {
-                for (const column of COMPANY_COLUMNS) {
-                    const value = company[column.key];
-                    if (column.required && !value) {
-                        Swal.showValidationMessage(`Zeile ${index + 1}: „${column.label}“ fehlt.`);
-                        return false;
-                    }
-                    const problem = (0, masterFile_1.invalidMasterFileValue)(value);
-                    if (problem) {
-                        Swal.showValidationMessage(`Zeile ${index + 1}: „${column.label}“ ${problem}.`);
-                        return false;
-                    }
-                }
+            else {
+                row.querySelectorAll("[data-company-field]").forEach((input) => (input.value = ""));
             }
-            const numbers = list.map((company) => company.COMPANY_NUM);
-            const duplicate = numbers.find((num, i) => numbers.indexOf(num) !== i);
-            if (duplicate) {
-                Swal.showValidationMessage(`Mandanten-Nr. „${duplicate}“ ist doppelt.`);
-                return false;
-            }
-            return list;
-        },
+            readCompanyTable(root);
+        });
+    };
+    body.querySelectorAll("[data-company-row]").forEach(bindRow);
+    root.querySelector("[data-company-add]")?.addEventListener("click", () => {
+        body.insertAdjacentHTML("beforeend", companyRowHtml(emptyCompany()));
+        const added = body.lastElementChild;
+        if (added) {
+            bindRow(added);
+            added.querySelector("input")?.focus();
+        }
     });
-    return result.isConfirmed ? result.value : undefined;
+}
+// Prüft die Mandanten; liefert eine Fehlermeldung oder undefined.
+function validateCompanies() {
+    if (!companies.length) {
+        return "Bitte mindestens einen Mandanten für die Stammdaten eintragen.";
+    }
+    for (const [index, company] of companies.entries()) {
+        for (const column of COMPANY_COLUMNS) {
+            const value = company[column.key];
+            if (column.required && !value) {
+                return `Mandanten, Zeile ${index + 1}: „${column.label}“ fehlt.`;
+            }
+            const problem = (0, masterFile_1.invalidMasterFileValue)(value);
+            if (problem) {
+                return `Mandanten, Zeile ${index + 1}: „${column.label}“ ${problem}.`;
+            }
+        }
+    }
+    const numbers = companies.map((company) => company.COMPANY_NUM);
+    const duplicate = numbers.find((num, i) => numbers.indexOf(num) !== i);
+    return duplicate ? `Mandanten-Nr. „${duplicate}“ ist doppelt.` : undefined;
 }
 function companiesCsv(list) {
     return (0, masterFile_1.buildMasterFileCsv)(COMPANY_COLUMNS.map((column) => column.key), list.map((company) => COMPANY_COLUMNS.map((column) => company[column.key] ?? "")));
@@ -3428,23 +3473,16 @@ const steps = [
     {
         id: "masterDataCompanies",
         title: "Stammdaten: Mandanten",
-        description: `Fragt die Mandanten des Kunden ab (beliebig viele), erzeugt daraus ${COMPANY_FILE_NAME} und lädt sie in die Stammdaten des Rechnungslesers hoch. Die vorhandene Datei wird ersetzt.`,
-        // Eingabe der Mandanten direkt vor dem Ausführen.
-        async beforeRun() {
-            const list = await askCompanies();
-            if (!list)
-                return false;
-            companies = list;
-            return true;
-        },
+        description: `Erzeugt aus den Mandanten der Konfiguration ${COMPANY_FILE_NAME} und lädt sie in die Stammdaten des Rechnungslesers hoch. Die vorhandene Datei wird ersetzt.`,
+        // Mandanten kommen von der Konfigurationsseite; vor dem Hochladen fragen,
+        // da die vorhandene Datei ersetzt wird.
+        beforeRun: () => confirmWarning("Stammdaten ersetzen?", `<strong>Achtung:</strong> ${COMPANY_FILE_NAME} wird mit ${companies.length} Mandant(en) aus der Konfiguration hochgeladen und ersetzt die vorhandenen Mandanten-Stammdaten.`, "Hochladen"),
         async check() {
-            return companies.length
-                ? { state: "manual", text: `${companies.length} Mandant(en) erfasst - wird beim Ausführen hochgeladen.` }
-                : { state: "manual", text: "Nicht prüfbar - Mandanten werden beim Ausführen abgefragt und hochgeladen." };
+            return { state: "manual", text: `${companies.length} Mandant(en) aus der Konfiguration - nicht prüfbar, wird beim Ausführen hochgeladen.` };
         },
         async run(apiKey) {
             if (!companies.length) {
-                throw new Error("Keine Mandanten erfasst.");
+                throw new Error("Keine Mandanten erfasst - bitte in der Konfiguration eintragen.");
             }
             const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
             await (0, masterFile_1.uploadMasterFile)(BASE_URI, subscriptionId, COMPANY_FILE_NAME, companiesCsv(companies));
@@ -3847,6 +3885,11 @@ const styles = `
   .onb-config { max-width: 640px; }
   .onb-config-block { margin-bottom: 18px; }
   .onb-config-block[hidden] { display: none; }
+  .onb-company-wrap { overflow-x: auto; }
+  .onb-company-table { border-collapse: collapse; font-size: 0.85em; }
+  .onb-company-table th { text-align: left; padding: 2px 4px; white-space: nowrap; font-weight: 600; }
+  .onb-company-table td { padding: 2px; }
+  .onb-company-table input { min-width: 110px; }
   .onb-veo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 12px; max-width: 720px; }
   .onb-veo-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85em; margin: 0; }
   .onb-veo-wide { grid-column: 1 / -1; }
@@ -3962,6 +4005,11 @@ function renderConfigPage() {
           <label>Kennwort<input type="password" autocomplete="new-password" class="form-control form-control-sm" data-onb-sftp="password" value="${escapeHtml(sftpConfig.password)}"></label>
           <label class="onb-veo-wide">Verzeichnis<input type="text" autocomplete="off" class="form-control form-control-sm" data-onb-sftp="directory" value="${escapeHtml(sftpConfig.directory)}"></label>
         </div>
+      </div>
+      <div class="onb-config-block">
+        <div class="onb-config-title">Stammdaten: Mandanten</div>
+        <div class="onb-config-desc">Alle Mandanten des Kunden - daraus wird <code>${COMPANY_FILE_NAME}</code> für die Stammdaten des Rechnungslesers erzeugt. * = Pflichtfeld</div>
+        ${renderCompanyTable()}
       </div>
       <div data-onb-message></div>
       <div class="onb-actions">
@@ -4331,7 +4379,8 @@ async function goToSteps() {
         refreshView();
         return;
     }
-    const veoError = erpSystem === "veo" ? validateVeoConfig() : erpSystem === "gevisR" ? validateSftpConfig() : undefined;
+    const veoError = (erpSystem === "veo" ? validateVeoConfig() : erpSystem === "gevisR" ? validateSftpConfig() : undefined)
+        ?? validateCompanies();
     if (veoError) {
         message = { kind: "error", text: veoError };
         refreshView();
@@ -4426,6 +4475,7 @@ function bindEvents(root) {
         });
     });
     bindGroupChoice(root);
+    bindCompanyTable(root);
     if (page === "config") {
         void loadGroupChoices();
     }
