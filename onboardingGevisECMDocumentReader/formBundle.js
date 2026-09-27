@@ -2497,6 +2497,7 @@ const webindexDesignerForm_json_1 = __importDefault(__webpack_require__(/*! ../d
 // "build" in package.json) und hier als Text eingebunden.
 const gutschriftenVerschieben_js_raw_1 = __importDefault(__webpack_require__(/*! ../../dist/scripts/gutschriftenVerschieben.js?raw */ "./dist/scripts/gutschriftenVerschieben.js?raw"));
 const preExport_js_raw_1 = __importDefault(__webpack_require__(/*! ../../dist/scripts/preExport.js?raw */ "./dist/scripts/preExport.js?raw"));
+const duplicateDetection_js_raw_1 = __importDefault(__webpack_require__(/*! ../../dist/scripts/duplicateDetection.js?raw */ "./dist/scripts/duplicateDetection.js?raw"));
 const Rechnungsleser_Gutschriften_verschieben_v1_bpmn_raw_1 = __importDefault(__webpack_require__(/*! ../data/Rechnungsleser Gutschriften verschieben_v1.bpmn?raw */ "./src/data/Rechnungsleser Gutschriften verschieben_v1.bpmn?raw"));
 const processComponents_1 = __webpack_require__(/*! ../../../../helper/processstudio/processComponents */ "../../helper/processstudio/processComponents.ts");
 const d3EndpointService_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/d3EndpointService */ "../../helper/classcon-documentreader/d3EndpointService.ts");
@@ -2553,7 +2554,7 @@ const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-do
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 19;
+const VERSION_COUNTER = 20;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -2570,6 +2571,11 @@ const CREDIT_MEMO_SCRIPT_NAME = "Rechnungsleser Gutschriften verschieben";
 const PRE_EXPORT_SCRIPT_NAME = "Rechnungsleser PreExport";
 const BEFORE_EXPORT_NODE_ID = "IR_Business_BeforeExportHook";
 const BEFORE_EXPORT_PROFILE = "PreExportScript";
+// Skript für den Extension Point "nach der Extraktion" (Dublettenerkennung,
+// src/scripts/duplicateDetection.ts).
+const DUPLICATE_DETECTION_SCRIPT_NAME = "Rechnungsleser Dublettenerkennung";
+const POST_EXTRACTION_NODE_ID = "IR_Business_PostExtractionScript";
+const POST_EXTRACTION_PROFILE = "PostExtractionScript";
 // Eingabeparameter der Aktion - muss zu DOC_ID_INPUT in
 // src/scripts/gutschriftenVerschieben.ts passen.
 const CREDIT_MEMO_INPUT_DOC_ID = "docId";
@@ -2704,9 +2710,9 @@ async function findScriptIdByName(apiKey, name) {
 function scriptRunUrl(scriptId) {
     return `${BASE_URI}/scripting/script/${scriptId}/run`;
 }
-// Soll-Zustand des Extension Points "vor dem Export": aktiv, ScriptingApp,
-// ruft das PreExport-Skript auf.
-function isBeforeExportConfigured(point, endpoint) {
+// Soll-Zustand eines Extension Points mit eigenem Skript: aktiv,
+// ScriptingApp, ruft das Skript auf.
+function isHookConfigured(point, endpoint) {
     return !!point && point.IsActivated && point.ExtensionPointType === "ScriptingApp" && point.ScriptingAppEndpoint === endpoint;
 }
 // Prozess-Id und -Name aus dem BPMN (<bpmn:process id="..." name="...">).
@@ -3157,6 +3163,111 @@ async function findSourceMapping(apiKey) {
     const containers = (await (0, getMappingContainers_1.getMappingContainers)(BASE_URI, apiKey, repositoryId)).body.containers ?? [];
     return { repositoryId, existing: containers.find((c) => c.sourceId === SOURCE_MAPPING.sourceId) };
 }
+// Schritt: eigenes Skript für einen Extension Point des Rechnungslesers
+// anlegen bzw. seinen Code aktualisieren (customerVariables werden nie
+// gesendet).
+function hookScriptStep(options) {
+    const { id, scriptName, content, description } = options;
+    return {
+        id,
+        title: `Skript „${scriptName}“`,
+        description,
+        async check(apiKey) {
+            return (await findScriptIdByName(apiKey, scriptName))
+                ? exists("Vorhanden - Code wird aktualisiert.")
+                : missing("Skript fehlt.");
+        },
+        async run(apiKey) {
+            let scriptId = await findScriptIdByName(apiKey, scriptName);
+            const createdNow = !scriptId;
+            if (!scriptId) {
+                scriptId = (await (0, createScript_1.createScript)(BASE_URI, apiKey, scriptName)).body.id;
+                if (!scriptId) {
+                    throw new Error(`„${scriptName}“ konnte nicht angelegt werden (keine Id).`);
+                }
+            }
+            const versionId = (await (0, getScriptVersion_1.getScriptVersion)(BASE_URI, apiKey, scriptId)).body[0]?.id;
+            if (!versionId) {
+                throw new Error(`Für „${scriptName}“ wurde keine Version gefunden.`);
+            }
+            await (0, patchScript_1.patchScript)(BASE_URI, apiKey, scriptId, versionId, { content });
+            return createdNow ? "Skript angelegt." : "Code aktualisiert.";
+        },
+    };
+}
+// Schritt: Extension Point des Rechnungslesers aktivieren und auf das Skript
+// umstellen (ScriptingApp). Liest vorher ALLE Extension Points und ändert nur
+// den eigenen - der POST ersetzt die komplette Liste.
+function extensionPointStep(options) {
+    const { id, title, nodeId, profile, scriptName } = options;
+    return {
+        id,
+        title,
+        description: `Aktiviert ${nodeId} im Rechnungsleser und hinterlegt das Skript „${scriptName}“ (ScriptingApp). Alle übrigen Extension Points bleiben unverändert - sie werden vorher gelesen und unverändert mitgesendet.`,
+        async check(apiKey) {
+            const scriptId = await findScriptIdByName(apiKey, scriptName);
+            if (!scriptId) {
+                return missing("Skript fehlt noch.");
+            }
+            const points = await (0, extensionPoints_1.getExtensionPoints)(BASE_URI, apiKey, await findDocumentReaderSubscriptionId(apiKey));
+            const point = points.find((p) => p.NodeId === nodeId);
+            if (isHookConfigured(point, scriptRunUrl(scriptId))) {
+                return done(`Aktiv, ruft „${scriptName}“ auf.`);
+            }
+            if (!point) {
+                return missing(`${nodeId} nicht gefunden - wird ergänzt.`);
+            }
+            const current = point.ExtensionPointType === "ScriptingApp" ? point.ScriptingAppEndpoint : point.ExtensionPointType;
+            return point.IsActivated || point.ScriptingAppEndpoint
+                ? exists(`Aktuell: ${point.IsActivated ? "aktiv" : "inaktiv"}${current ? `, ${current}` : ""} - wird auf „${scriptName}“ umgestellt.`)
+                : missing("Nicht aktiv.");
+        },
+        // Ist der Extension Point schon aktiv und ruft etwas anderes auf (z.B.
+        // ScriptingEngine), vor dem Umstellen nachfragen.
+        async beforeRun(apiKey) {
+            const scriptId = await findScriptIdByName(apiKey, scriptName);
+            const points = await (0, extensionPoints_1.getExtensionPoints)(BASE_URI, apiKey, await findDocumentReaderSubscriptionId(apiKey));
+            const point = points.find((p) => p.NodeId === nodeId);
+            if (!point?.IsActivated || (scriptId && isHookConfigured(point, scriptRunUrl(scriptId)))) {
+                return true;
+            }
+            const current = point.ExtensionPointType === "ScriptingApp"
+                ? `ScriptingApp <code>${escapeHtml(point.ScriptingAppEndpoint)}</code>`
+                : escapeHtml(point.ExtensionPointType || "unbekannt");
+            return confirmWarning("Extension Point umstellen?", `<strong>Achtung:</strong> ${escapeHtml(nodeId)} ist bereits aktiv (${current}). Er wird auf das Skript „${escapeHtml(scriptName)}“ (ScriptingApp) umgestellt - die bisherige Verarbeitung an dieser Stelle entfällt.`, "Umstellen");
+        },
+        async run(apiKey) {
+            const scriptId = await findScriptIdByName(apiKey, scriptName);
+            if (!scriptId) {
+                throw new Error(`Skript „${scriptName}“ nicht gefunden - bitte zuerst das Skript anlegen.`);
+            }
+            const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
+            const points = await (0, extensionPoints_1.getExtensionPoints)(BASE_URI, apiKey, subscriptionId);
+            const endpoint = scriptRunUrl(scriptId);
+            const index = points.findIndex((p) => p.NodeId === nodeId);
+            if (index >= 0 && isHookConfigured(points[index], endpoint)) {
+                return "Bereits hinterlegt.";
+            }
+            const updated = {
+                ...(index >= 0 ? points[index] : { ConnectionString: "", QueueName: "" }),
+                NodeId: nodeId,
+                IsActivated: true,
+                ExtensionPointType: "ScriptingApp",
+                ScriptingAppEndpoint: endpoint,
+                ScriptingEngineProfile: (index >= 0 && points[index].ScriptingEngineProfile) || profile,
+            };
+            const next = [...points];
+            if (index >= 0) {
+                next[index] = updated;
+            }
+            else {
+                next.push(updated);
+            }
+            await (0, extensionPoints_1.saveExtensionPoints)(BASE_URI, apiKey, subscriptionId, next);
+            return `„${scriptName}“ hinterlegt und aktiviert.`;
+        },
+    };
+}
 const steps = [
     {
         id: "targetGroup",
@@ -3320,83 +3431,32 @@ const steps = [
             return createdNow ? "Skript als Aktion angelegt." : "Code und Aktion aktualisiert.";
         },
     },
-    {
+    hookScriptStep({
         id: "preExportScript",
-        title: `Skript „${PRE_EXPORT_SCRIPT_NAME}“`,
+        scriptName: PRE_EXPORT_SCRIPT_NAME,
+        content: preExport_js_raw_1.default,
         description: "Wird vom Rechnungsleser vor dem Export aufgerufen: setzt DocumentType auf den ERP-Code (Gutschrift 3, sonst 2) - alle übrigen Attribute bleiben unverändert. Ein vorhandenes Skript bekommt nur den aktuellen Code.",
-        async check(apiKey) {
-            return (await findScriptIdByName(apiKey, PRE_EXPORT_SCRIPT_NAME))
-                ? exists("Vorhanden - Code wird aktualisiert.")
-                : missing("Skript fehlt.");
-        },
-        async run(apiKey) {
-            let scriptId = await findScriptIdByName(apiKey, PRE_EXPORT_SCRIPT_NAME);
-            const createdNow = !scriptId;
-            if (!scriptId) {
-                scriptId = (await (0, createScript_1.createScript)(BASE_URI, apiKey, PRE_EXPORT_SCRIPT_NAME)).body.id;
-                if (!scriptId) {
-                    throw new Error(`„${PRE_EXPORT_SCRIPT_NAME}“ konnte nicht angelegt werden (keine Id).`);
-                }
-            }
-            const versionId = (await (0, getScriptVersion_1.getScriptVersion)(BASE_URI, apiKey, scriptId)).body[0]?.id;
-            if (!versionId) {
-                throw new Error(`Für „${PRE_EXPORT_SCRIPT_NAME}“ wurde keine Version gefunden.`);
-            }
-            await (0, patchScript_1.patchScript)(BASE_URI, apiKey, scriptId, versionId, { content: preExport_js_raw_1.default });
-            return createdNow ? "Skript angelegt." : "Code aktualisiert.";
-        },
-    },
-    {
+    }),
+    extensionPointStep({
         id: "beforeExportHook",
         title: "Extension Point „vor dem Export“",
-        description: `Hinterlegt das Skript „${PRE_EXPORT_SCRIPT_NAME}“ im Rechnungsleser (${BEFORE_EXPORT_NODE_ID}, ScriptingApp). Alle übrigen Extension Points bleiben unverändert - sie werden vorher gelesen und unverändert mitgesendet.`,
-        async check(apiKey) {
-            const scriptId = await findScriptIdByName(apiKey, PRE_EXPORT_SCRIPT_NAME);
-            if (!scriptId) {
-                return missing("Skript fehlt noch.");
-            }
-            const points = await (0, extensionPoints_1.getExtensionPoints)(BASE_URI, apiKey, await findDocumentReaderSubscriptionId(apiKey));
-            const point = points.find((p) => p.NodeId === BEFORE_EXPORT_NODE_ID);
-            if (isBeforeExportConfigured(point, scriptRunUrl(scriptId))) {
-                return done("Aktiv, ruft das PreExport-Skript auf.");
-            }
-            return point?.ScriptingAppEndpoint
-                ? exists(`Aktuell: ${point.IsActivated ? "aktiv" : "inaktiv"}, ${point.ScriptingAppEndpoint} - wird auf das PreExport-Skript umgestellt.`)
-                : missing(point ? "Nicht hinterlegt." : `${BEFORE_EXPORT_NODE_ID} nicht gefunden - wird ergänzt.`);
-        },
-        async run(apiKey) {
-            const scriptId = await findScriptIdByName(apiKey, PRE_EXPORT_SCRIPT_NAME);
-            if (!scriptId) {
-                throw new Error(`Skript „${PRE_EXPORT_SCRIPT_NAME}“ nicht gefunden - bitte zuerst das Skript anlegen.`);
-            }
-            const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
-            // Erst ALLE Extension Points lesen (wirft, wenn das nicht klappt) und nur
-            // den BeforeExportHook ändern - der POST ersetzt die komplette Liste.
-            const points = await (0, extensionPoints_1.getExtensionPoints)(BASE_URI, apiKey, subscriptionId);
-            const endpoint = scriptRunUrl(scriptId);
-            const index = points.findIndex((p) => p.NodeId === BEFORE_EXPORT_NODE_ID);
-            if (index >= 0 && isBeforeExportConfigured(points[index], endpoint)) {
-                return "Bereits hinterlegt.";
-            }
-            const updated = {
-                ...(index >= 0 ? points[index] : { ConnectionString: "", QueueName: "" }),
-                NodeId: BEFORE_EXPORT_NODE_ID,
-                IsActivated: true,
-                ExtensionPointType: "ScriptingApp",
-                ScriptingAppEndpoint: endpoint,
-                ScriptingEngineProfile: (index >= 0 && points[index].ScriptingEngineProfile) || BEFORE_EXPORT_PROFILE,
-            };
-            const next = [...points];
-            if (index >= 0) {
-                next[index] = updated;
-            }
-            else {
-                next.push(updated);
-            }
-            await (0, extensionPoints_1.saveExtensionPoints)(BASE_URI, apiKey, subscriptionId, next);
-            return "PreExport-Skript hinterlegt und aktiviert.";
-        },
-    },
+        nodeId: BEFORE_EXPORT_NODE_ID,
+        profile: BEFORE_EXPORT_PROFILE,
+        scriptName: PRE_EXPORT_SCRIPT_NAME,
+    }),
+    hookScriptStep({
+        id: "duplicateDetectionScript",
+        scriptName: DUPLICATE_DETECTION_SCRIPT_NAME,
+        content: duplicateDetection_js_raw_1.default,
+        description: "Wird vom Rechnungsleser nach der Extraktion aufgerufen und übernimmt die Dublettenerkennung. Ein vorhandenes Skript bekommt nur den aktuellen Code.",
+    }),
+    extensionPointStep({
+        id: "postExtractionHook",
+        title: "Extension Point „nach der Extraktion“",
+        nodeId: POST_EXTRACTION_NODE_ID,
+        profile: POST_EXTRACTION_PROFILE,
+        scriptName: DUPLICATE_DETECTION_SCRIPT_NAME,
+    }),
     {
         id: "eventbridgeHook",
         title: "Eventbridge: DMS-Ereignis aktivieren",
@@ -3906,6 +3966,7 @@ const styles = `
   .onb-summary strong { font-weight: 600; }
   .onb-group-options { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
   .onb-group-option { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 0.85em; margin: 0; }
+  .onb-group-label { width: 15em; flex: 0 0 auto; }
   .onb-group-input { width: 280px; max-width: 100%; }
 </style>`;
 const STATE_LABELS = {
@@ -4038,12 +4099,12 @@ function renderGroupChoice() {
           <div class="onb-group-options">
             <label class="onb-group-option">
               <input type="radio" name="onb-group-mode" value="new" data-onb-group-mode ${groupMode === "new" ? "checked" : ""}>
-              Neue Gruppe anlegen:
+              <span class="onb-group-label">Neue Gruppe anlegen:</span>
               <input type="text" class="form-control form-control-sm onb-group-input" data-onb-group-name value="${escapeHtml(newGroupName)}" placeholder="Gruppenname">
             </label>
             <label class="onb-group-option">
               <input type="radio" name="onb-group-mode" value="existing" data-onb-group-mode ${groupMode === "existing" ? "checked" : ""} ${availableGroups.length ? "" : "disabled"}>
-              Vorhandene Gruppe verwenden:
+              <span class="onb-group-label">Vorhandene Gruppe verwenden:</span>
               <select class="form-control form-control-sm onb-group-input" data-onb-group-select ${availableGroups.length ? "" : "disabled"}>
                 <option value="">– Gruppe auswählen –</option>${options}
               </select>
@@ -4553,6 +4614,16 @@ window.formInit = function (form, data) {
     });
 };
 
+
+/***/ },
+
+/***/ "./dist/scripts/duplicateDetection.js?raw"
+/*!************************************************!*\
+  !*** ./dist/scripts/duplicateDetection.js?raw ***!
+  \************************************************/
+(module) {
+
+module.exports = "/******/ (() => { // webpackBootstrap\n/******/ \t\"use strict\";\n/******/ \tvar __webpack_modules__ = ({\n\n/***/ \"../../helper/utils/logger.ts\"\n/*!************************************!*\\\n  !*** ../../helper/utils/logger.ts ***!\n  \\************************************/\n(__unused_webpack_module, exports) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.Logger = exports.LogLevel = void 0;\nexports.initLogger = initLogger;\nexports.getLogger = getLogger;\nvar LogLevel;\n(function (LogLevel) {\n    LogLevel[LogLevel[\"DEBUG\"] = 0] = \"DEBUG\";\n    LogLevel[LogLevel[\"INFO\"] = 1] = \"INFO\";\n    LogLevel[LogLevel[\"WARN\"] = 2] = \"WARN\";\n    LogLevel[LogLevel[\"ERROR\"] = 3] = \"ERROR\";\n})(LogLevel || (exports.LogLevel = LogLevel = {}));\nclass Logger {\n    constructor(options = {}) {\n        this.level = options.level ?? LogLevel.INFO;\n        this.showTimestamp = options.showTimestamp ?? true;\n    }\n    formatMessage(level, message) {\n        const paddedLevel = level.toUpperCase().padEnd(5, ' ');\n        const timestamp = this.showTimestamp\n            ? `[${new Date().toISOString()}] `\n            : \"\";\n        return `${timestamp}${paddedLevel}: ${message}`;\n    }\n    debug(message, ...args) {\n        if (this.level <= LogLevel.DEBUG) {\n            console.debug(this.formatMessage(\"debug\", message), ...args);\n        }\n    }\n    info(message, ...args) {\n        if (this.level <= LogLevel.INFO) {\n            console.info(this.formatMessage(\"info\", message), ...args);\n        }\n    }\n    warn(message, ...args) {\n        if (this.level <= LogLevel.WARN) {\n            console.warn(this.formatMessage(\"warn\", message), ...args);\n        }\n    }\n    error(message, ...args) {\n        if (this.level <= LogLevel.ERROR) {\n            console.error(this.formatMessage(\"error\", message), ...args);\n        }\n    }\n    setLevel(newLevel) {\n        this.level = newLevel;\n    }\n}\nexports.Logger = Logger;\nlet loggerInstance;\nfunction initLogger(level = LogLevel.INFO, showTimestamp = true) {\n    if (!loggerInstance) {\n        loggerInstance = new Logger({ level, showTimestamp });\n    }\n    return loggerInstance;\n}\nfunction getLogger() {\n    // Fallback: falls noch niemand initLogger() aufgerufen hat\n    if (!loggerInstance) {\n        loggerInstance = new Logger({ level: LogLevel.DEBUG, showTimestamp: true });\n    }\n    return loggerInstance;\n}\n\n\n/***/ },\n\n/***/ \"./src/scripts/duplicateDetection.ts\"\n/*!*******************************************!*\\\n  !*** ./src/scripts/duplicateDetection.ts ***!\n  \\*******************************************/\n(module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nconst logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ \"../../helper/utils/logger.ts\");\n/**\n * \"Rechnungsleser Dublettenerkennung\": wird vom Rechnungsleser nach der\n * Extraktion aufgerufen (Extension Point \"IR_Business_PostExtractionScript\",\n * Typ ScriptingApp, Profil \"PostExtractionScript\" - hinterlegt vom\n * Onboarding-Formular). Bekommt die Attribute des Dokuments als JSON und\n * liefert sie (ggf. verändert) zurück.\n *\n * Platzhalter: gibt die Attribute derzeit unverändert zurück - die eigentliche\n * Dublettenerkennung folgt.\n */\nconst logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);\nmodule.exports = async (req, res) => {\n    try {\n        const body = parseBody(req);\n        // TODO: Dublettenerkennung\n        res.status(200).set(\"Content-Type\", \"application/json\").send(JSON.stringify(body));\n    }\n    catch (error) {\n        const message = error instanceof Error ? error.message : String(error);\n        logger.error(`Fehler: ${message}`);\n        res.status(500).set(\"Content-Type\", \"application/json\").send(JSON.stringify({ error: message }));\n    }\n};\nfunction parseBody(req) {\n    try {\n        const body = req.json?.();\n        return body && typeof body === \"object\" ? body : {};\n    }\n    catch {\n        return {};\n    }\n}\n\n\n/***/ }\n\n/******/ \t});\n/************************************************************************/\n/******/ \t// The module cache\n/******/ \tconst __webpack_module_cache__ = {};\n/******/ \t\n/******/ \t// The require function\n/******/ \tfunction __webpack_require__(moduleId) {\n/******/ \t\t// Check if module is in cache\n/******/ \t\tconst cachedModule = __webpack_module_cache__[moduleId];\n/******/ \t\tif (cachedModule !== undefined) {\n/******/ \t\t\treturn cachedModule.exports;\n/******/ \t\t}\n/******/ \t\t// Create a new module (and put it into the cache)\n/******/ \t\tconst module = __webpack_module_cache__[moduleId] = {\n/******/ \t\t\t// no module.id needed\n/******/ \t\t\t// no module.loaded needed\n/******/ \t\t\texports: {}\n/******/ \t\t};\n/******/ \t\n/******/ \t\t// Execute the module function\n/******/ \t\tif (!(moduleId in __webpack_modules__)) {\n/******/ \t\t\tdelete __webpack_module_cache__[moduleId];\n/******/ \t\t\tconst e = new Error(\"Cannot find module '\" + moduleId + \"'\");\n/******/ \t\t\te.code = 'MODULE_NOT_FOUND';\n/******/ \t\t\tthrow e;\n/******/ \t\t}\n/******/ \t\t__webpack_modules__[moduleId](module, module.exports, __webpack_require__);\n/******/ \t\n/******/ \t\t// Return the exports of the module\n/******/ \t\treturn module.exports;\n/******/ \t}\n/******/ \t\n/************************************************************************/\n/******/ \t\n/******/ \t// startup\n/******/ \t// Load entry module and return exports\n/******/ \t// This entry module is referenced by other modules so it can't be inlined\n/******/ \tlet __webpack_exports__ = __webpack_require__(\"./src/scripts/duplicateDetection.ts\");\n/******/ \tmodule.exports = __webpack_exports__;\n/******/ \t\n/******/ })()\n;\n//# sourceMappingURL=duplicateDetection.js.map";
 
 /***/ },
 
