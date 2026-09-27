@@ -2,6 +2,92 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
+/***/ "../../helper/performHttpRequest/performHttpRequest.ts"
+/*!*************************************************************!*\
+  !*** ../../helper/performHttpRequest/performHttpRequest.ts ***!
+  \*************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.performHttpRequest = performHttpRequest;
+const logger_1 = __webpack_require__(/*! ../utils/logger */ "../../helper/utils/logger.ts");
+/**
+ * Performs an HTTP request and returns a structured response.
+*
+* @template T - The expected type of the response body.
+* @param {string} url - The URL to which the request is sent.
+* @param {RequestInit} options - The options for the HTTP request, such as method, headers, and body.
+* @returns {Promise<ApiResponse<T>>} A promise that resolves to an `ApiResponse` object containing the response details.
+* @throws {Error} Throws an error if the HTTP response status is not OK (status code outside the range 200-299).
+*
+* The function attempts to parse the response body based on the `Content-Type` header:
+* - If the `Content-Type` includes "application/json", it parses the body as JSON.
+* - Otherwise, it parses the body as plain text.
+*
+* If the response is not OK, the function throws an error with the status code and error message.
+*/
+const logger = (0, logger_1.getLogger)();
+async function performHttpRequest(url, options) {
+    let body = {};
+    let errorMessage = "";
+    let response;
+    logger.debug(`[Request] ${options.method} ${url} | Headers: ${JSON.stringify(options.headers)} | Body: ${!(options.body instanceof Uint8Array) && options.body !== undefined
+        ? options.body
+        : "[Binary body omitted]"}`);
+    try {
+        response = await fetch(url, options);
+    }
+    catch (err) {
+        throw new Error(`Network error during fetch: ${err.message}`);
+    }
+    const contentType = response.headers.get("content-type") || "";
+    const parseBody = async () => {
+        try {
+            if (contentType.includes("application/json") || contentType.includes('application/hal+json')) {
+                return await response.json();
+            }
+            else if (contentType.includes("application/octet-stream") ||
+                contentType.includes("application/pdf")) {
+                const arrayBuffer = await response.arrayBuffer();
+                return new Uint8Array(arrayBuffer);
+            }
+            else {
+                return await response.text();
+            }
+        }
+        catch (e) {
+            return undefined;
+        }
+    };
+    if (response.ok) {
+        const result = await parseBody();
+        if (result !== undefined) {
+            body = result;
+        }
+    }
+    else {
+        const errorBody = await parseBody();
+        errorMessage =
+            typeof errorBody === "string" ? errorBody : JSON.stringify(errorBody);
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorMessage}`);
+    }
+    return {
+        status: response.status,
+        statusText: response.statusText,
+        body: body,
+        bodyUsed: response.bodyUsed,
+        headers: response.headers,
+        ok: response.ok,
+        redirected: response.redirected,
+        type: response.type,
+        url: response.url,
+    };
+}
+
+
+/***/ },
+
 /***/ "../../helper/utils/logger.ts"
 /*!************************************!*\
   !*** ../../helper/utils/logger.ts ***!
@@ -75,6 +161,42 @@ function getLogger() {
 
 /***/ },
 
+/***/ "../../helper/webindexlayouter/executeSqlQuery.ts"
+/*!********************************************************!*\
+  !*** ../../helper/webindexlayouter/executeSqlQuery.ts ***!
+  \********************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.executeSqlQuery = executeSqlQuery;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Führt eine SQL-Abfrage auf der Datenbank einer App aus - wie der
+ * Webindex-Designer (z.B. für eigene Dublettenprüfungen):
+ * POST /webindexlayouter/api/v1/apps/<app>/sqlResult
+ * mit { connectionString: null, sqlQuery }.
+ * connectionString null = Standard-Datenbank der App (z.B. die Protokoll-
+ * Tabellen CCLogDocuments/CCLogAttributes des Rechnungslesers).
+ *
+ * @param token - API-Key; leer = Browser-Session.
+ * @param app - App-Name, z.B. "classcon-documentreader".
+ */
+async function executeSqlQuery(baseUri, token, app, sqlQuery, connectionString = null) {
+    return await (0, performHttpRequest_1.performHttpRequest)(`${baseUri}/webindexlayouter/api/v1/apps/${encodeURIComponent(app)}/sqlResult`, {
+        method: "POST",
+        headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            Accept: "application/json",
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ connectionString, sqlQuery }),
+    });
+}
+
+
+/***/ },
+
 /***/ "./src/scripts/duplicateDetection.ts"
 /*!*******************************************!*\
   !*** ./src/scripts/duplicateDetection.ts ***!
@@ -83,30 +205,108 @@ function getLogger() {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+const executeSqlQuery_1 = __webpack_require__(/*! ../../../../helper/webindexlayouter/executeSqlQuery */ "../../helper/webindexlayouter/executeSqlQuery.ts");
 const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 /**
  * "Rechnungsleser Dublettenerkennung": wird vom Rechnungsleser nach der
  * Extraktion aufgerufen (Extension Point "IR_Business_PostExtractionScript",
  * Typ ScriptingApp, Profil "PostExtractionScript" - hinterlegt vom
  * Onboarding-Formular). Bekommt die Attribute des Dokuments als JSON und
- * liefert sie (ggf. verändert) zurück.
+ * liefert sie zurück.
  *
- * Platzhalter: gibt die Attribute derzeit unverändert zurück - die eigentliche
- * Dublettenerkennung folgt.
+ * Sucht im Protokoll des Rechnungslesers (CCLogDocuments/CCLogAttributes, per
+ * SQL über den Webindex-Designer) nach Dokumenten mit derselben
+ * Lieferantennummer (VENDOR_NUM) UND derselben Rechnungsnummer
+ * (InvoiceNumber). Das aktuelle Dokument selbst (DocumentUID) zählt nicht.
+ *
+ * customerVariables (vom Onboarding-Formular nur beim Neuanlegen gesetzt):
+ * apiKey (verschlüsselt). Die Mandanten-Adresse kommt aus dem Header
+ * "x-dv-baseuri".
  */
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
+const APP = "classcon-documentreader";
+const VENDOR_FIELD = "VENDOR_NUM";
+const INVOICE_FIELD = "InvoiceNumber";
+const DOCUMENT_ID_FIELD = "DocumentUID";
 module.exports = async (req, res) => {
+    const body = parseBody(req);
     try {
-        const body = parseBody(req);
-        // TODO: Dublettenerkennung
-        res.status(200).set("Content-Type", "application/json").send(JSON.stringify(body));
+        const vendorNum = attribute(body, VENDOR_FIELD);
+        const invoiceNumber = attribute(body, INVOICE_FIELD);
+        if (!vendorNum || !invoiceNumber) {
+            logger.info(`Keine Prüfung: ${VENDOR_FIELD} "${vendorNum}" / ${INVOICE_FIELD} "${invoiceNumber}" unvollständig.`);
+        }
+        else {
+            const baseUri = req.get("x-dv-baseuri");
+            const apiKey = req.var("apiKey");
+            const duplicates = await findDuplicates(baseUri, apiKey, vendorNum, invoiceNumber, attribute(body, DOCUMENT_ID_FIELD));
+            logger.info(`Lieferant "${vendorNum}", Rechnung "${invoiceNumber}": ${duplicates.length} Dublette(n) ${JSON.stringify(duplicates)}`);
+            if (duplicates.length > 0) {
+                // TODO: Reaktion auf eine Dublette (z.B. Hinweis/Attribut setzen) - folgt.
+            }
+        }
     }
     catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error(`Fehler: ${message}`);
-        res.status(500).set("Content-Type", "application/json").send(JSON.stringify({ error: message }));
+        // Die Dublettenprüfung darf die Verarbeitung nicht aufhalten - Fehler nur
+        // protokollieren und die Attribute unverändert zurückgeben.
+        logger.error(`Dublettenprüfung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
     }
+    res.status(200).set("Content-Type", "application/json").send(JSON.stringify(body));
 };
+async function findDuplicates(baseUri, apiKey, vendorNum, invoiceNumber, currentDocumentId) {
+    // Werte stammen aus der Extraktion (Rechnungstext) - als SQL-Literal
+    // maskieren, damit z.B. ein Hochkomma in der Rechnungsnummer die Abfrage
+    // nicht verändert.
+    const sqlQuery = `
+SELECT
+  doc.DocumentId,
+  aV.Attribute_After AS VendorNum,
+  aI.Attribute_After AS InvoiceNumber
+FROM
+  CCLogDocuments AS doc
+  JOIN CCLogAttributes AS aV ON aV.DocumentID = doc.DocumentID
+    AND aV.Attribute_Name = '${VENDOR_FIELD}'
+    AND aV.Attribute_After = ${sqlString(vendorNum)}
+  JOIN CCLogAttributes AS aI ON aI.DocumentID = doc.DocumentID
+    AND aI.Attribute_Name = '${INVOICE_FIELD}'
+    AND aI.Attribute_After = ${sqlString(invoiceNumber)}${currentDocumentId ? `
+WHERE
+  doc.DocumentID <> ${sqlString(currentDocumentId)}` : ""}`;
+    logger.debug(`SQL Query: ${sqlQuery}`);
+    const result = (await (0, executeSqlQuery_1.executeSqlQuery)(baseUri, apiKey, APP, sqlQuery)).body;
+    const headers = (result?.headers ?? []).map((h) => h.toLowerCase());
+    const column = (cells, name) => cells[headers.indexOf(name.toLowerCase())] ?? "";
+    return (result?.rows ?? []).map((row) => ({
+        documentId: column(row.cells ?? [], "DocumentId"),
+        vendorNum: column(row.cells ?? [], "VendorNum"),
+        invoiceNumber: column(row.cells ?? [], "InvoiceNumber"),
+    }));
+}
+function sqlString(value) {
+    return `N'${value.replace(/'/g, "''")}'`;
+}
+// Attribut aus dem Rechnungsleser-JSON: direkt als Feld (ohne Rücksicht auf
+// Groß-/Kleinschreibung) oder als Eintrag einer Attributliste
+// ({ Name/AttributeName/Id, Value }).
+function attribute(body, name) {
+    const key = name.toLowerCase();
+    for (const [field, value] of Object.entries(body)) {
+        if (field.toLowerCase() === key && value !== null && typeof value !== "object") {
+            return String(value).trim();
+        }
+    }
+    for (const value of Object.values(body)) {
+        if (!Array.isArray(value))
+            continue;
+        for (const entry of value) {
+            const entryName = String(entry?.Name ?? entry?.AttributeName ?? entry?.Id ?? entry?.name ?? "").toLowerCase();
+            if (entryName === key) {
+                return String(entry?.Value ?? entry?.value ?? "").trim();
+            }
+        }
+    }
+    return "";
+}
 function parseBody(req) {
     try {
         const body = req.json?.();
