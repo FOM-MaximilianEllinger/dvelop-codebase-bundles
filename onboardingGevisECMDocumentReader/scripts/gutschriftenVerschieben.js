@@ -276,11 +276,13 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  * projects/_OLD/moveDocumentsOfDocumentReader/script.mjs, bisher nur per
  * DMS-Webhook aufgerufen): prüft beim Dokument mit der übergebenen DocId die
  * Dokumentart des Rechnungslesers und
- *  - verschiebt Gutschriften (Wert = fieldDocumentTypeValueMatch, z.B.
- *    "CreditAdvice") in die Kategorie categoryCreditMemoGUID und setzt die
- *    Dokumentart auf "Gutschrift",
- *  - setzt bei allen anderen Dokumenten die Dokumentart auf "Rechnung"
- *    (Kategorie bleibt).
+ *  - verschiebt Gutschriften ("3", "Gutschrift", "CreditAdvice" oder der Wert
+ *    aus fieldDocumentTypeValueMatch) in die Kategorie categoryCreditMemoGUID
+ *    und setzt die Dokumentart auf "Gutschrift",
+ *  - setzt bei Rechnungen ("2", "Rechnung", "Invoice", "CorrectionOfInvoice")
+ *    die Dokumentart auf "Rechnung" (Kategorie bleibt),
+ *  - lässt leere/unbekannte Werte unverändert (protokolliert die Eigenschaften
+ *    des Dokuments zur Diagnose).
  *
  * Wird vom Onboarding-Formular (src/forms/form.ts) als Process-Studio-Aktion
  * mit dem Eingabeparameter "docId" (wie im BPMN "Rechnungsleser Gutschriften
@@ -313,9 +315,27 @@ module.exports = async (req, res) => {
         if (!repositoryId) {
             throw new Error("Kein DMS-Repository gefunden.");
         }
-        const document = (await (0, getSpecificDocument_1.getSpecificDocument)(baseUri, apiKey, repositoryId, documentId)).body;
-        const documentType = document.objectProperties?.find((property) => property.id === fieldDocumentType)?.value;
-        const isCreditMemo = documentType === valueMatch;
+        let document = (await (0, getSpecificDocument_1.getSpecificDocument)(baseUri, apiKey, repositoryId, documentId)).body;
+        let documentType = readDocumentType(document, fieldDocumentType);
+        if (!documentType) {
+            // Beim Aufruf direkt nach dem Import sind die Eigenschaften ggf. noch
+            // nicht geschrieben - einmal kurz warten und neu laden.
+            await new Promise((resolve) => setTimeout(resolve, RELOAD_DELAY_MS));
+            document = (await (0, getSpecificDocument_1.getSpecificDocument)(baseUri, apiKey, repositoryId, documentId)).body;
+            documentType = readDocumentType(document, fieldDocumentType);
+        }
+        const kind = classify(documentType, valueMatch);
+        if (!kind) {
+            // Leer/unbekannt: nichts ändern (früher wurde daraus "Rechnung").
+            const properties = [...(document.objectProperties ?? []), ...(document.multivalueProperties ?? [])]
+                .map((p) => `${p.name ?? "?"} [${p.id}]=${JSON.stringify(p.value ?? p.values ?? "")}`)
+                .join("; ");
+            const message = `Dokument ${documentId}: Dokumentart "${documentType}" nicht erkannt (Feld ${fieldDocumentType}) - unverändert.`;
+            logger.warn(`${message} Eigenschaften: ${properties.slice(0, 3000)}`);
+            respond(res, 200, { success: true, changed: false, creditMemo: false, message });
+            return;
+        }
+        const isCreditMemo = kind === "creditMemo";
         const targetCategory = isCreditMemo ? categoryCreditMemo : document.category;
         if (!targetCategory) {
             throw new Error(`Kategorie von Dokument ${documentId} konnte nicht ermittelt werden.`);
@@ -324,10 +344,10 @@ module.exports = async (req, res) => {
             properties: [{ key: fieldDocumentType, values: [isCreditMemo ? "Gutschrift" : "Rechnung"] }],
         });
         const message = isCreditMemo
-            ? `Dokument ${documentId} als Gutschrift in Kategorie ${categoryCreditMemo} verschoben.`
-            : `Dokument ${documentId} ist keine Gutschrift (Dokumentart "${documentType ?? ""}"), als Rechnung gekennzeichnet.`;
+            ? `Dokument ${documentId} (Dokumentart "${documentType}") als Gutschrift in Kategorie ${categoryCreditMemo} verschoben.`
+            : `Dokument ${documentId} (Dokumentart "${documentType}") als Rechnung gekennzeichnet.`;
         logger.info(message);
-        respond(res, 200, { success: true, creditMemo: isCreditMemo, message });
+        respond(res, 200, { success: true, changed: true, creditMemo: isCreditMemo, message });
     }
     catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -335,6 +355,29 @@ module.exports = async (req, res) => {
         respond(res, 500, { success: false, message });
     }
 };
+const RELOAD_DELAY_MS = 3000;
+// Werte, die der Rechnungsleser bzw. frühere Läufe im Feld hinterlassen:
+// ERP-Code (preExport.ts: 3 Gutschrift, 2 Rechnung), Rechnungsleser-Typ oder
+// schon der Klartext. fieldDocumentTypeValueMatch zählt zusätzlich als Gutschrift.
+const CREDIT_MEMO_VALUES = ["3", "gutschrift", "creditadvice"];
+const INVOICE_VALUES = ["2", "rechnung", "invoice", "correctionofinvoice"];
+function classify(value, valueMatch) {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized)
+        return undefined;
+    if (CREDIT_MEMO_VALUES.includes(normalized) || (valueMatch && normalized === valueMatch.trim().toLowerCase())) {
+        return "creditMemo";
+    }
+    return INVOICE_VALUES.includes(normalized) ? "invoice" : undefined;
+}
+// Wert des Dokumenttyp-Felds: Einzelfeld (value/displayValue) oder erster
+// Wert eines Mehrfachfelds.
+function readDocumentType(document, fieldId) {
+    const single = document.objectProperties?.find((p) => p.id === fieldId);
+    const multi = document.multivalueProperties?.find((p) => p.id === fieldId);
+    const value = single?.value ?? single?.displayValue ?? (multi?.values ? Object.values(multi.values)[0] : undefined);
+    return value === undefined || value === null ? "" : String(value).trim();
+}
 function parseBody(req) {
     try {
         return req.json?.() ?? {};
