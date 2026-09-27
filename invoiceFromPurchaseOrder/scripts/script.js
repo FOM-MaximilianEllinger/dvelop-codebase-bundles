@@ -94,7 +94,8 @@ let logger = (0, logger_1.getLogger)();
  * - getEnvironments                          -> { environments: [{ name, type }] }
  * - getCompanies  (environment)              -> { companies: [{ id, name }] }
  * - getOrders     (environment, companyId)   -> { orders: [...] }
- * - getOrder      (environment, companyId, orderNo) -> { order, lines, vendor }
+ * - getOrder      (environment, companyId, orderNo) -> { order, lines, vendor, buyer }
+ *   (buyer = companyInformation der Firma, für die E-Rechnung)
  * Fehler: Status 4xx/500 mit { error }.
  *
  * customerVariables (von der Toolbox nur beim Neuanlegen gesetzt):
@@ -107,7 +108,7 @@ let logger = (0, logger_1.getLogger)();
  * .github/workflows/publish-bundles.yml stempelt beim Publish in BEIDE Bundles
  * denselben nächsten Stand (der Wert hier ist nur ein Platzhalter).
  */
-const VERSION_COUNTER = 2;
+const VERSION_COUNTER = 3;
 const BC_API = "https://api.businesscentral.dynamics.com";
 // Eigene GWS-API in Business Central (Bestellungen inkl. Zeilen, Lieferanten).
 const GWS_API = "api/gws/ecm/v1.0";
@@ -203,7 +204,16 @@ async function getOrder(settings, environment, companyId, orderNo) {
         const vendorFilter = `$filter=${encodeURIComponent(`no eq ${odataString(String(order.buyFromVendorNo))}`)}`;
         vendor = (await bcGet(settings, `${base}/vendors?${vendorFilter}`)).value?.[0] ?? null;
     }
-    return { order, lines, vendor };
+    // Käufer = die Firma selbst (Anschrift, E-Mail, Währung) für die E-Rechnung;
+    // Standard-API "companyInformation". Fehlt sie, bleibt buyer leer.
+    let buyer = null;
+    try {
+        buyer = (await bcGet(settings, `${bcBase(settings, environment)}/api/v2.0/companies(${companyId})/companyInformation`)).value?.[0] ?? null;
+    }
+    catch (error) {
+        logger.warn(`Firmendaten (companyInformation) nicht ladbar: ${error}`);
+    }
+    return { order, lines, vendor, buyer };
 }
 function requireEnvironment(body) {
     const environment = String(body.environment ?? "").trim();

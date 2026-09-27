@@ -493,6 +493,404 @@ function getTenantName(hostname = window.location.hostname) {
 }
 
 
+/***/ },
+
+/***/ "./src/forms/eInvoice.ts"
+/*!*******************************!*\
+  !*** ./src/forms/eInvoice.ts ***!
+  \*******************************/
+(__unused_webpack_module, exports) {
+
+
+/**
+ * E-Rechnung nach EN 16931 in der Syntax UN/CEFACT CII (CrossIndustryInvoice):
+ * - XRechnung 3.0 (CII): reine XML-Datei,
+ * - ZUGFeRD 2 / Factur-X, Profil EN 16931: PDF/A-3 mit demselben XML als
+ *   Anhang "factur-x.xml" (pdf-lib, wird bei Bedarf von cdnjs nachgeladen).
+ *
+ * Noch nicht enthalten: USt-IdNr./Steuernummer des Verkäufers (BT-31/BT-32).
+ * Ohne sie meldet ein Validator die Regel BR-S-02 (Normalsatz) - kommt später.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FACTURX_FILE_NAME = void 0;
+exports.eInvoiceTotals = eInvoiceTotals;
+exports.unitCode = unitCode;
+exports.missingEInvoiceFields = missingEInvoiceFields;
+exports.buildCiiXml = buildCiiXml;
+exports.createFacturXPdf = createFacturXPdf;
+exports.buildSrgbIccProfile = buildSrgbIccProfile;
+const GUIDELINE_ID = {
+    xrechnung: "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0",
+    zugferd: "urn:cen.eu:en16931:2017",
+};
+const BUSINESS_PROCESS_ID = "urn:fdc:peppol.eu:2017:poacc:billing:01.0";
+exports.FACTURX_FILE_NAME = "factur-x.xml";
+// ---------------------------------------------------------------------------
+// Beträge
+// ---------------------------------------------------------------------------
+function round2(value) {
+    return Math.round(value * 100) / 100;
+}
+function eInvoiceTotals(data) {
+    const lineTotal = round2(data.lines.reduce((sum, line) => sum + round2(line.lineTotal), 0));
+    const taxTotal = round2(lineTotal * data.vatRate / 100);
+    const grandTotal = round2(lineTotal + taxTotal);
+    return { lineTotal, taxTotal, grandTotal };
+}
+// ---------------------------------------------------------------------------
+// Einheiten: BC-Maßeinheiten -> UN/ECE Rec. 20 (bzw. Rec. 21 mit "X").
+// ---------------------------------------------------------------------------
+const UNIT_CODES = {
+    STK: "H87", "STÜCK": "H87", STUECK: "H87", ST: "H87", PCS: "H87", PIECE: "H87",
+    KG: "KGM", KILO: "KGM", G: "GRM", GR: "GRM", T: "TNE", TO: "TNE", TONNE: "TNE",
+    L: "LTR", LTR: "LTR", LITER: "LTR", ML: "MLT",
+    M: "MTR", MTR: "MTR", METER: "MTR", CM: "CMT", MM: "MMT", KM: "KMT",
+    M2: "MTK", QM: "MTK", "M²": "MTK", M3: "MTQ", CBM: "MTQ", "M³": "MTQ",
+    STD: "HUR", STUNDE: "HUR", H: "HUR", HOUR: "HUR", MIN: "MIN", TAG: "DAY", DAY: "DAY", WOCHE: "WEE", MONAT: "MON",
+    PAK: "XPK", PAKET: "XPK", PCK: "XPK", KARTON: "XCT", KRT: "XCT", PAL: "XPX", PALETTE: "XPX", ROLLE: "XRO", SACK: "XSA",
+    SET: "SET", PAAR: "PR", PAR: "PR", PAUSCHAL: "LS", PSCH: "LS", LS: "LS",
+};
+/** C62 ("Einheit") als Rückfall, wenn der BC-Code unbekannt ist. */
+function unitCode(bcUnit) {
+    const key = bcUnit.trim().toUpperCase();
+    if (!key)
+        return "C62";
+    return UNIT_CODES[key] ?? (/^[A-Z0-9]{2,3}$/.test(key) && Object.values(UNIT_CODES).includes(key) ? key : "C62");
+}
+// ---------------------------------------------------------------------------
+// Pflichtangaben prüfen (Auszug aus EN 16931 / XRechnung) - als Hinweis vor
+// dem Erzeugen; formal gültig ist erst, was ein Validator (KoSIT) bestätigt.
+// ---------------------------------------------------------------------------
+function missingEInvoiceFields(data, profile) {
+    const missing = [];
+    const need = (value, label) => {
+        if (!value || !value.trim())
+            missing.push(label);
+    };
+    need(data.seller.name, "Name des Lieferanten");
+    need(data.seller.city, "Ort des Lieferanten");
+    need(data.seller.postcode, "PLZ des Lieferanten");
+    need(data.seller.country, "Land des Lieferanten");
+    need(data.buyer.name, "Name des Käufers");
+    need(data.buyer.city, "Ort des Käufers");
+    need(data.buyer.postcode, "PLZ des Käufers");
+    need(data.buyer.country, "Land des Käufers");
+    need(data.iban, "IBAN");
+    if (data.lines.length === 0)
+        missing.push("mindestens eine Rechnungsposition");
+    if (profile === "xrechnung") {
+        need(data.buyerReference, "Käuferreferenz / Leitweg-ID");
+        need(data.seller.email, "E-Mail des Lieferanten");
+        need(data.seller.phone, "Telefon des Lieferanten");
+        need(data.buyer.email, "E-Mail des Käufers");
+    }
+    return missing;
+}
+// ---------------------------------------------------------------------------
+// CII-XML
+// ---------------------------------------------------------------------------
+function xml(value) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+}
+function amount(value) {
+    return round2(value).toFixed(2);
+}
+// Menge/Preis: bis zu 4 Nachkommastellen, ohne überflüssige Nullen.
+function decimal(value) {
+    return String(Number(value.toFixed(4)));
+}
+function date102(value) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${value.getFullYear()}${pad(value.getMonth() + 1)}${pad(value.getDate())}`;
+}
+function dateTime(tag, value) {
+    return `<${tag}><udt:DateTimeString format="102">${date102(value)}</udt:DateTimeString></${tag}>`;
+}
+function optional(tag, value) {
+    return value && value.trim() ? `<${tag}>${xml(value.trim())}</${tag}>` : "";
+}
+function address(party) {
+    return "<ram:PostalTradeAddress>"
+        + optional("ram:PostcodeCode", party.postcode)
+        + optional("ram:LineOne", party.street)
+        + optional("ram:LineTwo", party.street2)
+        + optional("ram:CityName", party.city)
+        + `<ram:CountryID>${xml(party.country || "DE")}</ram:CountryID>`
+        + "</ram:PostalTradeAddress>";
+}
+function electronicAddress(party) {
+    return party.email?.trim()
+        ? `<ram:URIUniversalCommunication><ram:URIID schemeID="EM">${xml(party.email.trim())}</ram:URIID></ram:URIUniversalCommunication>`
+        : "";
+}
+function sellerContact(party) {
+    const name = party.contactName || party.name;
+    if (!name && !party.phone && !party.email)
+        return "";
+    return "<ram:DefinedTradeContact>"
+        + optional("ram:PersonName", name)
+        + (party.phone?.trim() ? `<ram:TelephoneUniversalCommunication><ram:CompleteNumber>${xml(party.phone.trim())}</ram:CompleteNumber></ram:TelephoneUniversalCommunication>` : "")
+        + (party.email?.trim() ? `<ram:EmailURIUniversalCommunication><ram:URIID>${xml(party.email.trim())}</ram:URIID></ram:EmailURIUniversalCommunication>` : "")
+        + "</ram:DefinedTradeContact>";
+}
+function taxCategory(rate) {
+    // Normalsatz "S"; 0 % als "Z" (nullbesteuert).
+    return rate > 0 ? "S" : "Z";
+}
+function buildCiiXml(data, profile) {
+    const totals = eInvoiceTotals(data);
+    const category = taxCategory(data.vatRate);
+    const rate = decimal(data.vatRate);
+    const currency = xml(data.currency);
+    const lines = data.lines.map((line) => `
+    <ram:IncludedSupplyChainTradeLineItem>
+      <ram:AssociatedDocumentLineDocument><ram:LineID>${xml(line.id)}</ram:LineID></ram:AssociatedDocumentLineDocument>
+      <ram:SpecifiedTradeProduct>${optional("ram:SellerAssignedID", line.itemNo)}<ram:Name>${xml(line.name || line.itemNo || "Position")}</ram:Name></ram:SpecifiedTradeProduct>
+      <ram:SpecifiedLineTradeAgreement><ram:NetPriceProductTradePrice><ram:ChargeAmount>${decimal(line.netPrice)}</ram:ChargeAmount></ram:NetPriceProductTradePrice></ram:SpecifiedLineTradeAgreement>
+      <ram:SpecifiedLineTradeDelivery><ram:BilledQuantity unitCode="${xml(line.unitCode)}">${decimal(line.quantity)}</ram:BilledQuantity></ram:SpecifiedLineTradeDelivery>
+      <ram:SpecifiedLineTradeSettlement>
+        <ram:ApplicableTradeTax><ram:TypeCode>VAT</ram:TypeCode><ram:CategoryCode>${category}</ram:CategoryCode><ram:RateApplicablePercent>${rate}</ram:RateApplicablePercent></ram:ApplicableTradeTax>
+        <ram:SpecifiedTradeSettlementLineMonetarySummation><ram:LineTotalAmount>${amount(line.lineTotal)}</ram:LineTotalAmount></ram:SpecifiedTradeSettlementLineMonetarySummation>
+      </ram:SpecifiedLineTradeSettlement>
+    </ram:IncludedSupplyChainTradeLineItem>`).join("");
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:qdt="urn:un:unece:uncefact:data:standard:QualifiedDataType:100" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100">
+  <rsm:ExchangedDocumentContext>
+    <ram:BusinessProcessSpecifiedDocumentContextParameter><ram:ID>${BUSINESS_PROCESS_ID}</ram:ID></ram:BusinessProcessSpecifiedDocumentContextParameter>
+    <ram:GuidelineSpecifiedDocumentContextParameter><ram:ID>${GUIDELINE_ID[profile]}</ram:ID></ram:GuidelineSpecifiedDocumentContextParameter>
+  </rsm:ExchangedDocumentContext>
+  <rsm:ExchangedDocument>
+    <ram:ID>${xml(data.invoiceNo)}</ram:ID>
+    <ram:TypeCode>380</ram:TypeCode>
+    ${dateTime("ram:IssueDateTime", data.issueDate)}
+    ${data.note ? `<ram:IncludedNote><ram:Content>${xml(data.note)}</ram:Content></ram:IncludedNote>` : ""}
+  </rsm:ExchangedDocument>
+  <rsm:SupplyChainTradeTransaction>${lines}
+    <ram:ApplicableHeaderTradeAgreement>
+      ${optional("ram:BuyerReference", data.buyerReference)}
+      <ram:SellerTradeParty>
+        ${optional("ram:ID", data.seller.id)}
+        <ram:Name>${xml(data.seller.name)}</ram:Name>
+        ${sellerContact(data.seller)}
+        ${address(data.seller)}
+        ${electronicAddress(data.seller)}
+      </ram:SellerTradeParty>
+      <ram:BuyerTradeParty>
+        <ram:Name>${xml(data.buyer.name)}</ram:Name>
+        ${address(data.buyer)}
+        ${electronicAddress(data.buyer)}
+      </ram:BuyerTradeParty>
+      ${data.orderReference ? `<ram:BuyerOrderReferencedDocument><ram:IssuerAssignedID>${xml(data.orderReference)}</ram:IssuerAssignedID></ram:BuyerOrderReferencedDocument>` : ""}
+    </ram:ApplicableHeaderTradeAgreement>
+    <ram:ApplicableHeaderTradeDelivery>
+      ${data.deliveryDate ? `<ram:ActualDeliverySupplyChainEvent>${dateTime("ram:OccurrenceDateTime", data.deliveryDate)}</ram:ActualDeliverySupplyChainEvent>` : ""}
+    </ram:ApplicableHeaderTradeDelivery>
+    <ram:ApplicableHeaderTradeSettlement>
+      <ram:InvoiceCurrencyCode>${currency}</ram:InvoiceCurrencyCode>
+      <ram:SpecifiedTradeSettlementPaymentMeans>
+        <ram:TypeCode>58</ram:TypeCode>
+        <ram:PayeePartyCreditorFinancialAccount><ram:IBANID>${xml(data.iban.replace(/\s+/g, ""))}</ram:IBANID></ram:PayeePartyCreditorFinancialAccount>
+      </ram:SpecifiedTradeSettlementPaymentMeans>
+      <ram:ApplicableTradeTax>
+        <ram:CalculatedAmount>${amount(totals.taxTotal)}</ram:CalculatedAmount>
+        <ram:TypeCode>VAT</ram:TypeCode>
+        <ram:BasisAmount>${amount(totals.lineTotal)}</ram:BasisAmount>
+        <ram:CategoryCode>${category}</ram:CategoryCode>
+        <ram:RateApplicablePercent>${rate}</ram:RateApplicablePercent>
+      </ram:ApplicableTradeTax>
+      <ram:SpecifiedTradePaymentTerms>
+        ${optional("ram:Description", data.paymentTerms)}
+        ${dateTime("ram:DueDateDateTime", data.dueDate)}
+      </ram:SpecifiedTradePaymentTerms>
+      <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+        <ram:LineTotalAmount>${amount(totals.lineTotal)}</ram:LineTotalAmount>
+        <ram:TaxBasisTotalAmount>${amount(totals.lineTotal)}</ram:TaxBasisTotalAmount>
+        <ram:TaxTotalAmount currencyID="${currency}">${amount(totals.taxTotal)}</ram:TaxTotalAmount>
+        <ram:GrandTotalAmount>${amount(totals.grandTotal)}</ram:GrandTotalAmount>
+        <ram:DuePayableAmount>${amount(totals.grandTotal)}</ram:DuePayableAmount>
+      </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+    </ram:ApplicableHeaderTradeSettlement>
+  </rsm:SupplyChainTradeTransaction>
+</rsm:CrossIndustryInvoice>
+`.replace(/\n\s*\n/g, "\n");
+}
+/**
+ * Macht aus der PDF ein PDF/A-3b mit eingebettetem factur-x.xml:
+ * sRGB-OutputIntent, XMP-Metadaten (PDF/A + Factur-X-Erweiterungsschema,
+ * passend zum Info-Dictionary), Anhang mit AFRelationship "Alternative" und
+ * /AF im Katalog, Datei-ID im Trailer.
+ */
+async function createFacturXPdf(PDFLib, pdfBytes, ciiXml, meta) {
+    const { PDFDocument, PDFName, PDFString, PDFHexString } = PDFLib;
+    const pdfDoc = await PDFDocument.load(pdfBytes, { updateMetadata: false });
+    const context = pdfDoc.context;
+    const catalog = pdfDoc.catalog;
+    // Sekundengenau - Info-Dictionary und XMP müssen übereinstimmen.
+    const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+    const producer = "pdfmake + pdf-lib";
+    pdfDoc.setTitle(meta.title);
+    pdfDoc.setAuthor(meta.author);
+    pdfDoc.setSubject(meta.subject);
+    pdfDoc.setCreator(producer);
+    pdfDoc.setProducer(producer);
+    pdfDoc.setCreationDate(now);
+    pdfDoc.setModificationDate(now);
+    // Anhang factur-x.xml
+    const xmlBytes = new TextEncoder().encode(ciiXml);
+    const fileStream = context.flateStream(xmlBytes, {
+        Type: "EmbeddedFile",
+        Subtype: "text/xml",
+        Params: { Size: xmlBytes.length, ModDate: PDFString.fromDate(now) },
+    });
+    const fileStreamRef = context.register(fileStream);
+    const fileSpec = context.obj({
+        Type: "Filespec",
+        F: PDFString.of(exports.FACTURX_FILE_NAME),
+        UF: PDFHexString.fromText(exports.FACTURX_FILE_NAME),
+        EF: { F: fileStreamRef, UF: fileStreamRef },
+        Desc: PDFString.of("Factur-X/ZUGFeRD Rechnung"),
+        AFRelationship: "Alternative",
+    });
+    const fileSpecRef = context.register(fileSpec);
+    catalog.set(PDFName.of("Names"), context.obj({
+        EmbeddedFiles: { Names: [PDFHexString.fromText(exports.FACTURX_FILE_NAME), fileSpecRef] },
+    }));
+    catalog.set(PDFName.of("AF"), context.obj([fileSpecRef]));
+    // OutputIntent sRGB
+    const iccStream = context.flateStream(buildSrgbIccProfile(), { N: 3 });
+    const iccRef = context.register(iccStream);
+    const outputIntent = context.obj({
+        Type: "OutputIntent",
+        S: "GTS_PDFA1",
+        OutputConditionIdentifier: PDFString.of("sRGB IEC61966-2.1"),
+        Info: PDFString.of("sRGB IEC61966-2.1"),
+        DestOutputProfile: iccRef,
+    });
+    catalog.set(PDFName.of("OutputIntents"), context.obj([context.register(outputIntent)]));
+    // XMP-Metadaten (unkomprimiert)
+    const xmp = buildXmp(meta, producer, now);
+    const metadata = context.stream(new TextEncoder().encode(xmp), { Type: "Metadata", Subtype: "XML" });
+    catalog.set(PDFName.of("Metadata"), context.register(metadata));
+    // Datei-ID im Trailer (PDF/A-Pflicht)
+    const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+    context.trailerInfo.ID = context.obj([PDFHexString.of(id), PDFHexString.of(id)]);
+    return pdfDoc.save({ useObjectStreams: false });
+}
+function xmpDate(value) {
+    return value.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+function buildXmp(meta, producer, date) {
+    const fxProperty = (name, description) => `
+            <rdf:li rdf:parseType="Resource">
+              <pdfaProperty:name>${name}</pdfaProperty:name>
+              <pdfaProperty:valueType>Text</pdfaProperty:valueType>
+              <pdfaProperty:category>external</pdfaProperty:category>
+              <pdfaProperty:description>${description}</pdfaProperty:description>
+            </rdf:li>`;
+    return `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
+      <pdfaid:part>3</pdfaid:part>
+      <pdfaid:conformance>B</pdfaid:conformance>
+    </rdf:Description>
+    <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
+      <dc:format>application/pdf</dc:format>
+      <dc:title><rdf:Alt><rdf:li xml:lang="x-default">${xml(meta.title)}</rdf:li></rdf:Alt></dc:title>
+      <dc:creator><rdf:Seq><rdf:li>${xml(meta.author)}</rdf:li></rdf:Seq></dc:creator>
+      <dc:description><rdf:Alt><rdf:li xml:lang="x-default">${xml(meta.subject)}</rdf:li></rdf:Alt></dc:description>
+    </rdf:Description>
+    <rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/">
+      <xmp:CreatorTool>${xml(producer)}</xmp:CreatorTool>
+      <xmp:CreateDate>${xmpDate(date)}</xmp:CreateDate>
+      <xmp:ModifyDate>${xmpDate(date)}</xmp:ModifyDate>
+    </rdf:Description>
+    <rdf:Description rdf:about="" xmlns:pdf="http://ns.adobe.com/pdf/1.3/">
+      <pdf:Producer>${xml(producer)}</pdf:Producer>
+    </rdf:Description>
+    <rdf:Description rdf:about="" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#">
+      <fx:DocumentType>INVOICE</fx:DocumentType>
+      <fx:DocumentFileName>${exports.FACTURX_FILE_NAME}</fx:DocumentFileName>
+      <fx:Version>1.0</fx:Version>
+      <fx:ConformanceLevel>EN 16931</fx:ConformanceLevel>
+    </rdf:Description>
+    <rdf:Description rdf:about="" xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">
+      <pdfaExtension:schemas>
+        <rdf:Bag>
+          <rdf:li rdf:parseType="Resource">
+            <pdfaSchema:schema>Factur-X PDFA Extension Schema</pdfaSchema:schema>
+            <pdfaSchema:namespaceURI>urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#</pdfaSchema:namespaceURI>
+            <pdfaSchema:prefix>fx</pdfaSchema:prefix>
+            <pdfaSchema:property>
+              <rdf:Seq>${fxProperty("DocumentFileName", "The name of the embedded XML document")}${fxProperty("DocumentType", "The type of the hybrid document in capital letters, e.g. INVOICE or ORDER")}${fxProperty("Version", "The actual version of the standard applying to the embedded XML document")}${fxProperty("ConformanceLevel", "The conformance level of the embedded XML document")}
+              </rdf:Seq>
+            </pdfaSchema:property>
+          </rdf:li>
+        </rdf:Bag>
+      </pdfaExtension:schemas>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`;
+}
+/**
+ * Minimales ICC-v2-Profil (Monitor, RGB, Matrix/TRC) mit den sRGB-Primärfarben
+ * (D50-adaptiert) und Gamma 2.2 - für den PDF/A-OutputIntent.
+ */
+function buildSrgbIccProfile() {
+    const text = (s) => Array.from(s, (c) => c.charCodeAt(0));
+    const u32 = (v) => [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255];
+    const u16 = (v) => [(v >>> 8) & 255, v & 255];
+    const zeros = (n) => new Array(n).fill(0);
+    const s15 = (v) => u32(Math.round(v * 65536) >>> 0);
+    const xyz = (x, y, z) => [...text("XYZ "), ...zeros(4), ...s15(x), ...s15(y), ...s15(z)];
+    const descText = "sRGB IEC61966-2.1";
+    const desc = [...text("desc"), ...zeros(4), ...u32(descText.length + 1), ...text(descText), 0, ...u32(0), ...u32(0), ...u16(0), 0, ...zeros(67)];
+    const cprt = [...text("text"), ...zeros(4), ...text("No copyright, use freely"), 0];
+    const curve = [...text("curv"), ...zeros(4), ...u32(1), ...u16(0x0233)]; // Gamma ~2.2 (u8Fixed8)
+    const tags = [
+        ["desc", desc],
+        ["cprt", cprt],
+        ["wtpt", xyz(0.9642, 1.0, 0.8249)],
+        ["rXYZ", xyz(0.4361, 0.2225, 0.0139)],
+        ["gXYZ", xyz(0.3851, 0.7169, 0.0971)],
+        ["bXYZ", xyz(0.1431, 0.0606, 0.7141)],
+        ["rTRC", curve],
+        ["gTRC", curve],
+        ["bTRC", curve],
+    ];
+    const dataStart = 128 + 4 + tags.length * 12;
+    const table = [...u32(tags.length)];
+    const data = [];
+    const offsets = new Map();
+    for (const [signature, bytes] of tags) {
+        let offset = offsets.get(bytes);
+        if (offset === undefined) {
+            offset = dataStart + data.length;
+            data.push(...bytes);
+            while (data.length % 4)
+                data.push(0);
+            offsets.set(bytes, offset);
+        }
+        table.push(...text(signature), ...u32(offset), ...u32(bytes.length));
+    }
+    const size = dataStart + data.length;
+    const header = [
+        ...u32(size), ...zeros(4), ...u32(0x02100000), ...text("mntr"), ...text("RGB "), ...text("XYZ "),
+        ...u16(2000), ...u16(1), ...u16(1), ...u16(0), ...u16(0), ...u16(0),
+        ...text("acsp"), ...zeros(4), ...zeros(4), ...zeros(4), ...zeros(4), ...zeros(8), ...u32(0),
+        ...s15(0.9642), ...s15(1.0), ...s15(0.8249), ...zeros(4),
+    ];
+    header.push(...zeros(128 - header.length));
+    return new Uint8Array([...header, ...table, ...data]);
+}
+
+
 /***/ }
 
 /******/ 	});
@@ -542,11 +940,13 @@ const callScriptEndpoint_1 = __webpack_require__(/*! ../../../../helper/scriptin
 const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExport */ "../../helper/utils/tableExport.ts");
 const getEmailinboundProfiles_1 = __webpack_require__(/*! ../../../../helper/emailinbound/getEmailinboundProfiles */ "../../helper/emailinbound/getEmailinboundProfiles.ts");
+const eInvoice_1 = __webpack_require__(/*! ./eInvoice */ "./src/forms/eInvoice.ts");
 /**
  * Formular-Gegenstück zum Script "Rechnung aus Bestellung"
  * (src/scripts/script.ts): Umgebung, Firma und Bestellung aus Business Central
  * wählen, Vorschau prüfen und daraus eine Beispiel-Rechnung als PDF
- * herunterladen (pdfmake, wird bei Bedarf von cdnjs nachgeladen). Die Daten
+ * herunterladen (pdfmake, wird bei Bedarf von cdnjs nachgeladen) - wahlweise
+ * auch als E-Rechnung: ZUGFeRD-PDF oder XRechnung-XML (siehe eInvoice.ts). Die Daten
  * holt das Script mit seiner App-Registrierung - der Browser bekommt weder
  * Client-Secret noch Business-Central-Token zu sehen.
  *
@@ -558,7 +958,7 @@ const getEmailinboundProfiles_1 = __webpack_require__(/*! ../../../../helper/ema
  * .github/workflows/publish-bundles.yml stempelt beim Publish in BEIDE Bundles
  * denselben nächsten Stand (der Wert hier ist nur ein Platzhalter).
  */
-const VERSION_COUNTER = 2;
+const VERSION_COUNTER = 3;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // Muss exakt dem Script-Namen in toolbox.meta.json ("scripts[].name") entsprechen.
 const SCRIPT_NAME = "Rechnung aus Bestellung";
@@ -566,7 +966,18 @@ const SCRIPT_NAME = "Rechnung aus Bestellung";
 const resultKey = "result";
 const PDFMAKE_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js";
 const PDFMAKE_FONTS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js";
+const PDF_LIB_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js";
 const DEFAULT_VAT_RATE = 19;
+// E-Rechnung: Test-IBAN (öffentliches Beispielkonto) als Vorbelegung,
+// Zahlungsziel und Kennzeichnung als Beispiel (BT-22).
+const TEST_IBAN = "DE02120300000000202051";
+const PAYMENT_DAYS = 14;
+const EXAMPLE_NOTE = "BEISPIEL – keine echte Rechnung";
+const FORMATS = [
+    { value: "pdf", label: "PDF" },
+    { value: "zugferd", label: "ZUGFeRD-PDF (EN 16931)" },
+    { value: "xrechnung", label: "XRechnung (XML, CII)" },
+];
 // ---------------------------------------------------------------------------
 // Zustand
 // ---------------------------------------------------------------------------
@@ -582,6 +993,15 @@ const state = {
     // Empfänger der E-Mail (.eml) - vorbelegt in formInit.
     emailTo: "",
     mailboxes: [],
+    format: "pdf",
+    // Angaben für die E-Rechnung, bei jeder Bestellung neu vorbelegt (selectOrder).
+    eInvoice: {
+        iban: TEST_IBAN,
+        buyerReference: "",
+        sellerEmail: "",
+        sellerPhone: "",
+        buyerEmail: "",
+    },
     details: undefined,
     // Welche Liste gerade lädt (für die Anzeige) und letzter Fehler.
     loading: "",
@@ -657,9 +1077,21 @@ async function selectOrder(no) {
         return render();
     await runLoading("order", async () => {
         const details = await callScript({ method: "getOrder", environment: state.environment, companyId: state.companyId, orderNo: no });
-        if (state.orderNo === no)
+        if (state.orderNo === no) {
             state.details = details;
+            // IBAN bleibt über Bestellungen hinweg stehen, der Rest kommt aus den Daten.
+            state.eInvoice = {
+                iban: state.eInvoice.iban || TEST_IBAN,
+                buyerReference: String(details.order.no ?? ""),
+                sellerEmail: text(details.vendor?.email ?? details.vendor?.eMail),
+                sellerPhone: text(details.vendor?.phoneNumber ?? details.vendor?.phoneNo),
+                buyerEmail: text(details.buyer?.email) || state.emailTo,
+            };
+        }
     });
+}
+function text(value) {
+    return value === undefined || value === null ? "" : String(value).trim();
 }
 function resetOrders() {
     state.orders = [];
@@ -697,9 +1129,10 @@ function toInvoiceLines(lines) {
         .map((line, index) => {
         const quantity = num(line.quantity);
         const unitPrice = num(line.unitCost ?? line.directUnitCost ?? line.unitPrice);
-        const amount = line.amount !== undefined || line.lineAmount !== undefined
+        // Auf Cent gerundet, damit PDF und E-Rechnung dieselben Summen haben.
+        const amount = round(line.amount !== undefined || line.lineAmount !== undefined
             ? num(line.amount ?? line.lineAmount)
-            : quantity * unitPrice;
+            : quantity * unitPrice);
         return {
             position: String(line.lineNo ?? line.sequence ?? (index + 1)),
             itemNo: String(line.no ?? line.itemNo ?? line.lineObjectNumber ?? ""),
@@ -712,7 +1145,7 @@ function toInvoiceLines(lines) {
     });
 }
 function totals(lines, vatRate) {
-    const net = round(lines.reduce((sum, line) => sum + line.amount, 0));
+    const net = round(lines.reduce((sum, line) => sum + round(line.amount), 0));
     const vat = round(net * vatRate / 100);
     return { net, vat, gross: round(net + vat) };
 }
@@ -737,6 +1170,7 @@ function generateInvoiceNumber() {
     const pad = (n, len = 2) => String(n).padStart(len, "0");
     return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}${pad(Math.floor(Math.random() * 1000), 3)}`;
 }
+// Anschriftzeilen von Lieferant (vendor) bzw. Käufer (companyInformation).
 function vendorAddressLines(vendor) {
     if (!vendor)
         return [];
@@ -744,6 +1178,76 @@ function vendorAddressLines(vendor) {
     return [vendor.addressLine1 ?? vendor.address, vendor.addressLine2 ?? vendor.address2, cityLine, vendor.country ?? vendor.countryRegionCode]
         .map((v) => String(v ?? "").trim())
         .filter(Boolean);
+}
+function companyName(details) {
+    return text(details.buyer?.displayName ?? details.buyer?.name) || (state.companies.find((c) => c.id === state.companyId)?.name ?? "");
+}
+function addDays(date, days) {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+}
+function parseDate(value) {
+    if (!value)
+        return undefined;
+    const date = new Date(String(value));
+    return isNaN(date.getTime()) || date.getFullYear() < 1900 ? undefined : date;
+}
+// ISO-Ländercode; BC lässt das Land bei Inlandsadressen oft leer -> "DE".
+function countryCode(value) {
+    const code = text(value).toUpperCase();
+    return /^[A-Z]{2}$/.test(code) ? code : "DE";
+}
+function paymentTermsText(dueDate) {
+    return `Zahlbar bis ${dueDate.toLocaleDateString("de-DE")} ohne Abzug.`;
+}
+// ---------------------------------------------------------------------------
+// E-Rechnung (Daten für eInvoice.ts)
+// ---------------------------------------------------------------------------
+function buildEInvoiceData(details, invoiceNo, issueDate) {
+    const { order, vendor, buyer } = details;
+    const party = (source, name, email, extra = {}) => ({
+        name,
+        street: text(source?.addressLine1 ?? source?.address),
+        street2: text(source?.addressLine2 ?? source?.address2),
+        postcode: text(source?.postalCode),
+        city: text(source?.city),
+        country: countryCode(source?.country ?? source?.countryRegionCode),
+        email,
+        ...extra,
+    });
+    const vendorName = text(vendor?.displayName ?? vendor?.name ?? order.buyFromVendorName);
+    const dueDate = addDays(issueDate, PAYMENT_DAYS);
+    return {
+        invoiceNo,
+        issueDate,
+        dueDate,
+        deliveryDate: parseDate(order.expectedReceiptDate ?? order.requestedReceiptDate ?? order.orderDate),
+        currency: text(order.currencyCode) || text(buyer?.currencyCode) || "EUR",
+        buyerReference: state.eInvoice.buyerReference.trim(),
+        orderReference: text(order.no),
+        note: EXAMPLE_NOTE,
+        paymentTerms: paymentTermsText(dueDate),
+        iban: state.eInvoice.iban.trim(),
+        vatRate: state.vatRate,
+        seller: party(vendor, vendorName, state.eInvoice.sellerEmail.trim(), {
+            id: text(vendor?.no ?? order.buyFromVendorNo),
+            phone: state.eInvoice.sellerPhone.trim(),
+        }),
+        buyer: party(buyer, companyName(details), state.eInvoice.buyerEmail.trim()),
+        // Text-/Leerzeilen (ohne Menge und Betrag) gehören nicht in die E-Rechnung.
+        lines: toInvoiceLines(details.lines)
+            .filter((line) => line.quantity !== 0 || line.amount !== 0)
+            .map((line) => ({
+            id: line.position,
+            itemNo: line.itemNo,
+            name: line.description,
+            quantity: line.quantity,
+            unitCode: (0, eInvoice_1.unitCode)(line.unit),
+            netPrice: line.unitPrice,
+            lineTotal: line.amount,
+        })),
+    };
 }
 // ---------------------------------------------------------------------------
 // PDF (pdfmake)
@@ -773,11 +1277,13 @@ async function loadPdfMake() {
         throw new Error("pdfmake konnte nicht geladen werden.");
     return w.pdfMake;
 }
-function buildDocDefinition(details, vatRate, invoiceNo) {
+// eInvoice gesetzt (ZUGFeRD): Zahlungsangaben und Käuferreferenz wie im XML
+// zusätzlich sichtbar in die PDF.
+function buildDocDefinition(details, vatRate, invoiceNo, issueDate, eInvoice) {
     const { order, vendor } = details;
     const lines = toInvoiceLines(details.lines);
     const sum = totals(lines, vatRate);
-    const companyName = state.companies.find((c) => c.id === state.companyId)?.name ?? "";
+    const buyerName = companyName(details);
     const vendorName = String(vendor?.displayName ?? vendor?.name ?? order.buyFromVendorName ?? "");
     const vendorNo = String(vendor?.no ?? order.buyFromVendorNo ?? "");
     const orderDate = formatDate(order.orderDate ?? order.documentDate ?? order.systemCreatedAt);
@@ -805,7 +1311,8 @@ function buildDocDefinition(details, vatRate, invoiceNo) {
                         ...vendorAddressLines(vendor).map((text) => ({ text })),
                         { text: "\n" },
                         { text: "Rechnungsempfänger", color: "#555", fontSize: 8 },
-                        { text: companyName, bold: true },
+                        { text: buyerName, bold: true },
+                        ...vendorAddressLines(details.buyer).map((text) => ({ text })),
                     ],
                     {
                         width: 230,
@@ -816,8 +1323,9 @@ function buildDocDefinition(details, vatRate, invoiceNo) {
                                     widths: ["*", "auto"],
                                     body: [
                                         infoRow("Rechnungsnummer", invoiceNo),
-                                        infoRow("Rechnungsdatum", new Date().toLocaleDateString("de-DE")),
+                                        infoRow("Rechnungsdatum", issueDate.toLocaleDateString("de-DE")),
                                         infoRow("Bestellnummer", String(order.no ?? "")),
+                                        ...(eInvoice?.buyerReference ? [infoRow("Käuferreferenz", eInvoice.buyerReference)] : []),
                                         infoRow("Lieferantennummer", vendorNo),
                                         ...(orderDate ? [infoRow("Bestelldatum", orderDate)] : []),
                                         ...(deliveryDate ? [infoRow("Lieferdatum", deliveryDate)] : []),
@@ -868,24 +1376,50 @@ function buildDocDefinition(details, vatRate, invoiceNo) {
                     },
                 ],
             },
+            ...(eInvoice ? [{
+                    text: `\n${eInvoice.paymentTerms} Bitte überweisen Sie ${money(sum.gross)} auf die IBAN ${eInvoice.iban}.`,
+                }] : []),
             { text: "\n\nEs gelten unsere allgemeinen Geschäftsbedingungen. Diese sind auf unserer Homepage einzusehen.", color: "#555" },
         ],
     };
 }
-async function createInvoicePdf(details) {
-    const pdfMake = await loadPdfMake();
-    const invoiceNo = generateInvoiceNumber();
-    const doc = pdfMake.createPdf(buildDocDefinition(details, state.vatRate, invoiceNo));
-    const blob = await new Promise((resolve) => doc.getBlob((b) => resolve(b)));
-    const fileName = `Rechnung_${String(details.order.no ?? "").replace(/[^\w-]+/g, "_")}_${invoiceNo}.pdf`;
-    return { blob, fileName, invoiceNo };
+async function loadPdfLib() {
+    const w = window;
+    if (!w.PDFLib)
+        await loadScriptOnce(PDF_LIB_URL);
+    if (!w.PDFLib?.PDFDocument)
+        throw new Error("pdf-lib konnte nicht geladen werden.");
+    return w.PDFLib;
 }
-async function downloadPdf() {
+// Erzeugt die Rechnung im gewählten Format - jedes Mal mit neuer Rechnungsnummer.
+async function createInvoiceFile(details, format) {
+    const invoiceNo = generateInvoiceNumber();
+    const issueDate = new Date();
+    const baseName = `Rechnung_${String(details.order.no ?? "").replace(/[^\w-]+/g, "_")}_${invoiceNo}`;
+    if (format === "xrechnung") {
+        const xml = (0, eInvoice_1.buildCiiXml)(buildEInvoiceData(details, invoiceNo, issueDate), "xrechnung");
+        return { blob: new Blob([xml], { type: "application/xml" }), fileName: `X${baseName}.xml`, contentType: "application/xml", invoiceNo };
+    }
+    const eInvoice = format === "zugferd" ? buildEInvoiceData(details, invoiceNo, issueDate) : undefined;
+    const pdfMake = await loadPdfMake();
+    const doc = pdfMake.createPdf(buildDocDefinition(details, state.vatRate, invoiceNo, issueDate, eInvoice));
+    const pdf = await new Promise((resolve) => doc.getBlob((b) => resolve(b)));
+    if (!eInvoice) {
+        return { blob: pdf, fileName: `${baseName}.pdf`, contentType: "application/pdf", invoiceNo };
+    }
+    const bytes = await (0, eInvoice_1.createFacturXPdf)(await loadPdfLib(), new Uint8Array(await pdf.arrayBuffer()), (0, eInvoice_1.buildCiiXml)(eInvoice, "zugferd"), {
+        title: `Rechnung ${invoiceNo}`,
+        author: eInvoice.seller.name || "Lieferant",
+        subject: `Rechnung ${invoiceNo} zur Bestellung ${eInvoice.orderReference} (${EXAMPLE_NOTE})`,
+    });
+    return { blob: new Blob([bytes], { type: "application/pdf" }), fileName: `${baseName}_ZUGFeRD.pdf`, contentType: "application/pdf", invoiceNo };
+}
+async function downloadInvoice() {
     const details = state.details;
     if (!details)
         return;
     await runLoading("pdf", async () => {
-        const { blob, fileName } = await createInvoicePdf(details);
+        const { blob, fileName } = await createInvoiceFile(details, state.format);
         (0, tableExport_1.downloadBlob)(blob, fileName);
     });
 }
@@ -940,7 +1474,7 @@ function wrapBase64(value) {
 function encodeHeader(value) {
     return /^[\x20-\x7e]*$/.test(value) ? value : `=?UTF-8?B?${utf8ToBase64(value)}?=`;
 }
-function buildEml(to, subject, html, attachmentName, attachmentBase64) {
+function buildEml(to, subject, html, attachment) {
     const boundary = `=_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
     const messageId = `<${Date.now().toString(36)}.${Math.random().toString(36).slice(2)}@${window.location.hostname || "localhost"}>`;
     return [
@@ -958,11 +1492,11 @@ function buildEml(to, subject, html, attachmentName, attachmentBase64) {
         "",
         wrapBase64(utf8ToBase64(html)),
         `--${boundary}`,
-        `Content-Type: application/pdf; name="${attachmentName}"`,
+        `Content-Type: ${attachment.contentType}; name="${attachment.name}"`,
         "Content-Transfer-Encoding: base64",
-        `Content-Disposition: attachment; filename="${attachmentName}"`,
+        `Content-Disposition: attachment; filename="${attachment.name}"`,
         "",
-        wrapBase64(attachmentBase64),
+        wrapBase64(attachment.base64),
         `--${boundary}--`,
         "",
     ].join("\r\n");
@@ -978,12 +1512,12 @@ async function downloadEml() {
         return;
     }
     await runLoading("pdf", async () => {
-        const { blob, fileName, invoiceNo } = await createInvoicePdf(details);
+        const { blob, fileName, contentType, invoiceNo } = await createInvoiceFile(details, state.format);
         const html = "<html><body>Sehr geehrte Damen und Herren,<br/><br/>im Anhang finden Sie die Rechnung "
             + `${escapeHtml(invoiceNo)} zu Ihrer Bestellung ${escapeHtml(String(details.order.no ?? ""))}.`
             + "<br/><br/>Mit freundlichen Grüßen</body></html>";
-        const eml = buildEml(to, `Rechnung ${invoiceNo}`, html, fileName, await blobToBase64(blob));
-        (0, tableExport_1.downloadBlob)(new Blob([eml], { type: "message/rfc822" }), fileName.replace(/\.pdf$/, ".eml"));
+        const eml = buildEml(to, `Rechnung ${invoiceNo}`, html, { name: fileName, contentType, base64: await blobToBase64(blob) });
+        (0, tableExport_1.downloadBlob)(new Blob([eml], { type: "message/rfc822" }), fileName.replace(/\.(pdf|xml)$/, ".eml"));
     });
 }
 // ---------------------------------------------------------------------------
@@ -1010,6 +1544,9 @@ const styles = `
   .ipo-totals strong { font-variant-numeric: tabular-nums; }
   .ipo-actions { display: flex; justify-content: flex-end; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .ipo-email { flex: 0 1 380px; }
+  .ipo-einvoice { margin-top: 14px; padding: 10px 12px; border: 1px solid #dee2e6; border-radius: 6px; background: #f8f9fa; }
+  .ipo-einvoice-title { font-weight: 600; margin-bottom: 8px; }
+  .ipo-hint { margin-top: 8px; font-size: 0.85em; color: #6c4a00; }
   .ipo-muted { color: #adb5bd; font-style: italic; }
 </style>`;
 function escapeHtml(value) {
@@ -1079,16 +1616,53 @@ function renderPreview() {
         <div>MwSt. <strong>${money(sum.vat)}</strong></div>
         <div>Gesamt <strong>${money(sum.gross)}</strong></div>
       </div>
+      ${renderEInvoiceOptions(details)}
       <div class="ipo-actions">
+        <div class="ipo-field">
+          <label>Format</label>
+          <select class="form-control" data-ipo="format">
+            ${FORMATS.map((f) => option(f.value, f.label, f.value === state.format)).join("")}
+          </select>
+        </div>
         <div class="ipo-field ipo-email">
           <label>Empfänger der E-Mail</label>
           <input type="email" class="form-control" list="ipo-mailboxes" data-ipo="emailTo" value="${escapeHtml(state.emailTo)}" placeholder="postfach@….emailinbound.service.d-velop.cloud">
           <datalist id="ipo-mailboxes">${state.mailboxes.map((m) => `<option value="${escapeHtml(m)}"></option>`).join("")}</datalist>
         </div>
         <button type="button" class="btn btn-outline-primary" data-ipo="downloadEml"${state.loading ? " disabled" : ""} title="E-Mail-Entwurf mit der Rechnung als Anhang, z. B. an den Rechnungsleser">Als E-Mail (.eml) herunterladen</button>
-        <button type="button" class="btn btn-primary" data-ipo="download"${state.loading ? " disabled" : ""}>Rechnung als PDF herunterladen</button>
+        <button type="button" class="btn btn-primary" data-ipo="download"${state.loading ? " disabled" : ""}>Rechnung herunterladen</button>
       </div>
     </div>`;
+}
+// Felder und Hinweise zur E-Rechnung - nur bei ZUGFeRD/XRechnung.
+function renderEInvoiceOptions(details) {
+    if (state.format === "pdf")
+        return "";
+    const profile = state.format;
+    const field = (key, label, type = "text", hint = "") => `
+        <div class="ipo-field">
+          <label>${escapeHtml(label)}</label>
+          <input type="${type}" class="form-control" data-ipo-einv="${key}" value="${escapeHtml(state.eInvoice[key])}"${hint ? ` placeholder="${escapeHtml(hint)}"` : ""}>
+        </div>`;
+    return `
+    <div class="ipo-einvoice">
+      <div class="ipo-einvoice-title">Angaben für die E-Rechnung</div>
+      <div class="ipo-grid">
+        ${field("iban", "IBAN des Lieferanten", "text", TEST_IBAN)}
+        ${field("buyerReference", profile === "xrechnung" ? "Käuferreferenz / Leitweg-ID" : "Käuferreferenz")}
+        ${field("sellerEmail", "E-Mail des Lieferanten", "email")}
+        ${field("sellerPhone", "Telefon des Lieferanten", "tel")}
+        ${field("buyerEmail", "E-Mail des Käufers", "email")}
+      </div>
+      <div class="ipo-hint" data-ipo="einvHint">${eInvoiceHintHtml(details, profile)}</div>
+    </div>`;
+}
+function eInvoiceHintHtml(details, profile) {
+    const missing = (0, eInvoice_1.missingEInvoiceFields)(buildEInvoiceData(details, "0", new Date()), profile);
+    return (missing.length
+        ? `<strong>Es fehlen Pflichtangaben:</strong> ${escapeHtml(missing.join(", "))}.`
+        : "Pflichtangaben vollständig.")
+        + " Die USt-IdNr. des Lieferanten ist noch nicht enthalten – ein Validator meldet dafür die Regel BR-S-02.";
 }
 function renderContent() {
     const loadingText = {
@@ -1096,7 +1670,7 @@ function renderContent() {
         companies: "Firmen werden geladen…",
         orders: "Bestellungen werden geladen…",
         order: "Bestellung wird geladen…",
-        pdf: "PDF wird erzeugt…",
+        pdf: "Rechnung wird erzeugt…",
     };
     const busy = !!state.loading;
     return `
@@ -1179,7 +1753,22 @@ function bindEvents(root) {
         render();
     });
     el("download")?.addEventListener("click", () => {
-        void downloadPdf();
+        void downloadInvoice();
+    });
+    el("format")?.addEventListener("change", (e) => {
+        state.format = e.target.value;
+        render();
+    });
+    // E-Rechnungs-Felder: nur den Hinweis auf fehlende Pflichtangaben
+    // austauschen, damit Fokus/Cursor erhalten bleiben.
+    root.querySelectorAll("[data-ipo-einv]").forEach((input) => {
+        const key = input.getAttribute("data-ipo-einv");
+        input.addEventListener("input", () => {
+            state.eInvoice[key] = input.value;
+            const hint = el("einvHint");
+            if (hint && state.details && state.format !== "pdf")
+                hint.innerHTML = eInvoiceHintHtml(state.details, state.format);
+        });
     });
     el("emailTo")?.addEventListener("input", (e) => {
         state.emailTo = e.target.value;

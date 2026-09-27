@@ -2498,6 +2498,7 @@ const webindexDesignerForm_json_1 = __importDefault(__webpack_require__(/*! ../d
 const gutschriftenVerschieben_js_raw_1 = __importDefault(__webpack_require__(/*! ../../dist/scripts/gutschriftenVerschieben.js?raw */ "./dist/scripts/gutschriftenVerschieben.js?raw"));
 const preExport_js_raw_1 = __importDefault(__webpack_require__(/*! ../../dist/scripts/preExport.js?raw */ "./dist/scripts/preExport.js?raw"));
 const duplicateDetection_js_raw_1 = __importDefault(__webpack_require__(/*! ../../dist/scripts/duplicateDetection.js?raw */ "./dist/scripts/duplicateDetection.js?raw"));
+const angebotMitAuftragVerknuepfen_js_raw_1 = __importDefault(__webpack_require__(/*! ../../dist/scripts/angebotMitAuftragVerknuepfen.js?raw */ "./dist/scripts/angebotMitAuftragVerknuepfen.js?raw"));
 const Rechnungsleser_Gutschriften_verschieben_v1_bpmn_raw_1 = __importDefault(__webpack_require__(/*! ../data/Rechnungsleser Gutschriften verschieben_v1.bpmn?raw */ "./src/data/Rechnungsleser Gutschriften verschieben_v1.bpmn?raw"));
 const processComponents_1 = __webpack_require__(/*! ../../../../helper/processstudio/processComponents */ "../../helper/processstudio/processComponents.ts");
 const d3EndpointService_1 = __webpack_require__(/*! ../../../../helper/classcon-documentreader/d3EndpointService */ "../../helper/classcon-documentreader/d3EndpointService.ts");
@@ -2554,7 +2555,7 @@ const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-do
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 25;
+const VERSION_COUNTER = 26;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -2585,6 +2586,19 @@ const CREDIT_MEMO_VARIABLES = [
     { key: "categoryCreditMemoGUID", value: "52a84dbc-31bf-4351-9c16-4852dc2e816d", encrypted: false },
     { key: "fieldDocumentTypeGUID", value: "717f4480-f16c-4838-96a3-f69a01eb41f1", encrypted: false },
     { key: "fieldDocumentTypeValueMatch", value: "CreditAdvice", encrypted: false },
+];
+// Aktion "Angebot mit Auftrag verknüpfen" (src/scripts/angebotMitAuftragVerknuepfen.ts,
+// ehemals projects/LinkQuoteWithOrder) - wird im BPMN eingebunden.
+const LINK_QUOTE_SCRIPT_NAME = "Angebot mit Auftrag verknüpfen";
+// Eingabeparameter der Aktion - muss zu DOC_ID_INPUT im Skript passen.
+const LINK_QUOTE_INPUT_DOC_ID = "docId";
+// Werte, die beim Neuanlegen des Skripts hinterlegt werden (aus
+// projects/LinkQuoteWithOrder übernommen).
+const LINK_QUOTE_VARIABLES = [
+    { key: "dmsCategoryDebAngeboteGUID", value: "f97cacec-54a9-4cdb-9111-9d02b1bd06e4", encrypted: false },
+    { key: "dmsFieldBelegNrGUID", value: "d73f3204-7e60-49a8-8586-1d9fe00061e1", encrypted: false },
+    { key: "dmsFieldAngebotsNrnGUID", value: "a5de04a2-132d-436f-b328-4d1d9fc19aef", encrypted: false },
+    { key: "dmsFieldAuftragsNrnGUID", value: "13497c25-d5ac-455c-9084-2c85c9ef50b4", encrypted: false },
 ];
 const API_KEY_LABEL = "Onboarding Gevis ECM Document Reader";
 const MAILBOXES = [
@@ -3169,6 +3183,57 @@ async function findSourceMapping(apiKey) {
 // withApiKey: das Skript ruft selbst APIs auf und bekommt beim NEUANLEGEN den
 // API-Key als verschlüsselte customerVariable "apiKey" (ein vorhandener Key
 // wird nie überschrieben oder geleert).
+// Schritt: Skript als Process-Studio-Aktion mit dem Eingabeparameter
+// inputDocId anlegen bzw. aktualisieren. customerVariables (API-Key +
+// variables) NUR bei einem in diesem Aufruf neu angelegten Skript - ein
+// vorhandener Key und hinterlegte Werte werden nie überschrieben oder geleert.
+function actionScriptStep(options) {
+    const { id, title, scriptName, content, actionDescription, inputDocId, variables, variablesText } = options;
+    return {
+        id,
+        title,
+        description: `„${scriptName}“ als Aktion mit Eingabeparameter „${inputDocId}“ - beim Anlegen werden ${variablesText} hinterlegt, bei einem vorhandenen Skript nur Code und Aktion aktualisiert; hinterlegte Werte bleiben unverändert.`,
+        async check(apiKey) {
+            return (await findScriptIdByName(apiKey, scriptName)) ? exists("Vorhanden - Code und Aktion werden aktualisiert.") : missing("Skript fehlt.");
+        },
+        async run(apiKey) {
+            let scriptId = await findScriptIdByName(apiKey, scriptName);
+            const createdNow = !scriptId;
+            if (!scriptId) {
+                scriptId = (await (0, createScript_1.createScript)(BASE_URI, apiKey, scriptName)).body.id;
+                if (!scriptId) {
+                    throw new Error(`„${scriptName}“ konnte nicht angelegt werden (keine Id).`);
+                }
+            }
+            const versionId = (await (0, getScriptVersion_1.getScriptVersion)(BASE_URI, apiKey, scriptId)).body[0]?.id;
+            if (!versionId) {
+                throw new Error(`Für „${scriptName}“ wurde keine Version gefunden.`);
+            }
+            const body = {
+                content,
+                actionEnabled: true,
+                action: {
+                    display_name: { de: scriptName },
+                    description: { de: actionDescription },
+                    volatile: true,
+                    execution_mode: "Synchron",
+                    input_properties: [
+                        { id: inputDocId, type: "String", title: { de: "Dokument-ID" }, required: true },
+                    ],
+                    output_properties: [],
+                },
+            };
+            if (createdNow) {
+                body.customerVariables = [
+                    { key: "apiKey", value: apiKey, encrypted: true },
+                    ...variables,
+                ];
+            }
+            await (0, patchScript_1.patchScript)(BASE_URI, apiKey, scriptId, versionId, body);
+            return createdNow ? "Skript als Aktion angelegt." : "Code und Aktion aktualisiert.";
+        },
+    };
+}
 function hookScriptStep(options) {
     const { id, scriptName, content, description, withApiKey } = options;
     return {
@@ -3492,53 +3557,26 @@ const steps = [
             return `Quell-Mapping aktualisiert (${updated} geändert, ${added} ergänzt, ${items.length - updated - added} weitere beibehalten).`;
         },
     },
-    {
+    actionScriptStep({
         id: "creditMemoScript",
         title: "Skript „Gutschriften verschieben“",
-        description: `„${CREDIT_MEMO_SCRIPT_NAME}“ als Aktion mit Eingabeparameter „${CREDIT_MEMO_INPUT_DOC_ID}“ - beim Anlegen werden API-Key und Kategorien hinterlegt, bei einem vorhandenen Skript nur Code und Aktion aktualisiert; hinterlegte Werte bleiben unverändert.`,
-        async check(apiKey) {
-            return (await findCreditMemoScriptId(apiKey)) ? exists("Vorhanden - Code und Aktion werden aktualisiert.") : missing("Skript fehlt.");
-        },
-        async run(apiKey) {
-            let scriptId = await findCreditMemoScriptId(apiKey);
-            const createdNow = !scriptId;
-            if (!scriptId) {
-                scriptId = (await (0, createScript_1.createScript)(BASE_URI, apiKey, CREDIT_MEMO_SCRIPT_NAME)).body.id;
-                if (!scriptId) {
-                    throw new Error(`„${CREDIT_MEMO_SCRIPT_NAME}“ konnte nicht angelegt werden (keine Id).`);
-                }
-            }
-            const versionId = (await (0, getScriptVersion_1.getScriptVersion)(BASE_URI, apiKey, scriptId)).body[0]?.id;
-            if (!versionId) {
-                throw new Error(`Für „${CREDIT_MEMO_SCRIPT_NAME}“ wurde keine Version gefunden.`);
-            }
-            const body = {
-                content: gutschriftenVerschieben_js_raw_1.default,
-                actionEnabled: true,
-                action: {
-                    display_name: { de: CREDIT_MEMO_SCRIPT_NAME },
-                    description: { de: "Verschiebt eine Gutschrift des Rechnungslesers in die Gutschrift-Kategorie bzw. kennzeichnet das Dokument als Rechnung." },
-                    volatile: true,
-                    execution_mode: "Synchron",
-                    input_properties: [
-                        { id: CREDIT_MEMO_INPUT_DOC_ID, type: "String", title: { de: "Dokument-ID" }, required: true },
-                    ],
-                    output_properties: [],
-                },
-            };
-            // customerVariables (u.a. der verschlüsselte API-Key) NUR bei einem in
-            // diesem Aufruf neu angelegten Skript - ein vorhandener Key wird nie
-            // überschrieben oder geleert.
-            if (createdNow) {
-                body.customerVariables = [
-                    { key: "apiKey", value: apiKey, encrypted: true },
-                    ...CREDIT_MEMO_VARIABLES,
-                ];
-            }
-            await (0, patchScript_1.patchScript)(BASE_URI, apiKey, scriptId, versionId, body);
-            return createdNow ? "Skript als Aktion angelegt." : "Code und Aktion aktualisiert.";
-        },
-    },
+        scriptName: CREDIT_MEMO_SCRIPT_NAME,
+        content: gutschriftenVerschieben_js_raw_1.default,
+        actionDescription: "Verschiebt eine Gutschrift des Rechnungslesers in die Gutschrift-Kategorie bzw. kennzeichnet das Dokument als Rechnung.",
+        inputDocId: CREDIT_MEMO_INPUT_DOC_ID,
+        variables: CREDIT_MEMO_VARIABLES,
+        variablesText: "API-Key und Kategorien",
+    }),
+    actionScriptStep({
+        id: "linkQuoteScript",
+        title: `Skript „${LINK_QUOTE_SCRIPT_NAME}“`,
+        scriptName: LINK_QUOTE_SCRIPT_NAME,
+        content: angebotMitAuftragVerknuepfen_js_raw_1.default,
+        actionDescription: "Trägt die Belegnummer eines Auftrags bei den Angeboten aus seinen Angebotsnummern als Auftragsnummer ein.",
+        inputDocId: LINK_QUOTE_INPUT_DOC_ID,
+        variables: LINK_QUOTE_VARIABLES,
+        variablesText: "API-Key, Kategorie und Eigenschaften",
+    }),
     hookScriptStep({
         id: "preExportScript",
         scriptName: PRE_EXPORT_SCRIPT_NAME,
@@ -4729,6 +4767,16 @@ window.formInit = function (form, data) {
     });
 };
 
+
+/***/ },
+
+/***/ "./dist/scripts/angebotMitAuftragVerknuepfen.js?raw"
+/*!**********************************************************!*\
+  !*** ./dist/scripts/angebotMitAuftragVerknuepfen.js?raw ***!
+  \**********************************************************/
+(module) {
+
+module.exports = "/******/ (() => { // webpackBootstrap\n/******/ \t\"use strict\";\n/******/ \tvar __webpack_modules__ = ({\n\n/***/ \"../../helper/dms/getDocumentsWithSourcemapping.ts\"\n/*!*********************************************************!*\\\n  !*** ../../helper/dms/getDocumentsWithSourcemapping.ts ***!\n  \\*********************************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.getDocumentsWithSourcemapping = getDocumentsWithSourcemapping;\nconst performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ \"../../helper/performHttpRequest/performHttpRequest.ts\");\n/**\n * Retrieves documents with sourcemapping from a specified repository.\n *\n * @template T - The type of the response data.\n * @param baseUri - The base URI of the DMS API.\n * @param token - The authorization token for API access.\n * @param repositoryId - The ID of the repository to query.\n * @param sourcemapping - The source mapping identifier to filter documents.\n * @param searchParameterProperties - Optional. An array of property IDs to include in the search filter.\n * @param searchParameterCategories - Optional. An array of category IDs to include in the search filter.\n * @param pageSize - Optional. The number of results per page. Defaults to 25. Maximum is 1000.\n * @param nextLink - Optional. The next link for pagination.\n * @returns A promise that resolves to an `ApiResponse` containing the requested documents.\n */\nasync function getDocumentsWithSourcemapping(baseUri, token, repositoryId, sourcemapping, searchParameterProperties, searchParameterCategories, pageSize = 25, nextLink = null) {\n    let finalUrl;\n    if (nextLink) {\n        finalUrl = `${baseUri}${nextLink}`;\n    }\n    else {\n        // Build new request with sourcemapping\n        const url = new URL(`${baseUri}/dms/r/${repositoryId}/srm/`);\n        const params = new URLSearchParams();\n        if (sourcemapping) {\n            params.set(\"sourceId\", sourcemapping);\n        }\n        if (searchParameterProperties) {\n            params.set(\"sourceproperties\", JSON.stringify(searchParameterProperties));\n        }\n        if (searchParameterCategories) {\n            params.set(\"sourcecategories\", JSON.stringify(searchParameterCategories));\n        }\n        if (pageSize) {\n            params.set(\"pageSize\", pageSize.toString());\n        }\n        url.search = params.toString();\n        finalUrl = url.toString();\n    }\n    const headers = {\n        \"Authorization\": `Bearer ${token}`,\n        \"Accept\": \"application/json\",\n        \"Content-Type\": \"application/json\",\n    };\n    const options = {\n        method: \"GET\",\n        headers\n    };\n    return await (0, performHttpRequest_1.performHttpRequest)(finalUrl.toString(), options);\n}\n\n\n/***/ },\n\n/***/ \"../../helper/dms/getRepositories.ts\"\n/*!*******************************************!*\\\n  !*** ../../helper/dms/getRepositories.ts ***!\n  \\*******************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.getRepositories = getRepositories;\nconst performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ \"../../helper/performHttpRequest/performHttpRequest.ts\");\nasync function getRepositories(baseUri, token) {\n    const url = `${baseUri}/dms/r`;\n    const headers = {\n        \"Authorization\": `Bearer ${token}`,\n        \"Accept\": \"application/json\",\n        \"Content-Type\": \"application/json\",\n    };\n    const options = {\n        method: \"GET\",\n        headers,\n    };\n    return await (0, performHttpRequest_1.performHttpRequest)(url, options);\n}\n\n\n/***/ },\n\n/***/ \"../../helper/dms/getSpecificDocument.ts\"\n/*!***********************************************!*\\\n  !*** ../../helper/dms/getSpecificDocument.ts ***!\n  \\***********************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.getSpecificDocument = getSpecificDocument;\nconst performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ \"../../helper/performHttpRequest/performHttpRequest.ts\");\n/**\n * Retrieves a specific document from the DMS (Document Management System) using the provided parameters.\n *\n * @param baseUri - The base URI of the DMS API.\n * @param token - The authorization token to access the DMS API.\n * @param repositoryId - The ID of the repository where the document is stored.\n * @param documentId - The ID of the specific document to retrieve.\n * @returns A promise that resolves to an `ApiResponse` containing the `GetSpecificDocument` data.\n *\n * @throws Will throw an error if the HTTP request fails or the response is invalid.\n */\nasync function getSpecificDocument(baseUri, token, repositoryId, documentId) {\n    const url = `${baseUri}/dms/r/${repositoryId}/o2/${documentId}`;\n    const headers = {\n        \"Authorization\": `Bearer ${token}`,\n        \"Accept\": \"application/json\",\n        \"Content-Type\": \"application/json\",\n    };\n    const options = {\n        method: \"GET\",\n        headers\n    };\n    return await (0, performHttpRequest_1.performHttpRequest)(url, options);\n}\n\n\n/***/ },\n\n/***/ \"../../helper/dms/updateDocument.ts\"\n/*!******************************************!*\\\n  !*** ../../helper/dms/updateDocument.ts ***!\n  \\******************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.updateDocument = updateDocument;\nconst performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ \"../../helper/performHttpRequest/performHttpRequest.ts\");\nasync function updateDocument(baseUri, token, repositoryId, documentId, sourceCategory, sourceProperties) {\n    const url = `${baseUri}/dms/r/${repositoryId}/o2m/${documentId}`;\n    const headers = {\n        Authorization: `Bearer ${token}`,\n        Accept: \"application/json\",\n        \"Content-Type\": \"application/json\",\n    };\n    const body = {\n        sourceCategory: sourceCategory,\n        sourceId: `/dms/r/${repositoryId}/source`,\n        sourceProperties: sourceProperties,\n    };\n    const options = {\n        method: \"PUT\",\n        headers,\n        body: JSON.stringify(body),\n    };\n    return await (0, performHttpRequest_1.performHttpRequest)(url, options);\n}\n\n\n/***/ },\n\n/***/ \"../../helper/performHttpRequest/performHttpRequest.ts\"\n/*!*************************************************************!*\\\n  !*** ../../helper/performHttpRequest/performHttpRequest.ts ***!\n  \\*************************************************************/\n(__unused_webpack_module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.performHttpRequest = performHttpRequest;\nconst logger_1 = __webpack_require__(/*! ../utils/logger */ \"../../helper/utils/logger.ts\");\n/**\n * Performs an HTTP request and returns a structured response.\n*\n* @template T - The expected type of the response body.\n* @param {string} url - The URL to which the request is sent.\n* @param {RequestInit} options - The options for the HTTP request, such as method, headers, and body.\n* @returns {Promise<ApiResponse<T>>} A promise that resolves to an `ApiResponse` object containing the response details.\n* @throws {Error} Throws an error if the HTTP response status is not OK (status code outside the range 200-299).\n*\n* The function attempts to parse the response body based on the `Content-Type` header:\n* - If the `Content-Type` includes \"application/json\", it parses the body as JSON.\n* - Otherwise, it parses the body as plain text.\n*\n* If the response is not OK, the function throws an error with the status code and error message.\n*/\nconst logger = (0, logger_1.getLogger)();\nasync function performHttpRequest(url, options) {\n    let body = {};\n    let errorMessage = \"\";\n    let response;\n    logger.debug(`[Request] ${options.method} ${url} | Headers: ${JSON.stringify(options.headers)} | Body: ${!(options.body instanceof Uint8Array) && options.body !== undefined\n        ? options.body\n        : \"[Binary body omitted]\"}`);\n    try {\n        response = await fetch(url, options);\n    }\n    catch (err) {\n        throw new Error(`Network error during fetch: ${err.message}`);\n    }\n    const contentType = response.headers.get(\"content-type\") || \"\";\n    const parseBody = async () => {\n        try {\n            if (contentType.includes(\"application/json\") || contentType.includes('application/hal+json')) {\n                return await response.json();\n            }\n            else if (contentType.includes(\"application/octet-stream\") ||\n                contentType.includes(\"application/pdf\")) {\n                const arrayBuffer = await response.arrayBuffer();\n                return new Uint8Array(arrayBuffer);\n            }\n            else {\n                return await response.text();\n            }\n        }\n        catch (e) {\n            return undefined;\n        }\n    };\n    if (response.ok) {\n        const result = await parseBody();\n        if (result !== undefined) {\n            body = result;\n        }\n    }\n    else {\n        const errorBody = await parseBody();\n        errorMessage =\n            typeof errorBody === \"string\" ? errorBody : JSON.stringify(errorBody);\n        throw new Error(`HTTP error! status: ${response.status}, message: ${errorMessage}`);\n    }\n    return {\n        status: response.status,\n        statusText: response.statusText,\n        body: body,\n        bodyUsed: response.bodyUsed,\n        headers: response.headers,\n        ok: response.ok,\n        redirected: response.redirected,\n        type: response.type,\n        url: response.url,\n    };\n}\n\n\n/***/ },\n\n/***/ \"../../helper/utils/logger.ts\"\n/*!************************************!*\\\n  !*** ../../helper/utils/logger.ts ***!\n  \\************************************/\n(__unused_webpack_module, exports) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.Logger = exports.LogLevel = void 0;\nexports.initLogger = initLogger;\nexports.getLogger = getLogger;\nvar LogLevel;\n(function (LogLevel) {\n    LogLevel[LogLevel[\"DEBUG\"] = 0] = \"DEBUG\";\n    LogLevel[LogLevel[\"INFO\"] = 1] = \"INFO\";\n    LogLevel[LogLevel[\"WARN\"] = 2] = \"WARN\";\n    LogLevel[LogLevel[\"ERROR\"] = 3] = \"ERROR\";\n})(LogLevel || (exports.LogLevel = LogLevel = {}));\nclass Logger {\n    constructor(options = {}) {\n        this.level = options.level ?? LogLevel.INFO;\n        this.showTimestamp = options.showTimestamp ?? true;\n    }\n    formatMessage(level, message) {\n        const paddedLevel = level.toUpperCase().padEnd(5, ' ');\n        const timestamp = this.showTimestamp\n            ? `[${new Date().toISOString()}] `\n            : \"\";\n        return `${timestamp}${paddedLevel}: ${message}`;\n    }\n    debug(message, ...args) {\n        if (this.level <= LogLevel.DEBUG) {\n            console.debug(this.formatMessage(\"debug\", message), ...args);\n        }\n    }\n    info(message, ...args) {\n        if (this.level <= LogLevel.INFO) {\n            console.info(this.formatMessage(\"info\", message), ...args);\n        }\n    }\n    warn(message, ...args) {\n        if (this.level <= LogLevel.WARN) {\n            console.warn(this.formatMessage(\"warn\", message), ...args);\n        }\n    }\n    error(message, ...args) {\n        if (this.level <= LogLevel.ERROR) {\n            console.error(this.formatMessage(\"error\", message), ...args);\n        }\n    }\n    setLevel(newLevel) {\n        this.level = newLevel;\n    }\n}\nexports.Logger = Logger;\nlet loggerInstance;\nfunction initLogger(level = LogLevel.INFO, showTimestamp = true) {\n    if (!loggerInstance) {\n        loggerInstance = new Logger({ level, showTimestamp });\n    }\n    return loggerInstance;\n}\nfunction getLogger() {\n    // Fallback: falls noch niemand initLogger() aufgerufen hat\n    if (!loggerInstance) {\n        loggerInstance = new Logger({ level: LogLevel.DEBUG, showTimestamp: true });\n    }\n    return loggerInstance;\n}\n\n\n/***/ },\n\n/***/ \"./src/scripts/angebotMitAuftragVerknuepfen.ts\"\n/*!*****************************************************!*\\\n  !*** ./src/scripts/angebotMitAuftragVerknuepfen.ts ***!\n  \\*****************************************************/\n(module, exports, __webpack_require__) {\n\n\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nconst getRepositories_1 = __webpack_require__(/*! ../../../../helper/dms/getRepositories */ \"../../helper/dms/getRepositories.ts\");\nconst getSpecificDocument_1 = __webpack_require__(/*! ../../../../helper/dms/getSpecificDocument */ \"../../helper/dms/getSpecificDocument.ts\");\nconst getDocumentsWithSourcemapping_1 = __webpack_require__(/*! ../../../../helper/dms/getDocumentsWithSourcemapping */ \"../../helper/dms/getDocumentsWithSourcemapping.ts\");\nconst updateDocument_1 = __webpack_require__(/*! ../../../../helper/dms/updateDocument */ \"../../helper/dms/updateDocument.ts\");\nconst logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ \"../../helper/utils/logger.ts\");\n/**\n * \"Angebot mit Auftrag verknüpfen\" (ehemals projects/LinkQuoteWithOrder, dort\n * per DMS-Webhook \"postimport\"/\"postupdateproperties\" aufgerufen): liest beim\n * Auftrag (Auftragsbestätigung) mit der übergebenen DocId die Belegnummer und\n * die Angebotsnummern, sucht zu jeder Angebotsnummer das Angebot (Belegnummer\n * = Angebotsnummer in der Kategorie dmsCategoryDebAngeboteGUID) und trägt dort\n * die Auftragsnummer in das Mehrfachfeld dmsFieldAuftragsNrnGUID ein\n * (vorhandene Auftragsnummern bleiben, doppelte werden nicht ergänzt).\n *\n * Wird vom Onboarding-Formular (src/forms/form.ts) als Process-Studio-Aktion\n * mit dem Eingabeparameter \"docId\" angelegt; der Code wird beim Build als Text\n * ins Formular-Bundle übernommen (siehe build/webpack.form.config.js). Aus\n * Kompatibilität wird auch der Body eines DMS-Webhooks ({ doc: { id,\n * properties } }) verstanden.\n *\n * customerVariables (werden vom Formular nur beim Neuanlegen gesetzt):\n * apiKey, dmsCategoryDebAngeboteGUID, dmsFieldBelegNrGUID,\n * dmsFieldAngebotsNrnGUID, dmsFieldAuftragsNrnGUID.\n */\nconst logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);\n/** Name des Eingabeparameters der Aktion. */\nconst DOC_ID_INPUT = \"docId\";\nmodule.exports = async (req, res) => {\n    try {\n        const body = parseBody(req);\n        const documentId = body?.[DOC_ID_INPUT] ?? body?.DocId ?? body?.doc?.id;\n        if (!documentId) {\n            respond(res, 400, { success: false, message: `Eingabeparameter \"${DOC_ID_INPUT}\" fehlt.` });\n            return;\n        }\n        const settings = {\n            baseUri: req.get(\"x-dv-baseuri\"),\n            apiKey: req.var(\"apiKey\"),\n            categoryQuotes: req.var(\"dmsCategoryDebAngeboteGUID\"),\n            fieldDocumentNo: req.var(\"dmsFieldBelegNrGUID\"),\n            fieldQuoteNos: req.var(\"dmsFieldAngebotsNrnGUID\"),\n            fieldOrderNos: req.var(\"dmsFieldAuftragsNrnGUID\"),\n        };\n        const repositoryId = (await (0, getRepositories_1.getRepositories)(settings.baseUri, settings.apiKey)).body.repositories[0]?.id;\n        if (!repositoryId) {\n            throw new Error(\"Kein DMS-Repository gefunden.\");\n        }\n        // Webhook-Body bringt die Eigenschaften mit, sonst das Dokument laden.\n        const { orderNo, quoteNos } = Array.isArray(body?.doc?.properties)\n            ? valuesFromWebhook(body.doc.properties, settings)\n            : await valuesFromDocument(settings, repositoryId, documentId);\n        logger.info(`Auftrag ${documentId}: Belegnummer \"${orderNo}\", Angebotsnummern ${JSON.stringify(quoteNos)}`);\n        if (!orderNo) {\n            respond(res, 200, { success: true, linked: [], message: `Auftrag ${documentId} hat keine Belegnummer - nichts zu verknüpfen.` });\n            return;\n        }\n        if (quoteNos.length === 0) {\n            respond(res, 200, { success: true, linked: [], message: `Auftrag ${documentId} hat keine Angebotsnummer - nichts zu verknüpfen.` });\n            return;\n        }\n        const linked = [];\n        const notFound = [];\n        for (const quoteNo of quoteNos) {\n            const quoteId = await linkQuote(settings, repositoryId, quoteNo, orderNo);\n            if (quoteId) {\n                linked.push(quoteNo);\n            }\n            else {\n                notFound.push(quoteNo);\n            }\n        }\n        const message = [\n            linked.length ? `Auftrag ${orderNo} mit Angebot(en) ${linked.join(\", \")} verknüpft.` : \"\",\n            notFound.length ? `Angebot(e) ${notFound.join(\", \")} nicht gefunden.` : \"\",\n        ].filter(Boolean).join(\" \");\n        logger.info(message);\n        respond(res, 200, { success: true, linked, notFound, message });\n    }\n    catch (error) {\n        const message = error instanceof Error ? error.message : String(error);\n        logger.error(`Fehler: ${message}`);\n        respond(res, 500, { success: false, message });\n    }\n};\n// Sucht das Angebot mit der Belegnummer quoteNo und ergänzt dort orderNo in\n// den Auftragsnummern. Liefert die Dokument-Id oder undefined, wenn es kein\n// Angebot mit dieser Nummer gibt.\nasync function linkQuote(settings, repositoryId, quoteNo, orderNo) {\n    const result = await (0, getDocumentsWithSourcemapping_1.getDocumentsWithSourcemapping)(settings.baseUri, settings.apiKey, repositoryId, `/dms/r/${repositoryId}/source`, { [settings.fieldDocumentNo]: [quoteNo] }, [settings.categoryQuotes]);\n    const quote = result.body.items?.[0];\n    if (!quote) {\n        return undefined;\n    }\n    const property = quote.sourceProperties.find((p) => p.key === settings.fieldOrderNos);\n    const orderNos = property?.values ? Object.values(property.values).filter(Boolean) : property?.value ? [property.value] : [];\n    if (orderNos.includes(orderNo)) {\n        logger.info(`Angebot ${quoteNo} (${quote.id}) enthält Auftrag ${orderNo} bereits.`);\n        return quote.id;\n    }\n    await (0, updateDocument_1.updateDocument)(settings.baseUri, settings.apiKey, repositoryId, quote.id, settings.categoryQuotes, {\n        properties: [{ key: settings.fieldOrderNos, values: [...orderNos, orderNo] }],\n    });\n    logger.info(`Angebot ${quoteNo} (${quote.id}): Auftrag ${orderNo} ergänzt.`);\n    return quote.id;\n}\nasync function valuesFromDocument(settings, repositoryId, documentId) {\n    const document = (await (0, getSpecificDocument_1.getSpecificDocument)(settings.baseUri, settings.apiKey, repositoryId, documentId)).body;\n    const orderNo = document.objectProperties?.find((p) => p.id === settings.fieldDocumentNo)?.value;\n    const multi = document.multivalueProperties?.find((p) => p.id === settings.fieldQuoteNos);\n    // Angebotsnummern als Mehrfachfeld ({ \"1\": \"...\", ... }) oder notfalls als Einzelfeld.\n    const quoteNos = multi?.values\n        ? Object.values(multi.values)\n        : [document.objectProperties?.find((p) => p.id === settings.fieldQuoteNos)?.value];\n    return { orderNo: clean(orderNo), quoteNos: unique(quoteNos) };\n}\n// Body eines DMS-Webhooks: doc.properties = [{ id, value } | { id, values: [{ value }] }].\nfunction valuesFromWebhook(properties, settings) {\n    const find = (id) => properties.find((p) => p?.id === id);\n    const quoteProperty = find(settings.fieldQuoteNos);\n    const quoteNos = Array.isArray(quoteProperty?.values)\n        ? quoteProperty.values.map((v) => v?.value)\n        : [quoteProperty?.value];\n    return { orderNo: clean(find(settings.fieldDocumentNo)?.value), quoteNos: unique(quoteNos) };\n}\nfunction clean(value) {\n    return value === undefined || value === null ? \"\" : String(value).trim();\n}\nfunction unique(values) {\n    return [...new Set(values.map(clean).filter(Boolean))];\n}\nfunction parseBody(req) {\n    try {\n        return req.json?.() ?? {};\n    }\n    catch {\n        return {};\n    }\n}\nfunction respond(res, status, body) {\n    res.status(status).set(\"Content-Type\", \"application/json\").send(JSON.stringify(body));\n}\n\n\n/***/ }\n\n/******/ \t});\n/************************************************************************/\n/******/ \t// The module cache\n/******/ \tconst __webpack_module_cache__ = {};\n/******/ \t\n/******/ \t// The require function\n/******/ \tfunction __webpack_require__(moduleId) {\n/******/ \t\t// Check if module is in cache\n/******/ \t\tconst cachedModule = __webpack_module_cache__[moduleId];\n/******/ \t\tif (cachedModule !== undefined) {\n/******/ \t\t\treturn cachedModule.exports;\n/******/ \t\t}\n/******/ \t\t// Create a new module (and put it into the cache)\n/******/ \t\tconst module = __webpack_module_cache__[moduleId] = {\n/******/ \t\t\t// no module.id needed\n/******/ \t\t\t// no module.loaded needed\n/******/ \t\t\texports: {}\n/******/ \t\t};\n/******/ \t\n/******/ \t\t// Execute the module function\n/******/ \t\tif (!(moduleId in __webpack_modules__)) {\n/******/ \t\t\tdelete __webpack_module_cache__[moduleId];\n/******/ \t\t\tconst e = new Error(\"Cannot find module '\" + moduleId + \"'\");\n/******/ \t\t\te.code = 'MODULE_NOT_FOUND';\n/******/ \t\t\tthrow e;\n/******/ \t\t}\n/******/ \t\t__webpack_modules__[moduleId](module, module.exports, __webpack_require__);\n/******/ \t\n/******/ \t\t// Return the exports of the module\n/******/ \t\treturn module.exports;\n/******/ \t}\n/******/ \t\n/************************************************************************/\n/******/ \t\n/******/ \t// startup\n/******/ \t// Load entry module and return exports\n/******/ \t// This entry module is referenced by other modules so it can't be inlined\n/******/ \tlet __webpack_exports__ = __webpack_require__(\"./src/scripts/angebotMitAuftragVerknuepfen.ts\");\n/******/ \tmodule.exports = __webpack_exports__;\n/******/ \t\n/******/ })()\n;\n//# sourceMappingURL=angebotMitAuftragVerknuepfen.js.map";
 
 /***/ },
 
