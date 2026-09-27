@@ -236,6 +236,8 @@ const DUPLICATE_FLAG_FIELD = "IsDuplicate";
 const DUPLICATE_IDS_FIELD = "DuplicateDocumentIds";
 module.exports = async (req, res) => {
     const body = parseBody(req);
+    // Diagnose (vorübergehend): Aufbau der Daten, die der Rechnungsleser schickt.
+    logger.info(`Eingang: ${JSON.stringify(body).slice(0, 4000)}`);
     try {
         const vendorNum = attribute(body, VENDOR_FIELD);
         const invoiceNumber = attribute(body, INVOICE_FIELD);
@@ -258,6 +260,8 @@ module.exports = async (req, res) => {
         // protokollieren und die Attribute unverändert zurückgeben.
         logger.error(`Dublettenprüfung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
     }
+    // Diagnose (vorübergehend): was an den Rechnungsleser zurückgeht.
+    logger.info(`Antwort: ${JSON.stringify(body).slice(0, 4000)}`);
     res.status(200).set("Content-Type", "application/json").send(JSON.stringify(body));
 };
 async function findDuplicates(baseUri, apiKey, vendorNum, invoiceNumber, currentDocumentId) {
