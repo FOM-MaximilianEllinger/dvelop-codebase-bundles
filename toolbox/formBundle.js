@@ -5472,6 +5472,23 @@ exports.targetForms = [
         formDefinitionPath: "downloadBatchDocuments/form.json",
     },
     {
+        type: "combined",
+        id: "invoiceFromPurchaseOrder",
+        name: "Rechnung aus Bestellung",
+        description: "Erzeugt aus einer Bestellung in Business Central eine Beispiel-Rechnung als PDF zum Download – z. B. zum Testen des Rechnungslesers.",
+        formId: "b5fe5d8a-13a7-5ff5-81ce-160e029d6621",
+        bundlePath: "invoiceFromPurchaseOrder/formBundle.js",
+        formDefinitionPath: "invoiceFromPurchaseOrder/form.json",
+        scripts: [
+            {
+                name: "Rechnung aus Bestellung",
+                description: "Erzeugt aus einer Bestellung in Business Central eine Beispiel-Rechnung als PDF zum Download – z. B. zum Testen des Rechnungslesers.",
+                bundlePath: "invoiceFromPurchaseOrder/scripts/script.js",
+                customerVariables: [{ "key": "erpTenantId", "label": "Entra-Tenant-ID", "encrypted": false, "description": "Microsoft-Entra-Tenant-ID (GUID) des Business-Central-Mandanten." }, { "key": "clientId", "label": "Client-ID", "encrypted": false, "description": "Anwendungs-ID (Client-ID) der App-Registrierung mit Zugriff auf die Business-Central-API." }, { "key": "clientSecret", "label": "Client-Secret", "encrypted": true, "description": "Geheimer Clientschlüssel der App-Registrierung." }],
+            },
+        ],
+    },
+    {
         type: "form",
         id: "invoiceReaderCleanup",
         name: "Bereinigung Rechnungsleser",
@@ -5590,7 +5607,7 @@ const TOOLBOX_BUNDLE_PATH = "toolbox/formBundle.js";
 // .github/workflows/publish-bundles.yml stempelt bei jeder inhaltlichen
 // Änderung den nächsten Stand (veröffentlichter Stand + 1) ins veröffentlichte
 // Bundle, ohne den Quellcode zu ändern.
-const TOOLBOX_VERSION_COUNTER = 54;
+const TOOLBOX_VERSION_COUNTER = 55;
 // Alle dforms-Aufrufe laufen über die aktuelle Browser-Session: Bei fetch() an
 // dieselbe Origin (window.location.origin) schickt der Browser automatisch das
 // Session-Cookie mit, ein manuell eingegebener API-Key ist dafür nicht mehr nötig.
