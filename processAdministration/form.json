@@ -455,6 +455,46 @@
             },
             "customConditional": "",
             "id": "jobsListe01"
+        },
+        {
+            "label": "Script-Logs Titel",
+            "customClass": "",
+            "tag": "div",
+            "attrs": [],
+            "content": "<h4 style=\"margin-top:24px;\">Script-Logs</h4>",
+            "refreshOnChange": false,
+            "key": "scriptLogsTitle",
+            "type": "htmlelement",
+            "input": false,
+            "tableView": false,
+            "hidden": false,
+            "conditional": {
+                "show": null,
+                "when": null,
+                "eq": ""
+            },
+            "customConditional": "",
+            "id": "scriptLogsTitle01"
+        },
+        {
+            "label": "Script-Logs",
+            "customClass": "",
+            "tag": "div",
+            "attrs": [],
+            "content": "<p>Scripts werden geladen…</p>",
+            "refreshOnChange": false,
+            "key": "scriptLogs",
+            "type": "htmlelement",
+            "input": false,
+            "tableView": false,
+            "hidden": false,
+            "conditional": {
+                "show": null,
+                "when": null,
+                "eq": ""
+            },
+            "customConditional": "",
+            "id": "scriptLogs01"
         }
     ]
 }

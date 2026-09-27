@@ -341,6 +341,82 @@ async function retryProcessInstances(baseUri, token, processKey, version) {
 
 /***/ }),
 
+/***/ "../../helper/scripting/getAllScripts.ts":
+/*!***********************************************!*\
+  !*** ../../helper/scripting/getAllScripts.ts ***!
+  \***********************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getAllScripts = getAllScripts;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+async function getAllScripts(baseUri, token) {
+    const url = `${baseUri}/scripting/script`;
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "GET",
+        headers
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ }),
+
+/***/ "../../helper/scripting/getScriptLogs.ts":
+/*!***********************************************!*\
+  !*** ../../helper/scripting/getScriptLogs.ts ***!
+  \***********************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getScriptExecutions = getScriptExecutions;
+exports.getScriptExecutionLog = getScriptExecutionLog;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+// Letzte Ausführungen eines Scripts (GET /scripting/log/script/<id>). Die
+// Antwort ist ein Objekt mit genau einer Liste (z.B. { filteredLogs: [...] }) -
+// die erste Liste wird zurückgegeben. Ohne Token (leerer String) läuft der
+// Aufruf über die Browser-Session.
+async function getScriptExecutions(baseUri, token, scriptId) {
+    const url = `${baseUri}/scripting/log/script/${encodeURIComponent(scriptId)}`;
+    const response = await (0, performHttpRequest_1.performHttpRequest)(url, {
+        method: "GET",
+        headers: {
+            Accept: "application/json",
+            "Cache-Control": "no-cache",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+    });
+    const body = response.body;
+    if (Array.isArray(body)) {
+        return body;
+    }
+    const list = Object.values(body ?? {}).find((value) => Array.isArray(value));
+    return list ?? [];
+}
+// Log einer einzelnen Ausführung (GET /scripting/log/script/<id>/execution/<executionId>),
+// als Text - je nach Antwort JSON oder Klartext.
+async function getScriptExecutionLog(baseUri, token, scriptId, executionId) {
+    const url = `${baseUri}/scripting/log/script/${encodeURIComponent(scriptId)}/execution/${encodeURIComponent(executionId)}`;
+    return (0, performHttpRequest_1.performHttpRequest)(url, {
+        method: "GET",
+        headers: {
+            Accept: "application/json",
+            "Cache-Control": "no-cache",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+    });
+}
+
+
+/***/ }),
+
 /***/ "../../helper/utils/logger.ts":
 /*!************************************!*\
   !*** ../../helper/utils/logger.ts ***!
@@ -459,6 +535,8 @@ const cancelProcessInstances_1 = __webpack_require__(/*! ../../../../helper/proc
 const migrateProcessInstances_1 = __webpack_require__(/*! ../../../../helper/process/migrateProcessInstances */ "../../helper/process/migrateProcessInstances.ts");
 const retryProcessInstances_1 = __webpack_require__(/*! ../../../../helper/process/retryProcessInstances */ "../../helper/process/retryProcessInstances.ts");
 const deleteProcessVersion_1 = __webpack_require__(/*! ../../../../helper/process/deleteProcessVersion */ "../../helper/process/deleteProcessVersion.ts");
+const getAllScripts_1 = __webpack_require__(/*! ../../../../helper/scripting/getAllScripts */ "../../helper/scripting/getAllScripts.ts");
+const getScriptLogs_1 = __webpack_require__(/*! ../../../../helper/scripting/getScriptLogs */ "../../helper/scripting/getScriptLogs.ts");
 // Lädt SweetAlert2 bei Bedarf nach, analog zu deleteBadgesFromDocumentReaderForm/src/form.ts.
 function loadSweetAlert() {
     return new Promise((resolve) => {
@@ -485,7 +563,7 @@ const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
 // JEDEM Toolbox-Tool-Projekt einheitlich "VERSION_COUNTER" (nicht mehr
 // projektspezifisch benannt) - die Toolbox sucht beim Bump/Auslesen immer nach
 // genau diesem Namen, siehe generateTargetForms.js.
-const VERSION_COUNTER = 24;
+const VERSION_COUNTER = 25;
 // Eigene Aktionen (kein JobType): wirken unabhängig von der gewählten
 // "Version" auf alle Versionen eines Prozesses.
 const CANCEL_ALL_ACTION = "CANCEL_ALL";
@@ -786,6 +864,221 @@ async function reloadJobsList(form) {
         return;
     }
     renderJobsList(form);
+}
+const scriptLogState = {
+    scripts: [],
+    scriptId: "",
+    statusFilter: "",
+    executions: [],
+    loading: false,
+    error: "",
+    expanded: new Set(),
+    // executionId -> geladenes Log (oder Fehlermeldung); "" = wird geladen
+    logs: new Map(),
+};
+function isSuccessStatus(statusCode) {
+    return statusCode !== undefined && statusCode >= 200 && statusCode < 300;
+}
+// Log-Antwort lesbar machen: Text unverändert, JSON eingerückt.
+function formatScriptLog(body) {
+    if (typeof body === "string") {
+        try {
+            return JSON.stringify(JSON.parse(body), null, 2);
+        }
+        catch {
+            return body;
+        }
+    }
+    if (body === undefined || body === null) {
+        return "";
+    }
+    return JSON.stringify(body, null, 2);
+}
+function renderScriptLogRows() {
+    const state = scriptLogState;
+    if (!state.scriptId) {
+        return `<p>Bitte ein Script wählen.</p>`;
+    }
+    if (state.loading) {
+        return `<p>Ausführungen werden geladen…</p>`;
+    }
+    if (state.error) {
+        return `<p style="color:#c0392b;">${escapeHtml(state.error)}</p>`;
+    }
+    const executions = state.executions
+        .filter((e) => state.statusFilter === "" || (state.statusFilter === "ok") === isSuccessStatus(e.statusCode))
+        .sort((a, b) => new Date(b.executionDate ?? 0).getTime() - new Date(a.executionDate ?? 0).getTime());
+    if (executions.length === 0) {
+        return `<p>Keine Ausführungen gefunden.</p>`;
+    }
+    const rows = executions
+        .map((execution) => {
+        const id = execution.executionId ?? "";
+        const open = state.expanded.has(id);
+        const color = isSuccessStatus(execution.statusCode) ? "#27ae60" : "#c0392b";
+        let logRow = "";
+        if (open) {
+            const log = state.logs.get(id);
+            const content = !log || log.text === ""
+                ? "Log wird geladen…"
+                : log.text;
+            logRow = `
+      <tr>
+        <td colspan="5" style="padding:0;">
+          <pre style="margin:0; max-height:400px; overflow:auto; white-space:pre-wrap; word-break:break-word; font-size:12px; padding:8px; background:#f7f7f7;${log?.error ? " color:#c0392b;" : ""}">${escapeHtml(content)}</pre>
+        </td>
+      </tr>`;
+        }
+        return `
+      <tr>
+        <td>${formatJobDate(execution.executionDate)}</td>
+        <td><strong style="color:${color};">${execution.statusCode ?? "-"}</strong></td>
+        <td>${escapeHtml(execution.versionId ?? "-")}</td>
+        <td style="font-family:monospace; font-size:12px;">${escapeHtml(id || "-")}</td>
+        <td style="text-align:right;">${id ? `<button type="button" class="btn btn-sm btn-default" data-script-log-toggle="${escapeHtml(id)}">${open ? "Log ausblenden" : "Log anzeigen"}</button>` : ""}</td>
+      </tr>${logRow}`;
+    })
+        .join("");
+    return `
+    <p style="margin:4px 0;">${executions.length} Ausführung(en)</p>
+    <table class="table table-striped" style="width:100%;">
+      <thead>
+        <tr><th>Ausgeführt</th><th>Status</th><th>Version</th><th>Ausführungs-ID</th><th></th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+function renderScriptLogShell() {
+    const state = scriptLogState;
+    const scriptOptions = [`<option value="">– Script wählen –</option>`]
+        .concat(state.scripts.map((s) => `<option value="${escapeHtml(s.id ?? "")}"${s.id === state.scriptId ? " selected" : ""}>${escapeHtml(s.name ?? s.id ?? "")}</option>`))
+        .join("");
+    const statusOptions = [
+        { value: "", label: "Alle" },
+        { value: "ok", label: "Erfolgreich (2xx)" },
+        { value: "error", label: "Fehler" },
+    ];
+    return `
+    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px;">
+      <select data-script-log="script" class="form-control" style="flex:1 1 300px; width:auto;">${scriptOptions}</select>
+      <select data-script-log="status" class="form-control" style="flex:0 0 180px; width:auto;">
+        ${statusOptions.map((o) => `<option value="${o.value}"${o.value === state.statusFilter ? " selected" : ""}>${o.label}</option>`).join("")}
+      </select>
+      <button type="button" class="btn btn-default" data-script-log="reload">Aktualisieren</button>
+    </div>
+    <div id="scriptLogsBody">${renderScriptLogRows()}</div>`;
+}
+// Tauscht nur die Ausführungsliste aus - die Auswahlfelder bleiben stehen.
+function refreshScriptLogBody(form) {
+    const root = form.getComponent("scriptLogs")?.element;
+    const body = root?.querySelector("#scriptLogsBody");
+    if (body) {
+        body.innerHTML = renderScriptLogRows();
+    }
+}
+async function loadScriptExecutions(form) {
+    const state = scriptLogState;
+    state.executions = [];
+    state.expanded.clear();
+    state.logs.clear();
+    state.error = "";
+    if (!state.scriptId) {
+        refreshScriptLogBody(form);
+        return;
+    }
+    const scriptId = state.scriptId;
+    state.loading = true;
+    refreshScriptLogBody(form);
+    try {
+        const executions = await (0, getScriptLogs_1.getScriptExecutions)(window.location.origin, "", scriptId);
+        if (state.scriptId !== scriptId) {
+            return; // inzwischen anderes Script gewählt
+        }
+        state.executions = executions;
+    }
+    catch (error) {
+        logger.error(`Fehler beim Laden der Script-Ausführungen für "${scriptId}": ${error}`);
+        state.error = `Fehler beim Laden der Ausführungen: ${String(error)}`;
+    }
+    finally {
+        if (state.scriptId === scriptId) {
+            state.loading = false;
+            refreshScriptLogBody(form);
+        }
+    }
+}
+async function toggleScriptLog(form, executionId) {
+    const state = scriptLogState;
+    if (state.expanded.has(executionId)) {
+        state.expanded.delete(executionId);
+        refreshScriptLogBody(form);
+        return;
+    }
+    state.expanded.add(executionId);
+    refreshScriptLogBody(form);
+    if (state.logs.has(executionId)) {
+        return; // bereits geladen oder wird gerade geladen
+    }
+    const scriptId = state.scriptId;
+    state.logs.set(executionId, { text: "" });
+    try {
+        const response = await (0, getScriptLogs_1.getScriptExecutionLog)(window.location.origin, "", scriptId, executionId);
+        state.logs.set(executionId, { text: formatScriptLog(response.body) || "(Log ist leer)" });
+    }
+    catch (error) {
+        logger.error(`Fehler beim Laden des Logs ${executionId}: ${error}`);
+        state.logs.set(executionId, { text: `Fehler beim Laden des Logs: ${String(error)}`, error: true });
+    }
+    if (state.scriptId === scriptId) {
+        refreshScriptLogBody(form);
+    }
+}
+function bindScriptLogEvents(form) {
+    const root = form.getComponent("scriptLogs")?.element;
+    if (!root || root.dataset.eventsBound === "true") {
+        return;
+    }
+    root.dataset.eventsBound = "true";
+    root.addEventListener("change", (event) => {
+        const target = event.target;
+        const field = target?.getAttribute("data-script-log");
+        if (field === "script") {
+            scriptLogState.scriptId = target.value;
+            loadScriptExecutions(form);
+        }
+        else if (field === "status") {
+            scriptLogState.statusFilter = target.value;
+            refreshScriptLogBody(form);
+        }
+    });
+    root.addEventListener("click", (event) => {
+        const target = event.target;
+        if (target?.closest("[data-script-log='reload']")) {
+            loadScriptExecutions(form);
+            return;
+        }
+        const toggle = target?.closest("[data-script-log-toggle]");
+        const executionId = toggle?.getAttribute("data-script-log-toggle");
+        if (executionId) {
+            toggleScriptLog(form, executionId);
+        }
+    });
+}
+async function initScriptLogs(form) {
+    setContent(form, "scriptLogs", "<p>Scripts werden geladen…</p>");
+    try {
+        const response = await (0, getAllScripts_1.getAllScripts)(window.location.origin, "");
+        scriptLogState.scripts = (response.body ?? [])
+            .filter((s) => !!s.id)
+            .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "de"));
+    }
+    catch (error) {
+        logger.error(`Fehler beim Laden der Scripts: ${error}`);
+        setContent(form, "scriptLogs", "<p>Fehler beim Laden der Scripts.</p>");
+        return;
+    }
+    setContent(form, "scriptLogs", renderScriptLogShell());
+    bindScriptLogEvents(form);
 }
 function versionOptions(versions) {
     return versions
@@ -1343,7 +1636,10 @@ window.formInit = async function (form, data) {
         .map((p) => [p.key, p.name ?? p.key]));
     // Jobs-Übersicht (unter https://.../process/jobs) mit Filtern pro Spalte,
     // unabhängig von der gewählten Aktion/Prozess/Version.
+    // Script-Logs parallel laden - unabhängig von der Jobs-Übersicht.
+    const scriptLogsReady = initScriptLogs(form);
     await reloadJobsList(form);
+    await scriptLogsReady;
     // "Version" hängt vom gewählten Prozess ab (kaskadierende Selectbox). Die
     // Versionen kommen nicht mehr aus der Prozess-Liste selbst, sondern werden
     // pro Prozess über dessen versions-Endpunkt nachgeladen.
