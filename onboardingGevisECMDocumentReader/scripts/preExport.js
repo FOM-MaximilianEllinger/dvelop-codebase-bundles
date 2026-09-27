@@ -85,7 +85,7 @@ function getLogger() {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 /**
- * "Rechnungsleser PreExport": wird vom Rechnungsleser vor dem Export
+ * "Rechnungsleser: PreExport": wird vom Rechnungsleser vor dem Export
  * aufgerufen (Extension Point "IR_Business_BeforeExportHook", Typ
  * ScriptingApp, Profil "PreExportScript" - hinterlegt vom Onboarding-Formular).
  * Bekommt die Attribute des Dokuments als JSON und liefert sie verändert

@@ -11,7 +11,7 @@
             "id": "registerkarten01",
             "components": [
                 {
-                    "label": "Prozesse & Jobs",
+                    "label": "Prozesse",
                     "key": "prozesseTab",
                     "components": [
                         {
@@ -448,7 +448,13 @@
                             },
                             "customConditional": "show = !!(data.prozess && ((data.aktion === 'CANCEL' && data.version) || data.aktion === 'CANCEL_ALL' || (data.aktion === 'MIGRATION' && data.version) || data.aktion === 'MIGRATE_ALL' || (data.aktion === 'RETRY' && data.version) || data.aktion === 'RETRY_ALL' || (data.aktion === 'DELETION' && data.version) || data.aktion === 'DELETE_ALL'));",
                             "id": "instanzenAction01"
-                        },
+                        }
+                    ]
+                },
+                {
+                    "label": "Jobs",
+                    "key": "jobsTab",
+                    "components": [
                         {
                             "label": "Jobs",
                             "customClass": "",

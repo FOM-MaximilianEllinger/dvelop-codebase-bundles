@@ -563,7 +563,7 @@ const logger = (0, logger_1.initLogger)(logger_1.LogLevel.DEBUG, true);
 // JEDEM Toolbox-Tool-Projekt einheitlich "VERSION_COUNTER" (nicht mehr
 // projektspezifisch benannt) - die Toolbox sucht beim Bump/Auslesen immer nach
 // genau diesem Namen, siehe generateTargetForms.js.
-const VERSION_COUNTER = 26;
+const VERSION_COUNTER = 27;
 // Eigene Aktionen (kein JobType): wirken unabhängig von der gewählten
 // "Version" auf alle Versionen eines Prozesses.
 const CANCEL_ALL_ACTION = "CANCEL_ALL";
@@ -765,8 +765,19 @@ function renderJobsHeaderCell(label, field) {
 }
 // Baut die vollständige Tabelle (Header + Filterzeile + Zeilen). Wird nur bei
 // einem echten Neuladen der Jobs vom Server aufgerufen.
-function renderJobsTableShell() {
+// Kopfzeile über der Jobs-Tabelle: Stand + "Aktualisieren" (lädt die Jobs neu
+// vom Server, Filter und Sortierung bleiben erhalten).
+let jobsLoadedAt;
+function renderJobsToolbar(status, disabled = false) {
     return `
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+      <span style="color:#6c757d;">${escapeHtml(status)}</span>
+      <button type="button" class="btn btn-default" data-job-reload${disabled ? " disabled" : ""}>Aktualisieren</button>
+    </div>`;
+}
+function renderJobsTableShell() {
+    const status = jobsLoadedAt ? `${allJobs.length} Job(s) · Stand ${jobsLoadedAt.toLocaleTimeString("de-DE")}` : "";
+    return `${renderJobsToolbar(status)}
     <table class="table table-striped" style="width:100%;">
       <thead>
         <tr>
@@ -828,6 +839,10 @@ function bindJobsTableEvents(form) {
     root.addEventListener("input", handleFilterChange);
     root.addEventListener("change", handleFilterChange);
     root.addEventListener("click", (event) => {
+        if (event.target?.closest("[data-job-reload]")) {
+            void reloadJobsList(form);
+            return;
+        }
         const target = event.target?.closest("[data-job-sort]");
         const field = target?.getAttribute("data-job-sort");
         if (!field) {
@@ -854,13 +869,16 @@ function renderJobsList(form) {
 // gesetzten Spaltenfiltern neu. Wird initial sowie nach jeder Aktion
 // aufgerufen, damit die Übersicht aktuell bleibt.
 async function reloadJobsList(form) {
-    setContent(form, "jobsListe", "<p>Jobs werden geladen…</p>");
+    setContent(form, "jobsListe", renderJobsToolbar("Jobs werden geladen…", true));
+    bindJobsTableEvents(form);
     try {
         allJobs = await loadAllJobs();
+        jobsLoadedAt = new Date();
     }
     catch (error) {
         logger.error(`Fehler beim Laden der Jobs: ${error}`);
-        setContent(form, "jobsListe", "<p>Fehler beim Laden der Jobs.</p>");
+        setContent(form, "jobsListe", renderJobsToolbar("Fehler beim Laden der Jobs."));
+        bindJobsTableEvents(form);
         return;
     }
     renderJobsList(form);

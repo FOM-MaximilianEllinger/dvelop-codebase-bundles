@@ -208,7 +208,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const executeSqlQuery_1 = __webpack_require__(/*! ../../../../helper/webindexlayouter/executeSqlQuery */ "../../helper/webindexlayouter/executeSqlQuery.ts");
 const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 /**
- * "Rechnungsleser Dublettenerkennung": wird vom Rechnungsleser nach der
+ * "Rechnungsleser: Dublettenerkennung": wird vom Rechnungsleser nach der
  * Extraktion aufgerufen (Extension Point "IR_Business_PostExtractionScript",
  * Typ ScriptingApp, Profil "PostExtractionScript" - hinterlegt vom
  * Onboarding-Formular). Bekommt die Attribute des Dokuments als JSON und

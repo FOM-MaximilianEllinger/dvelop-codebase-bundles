@@ -2,69 +2,6 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
-/***/ "../../helper/dms/getDocumentsWithSourcemapping.ts"
-/*!*********************************************************!*\
-  !*** ../../helper/dms/getDocumentsWithSourcemapping.ts ***!
-  \*********************************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getDocumentsWithSourcemapping = getDocumentsWithSourcemapping;
-const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
-/**
- * Retrieves documents with sourcemapping from a specified repository.
- *
- * @template T - The type of the response data.
- * @param baseUri - The base URI of the DMS API.
- * @param token - The authorization token for API access.
- * @param repositoryId - The ID of the repository to query.
- * @param sourcemapping - The source mapping identifier to filter documents.
- * @param searchParameterProperties - Optional. An array of property IDs to include in the search filter.
- * @param searchParameterCategories - Optional. An array of category IDs to include in the search filter.
- * @param pageSize - Optional. The number of results per page. Defaults to 25. Maximum is 1000.
- * @param nextLink - Optional. The next link for pagination.
- * @returns A promise that resolves to an `ApiResponse` containing the requested documents.
- */
-async function getDocumentsWithSourcemapping(baseUri, token, repositoryId, sourcemapping, searchParameterProperties, searchParameterCategories, pageSize = 25, nextLink = null) {
-    let finalUrl;
-    if (nextLink) {
-        finalUrl = `${baseUri}${nextLink}`;
-    }
-    else {
-        // Build new request with sourcemapping
-        const url = new URL(`${baseUri}/dms/r/${repositoryId}/srm/`);
-        const params = new URLSearchParams();
-        if (sourcemapping) {
-            params.set("sourceId", sourcemapping);
-        }
-        if (searchParameterProperties) {
-            params.set("sourceproperties", JSON.stringify(searchParameterProperties));
-        }
-        if (searchParameterCategories) {
-            params.set("sourcecategories", JSON.stringify(searchParameterCategories));
-        }
-        if (pageSize) {
-            params.set("pageSize", pageSize.toString());
-        }
-        url.search = params.toString();
-        finalUrl = url.toString();
-    }
-    const headers = {
-        "Authorization": `Bearer ${token}`,
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    };
-    const options = {
-        method: "GET",
-        headers
-    };
-    return await (0, performHttpRequest_1.performHttpRequest)(finalUrl.toString(), options);
-}
-
-
-/***/ },
-
 /***/ "../../helper/dms/getRepositories.ts"
 /*!*******************************************!*\
   !*** ../../helper/dms/getRepositories.ts ***!
@@ -322,41 +259,43 @@ function getLogger() {
 
 /***/ },
 
-/***/ "./src/scripts/angebotMitAuftragVerknuepfen.ts"
-/*!*****************************************************!*\
-  !*** ./src/scripts/angebotMitAuftragVerknuepfen.ts ***!
-  \*****************************************************/
+/***/ "./src/scripts/dokumenttypAnpassen.ts"
+/*!********************************************!*\
+  !*** ./src/scripts/dokumenttypAnpassen.ts ***!
+  \********************************************/
 (module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const getRepositories_1 = __webpack_require__(/*! ../../../../helper/dms/getRepositories */ "../../helper/dms/getRepositories.ts");
 const getSpecificDocument_1 = __webpack_require__(/*! ../../../../helper/dms/getSpecificDocument */ "../../helper/dms/getSpecificDocument.ts");
-const getDocumentsWithSourcemapping_1 = __webpack_require__(/*! ../../../../helper/dms/getDocumentsWithSourcemapping */ "../../helper/dms/getDocumentsWithSourcemapping.ts");
 const updateDocument_1 = __webpack_require__(/*! ../../../../helper/dms/updateDocument */ "../../helper/dms/updateDocument.ts");
 const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 /**
- * "Rechnungsleser: Angebot mit Auftrag verknüpfen" (ehemals projects/LinkQuoteWithOrder, dort
- * per DMS-Webhook "postimport"/"postupdateproperties" aufgerufen): liest beim
- * Auftrag (Auftragsbestätigung) mit der übergebenen DocId die Belegnummer und
- * die Angebotsnummern, sucht zu jeder Angebotsnummer das Angebot (Belegnummer
- * = Angebotsnummer in der Kategorie dmsCategoryDebAngeboteGUID) und trägt dort
- * die Auftragsnummer in das Mehrfachfeld dmsFieldAuftragsNrnGUID ein
- * (vorhandene Auftragsnummern bleiben, doppelte werden nicht ergänzt).
+ * "Rechnungsleser: Dokumenttyp anpassen": der Rechnungsleser übergibt den
+ * Dokumenttyp als ERP-Code (siehe src/scripts/preExport.ts: Rechnung 2,
+ * Gutschrift 3) - im DMS-Feld fieldDocumentTypeGUID landet daher "2" bzw.
+ * "3". Dieses Skript setzt beim Dokument mit der übergebenen DocId den
+ * lesbaren Wert: "2" -> "Rechnung", "3" -> "Gutschrift". Andere Werte bleiben
+ * unverändert, die Kategorie ebenfalls.
  *
  * Wird vom Onboarding-Formular (src/forms/form.ts) als Process-Studio-Aktion
  * mit dem Eingabeparameter "docId" angelegt; der Code wird beim Build als Text
  * ins Formular-Bundle übernommen (siehe build/webpack.form.config.js). Aus
- * Kompatibilität wird auch der Body eines DMS-Webhooks ({ doc: { id,
- * properties } }) verstanden.
+ * Kompatibilität wird auch der Body eines DMS-Webhooks ({ doc: { id } })
+ * verstanden.
  *
  * customerVariables (werden vom Formular nur beim Neuanlegen gesetzt):
- * apiKey, dmsCategoryDebAngeboteGUID, dmsFieldBelegNrGUID,
- * dmsFieldAngebotsNrnGUID, dmsFieldAuftragsNrnGUID.
+ * apiKey, fieldDocumentTypeGUID.
  */
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 /** Name des Eingabeparameters der Aktion. */
 const DOC_ID_INPUT = "docId";
+/** ERP-Code -> Dokumenttyp im DMS. */
+const DOCUMENT_TYPES = {
+    "2": "Rechnung",
+    "3": "Gutschrift",
+};
 module.exports = async (req, res) => {
     try {
         const body = parseBody(req);
@@ -365,48 +304,31 @@ module.exports = async (req, res) => {
             respond(res, 400, { success: false, message: `Eingabeparameter "${DOC_ID_INPUT}" fehlt.` });
             return;
         }
-        const settings = {
-            baseUri: req.get("x-dv-baseuri"),
-            apiKey: req.var("apiKey"),
-            categoryQuotes: req.var("dmsCategoryDebAngeboteGUID"),
-            fieldDocumentNo: req.var("dmsFieldBelegNrGUID"),
-            fieldQuoteNos: req.var("dmsFieldAngebotsNrnGUID"),
-            fieldOrderNos: req.var("dmsFieldAuftragsNrnGUID"),
-        };
-        const repositoryId = (await (0, getRepositories_1.getRepositories)(settings.baseUri, settings.apiKey)).body.repositories[0]?.id;
+        const baseUri = req.get("x-dv-baseuri");
+        const apiKey = req.var("apiKey");
+        const fieldDocumentType = req.var("fieldDocumentTypeGUID");
+        const repositoryId = (await (0, getRepositories_1.getRepositories)(baseUri, apiKey)).body.repositories[0]?.id;
         if (!repositoryId) {
             throw new Error("Kein DMS-Repository gefunden.");
         }
-        // Webhook-Body bringt die Eigenschaften mit, sonst das Dokument laden.
-        const { orderNo, quoteNos } = Array.isArray(body?.doc?.properties)
-            ? valuesFromWebhook(body.doc.properties, settings)
-            : await valuesFromDocument(settings, repositoryId, documentId);
-        logger.info(`Auftrag ${documentId}: Belegnummer "${orderNo}", Angebotsnummern ${JSON.stringify(quoteNos)}`);
-        if (!orderNo) {
-            respond(res, 200, { success: true, linked: [], message: `Auftrag ${documentId} hat keine Belegnummer - nichts zu verknüpfen.` });
+        const document = (await (0, getSpecificDocument_1.getSpecificDocument)(baseUri, apiKey, repositoryId, documentId)).body;
+        const current = String(document.objectProperties?.find((property) => property.id === fieldDocumentType)?.value ?? "").trim();
+        const target = DOCUMENT_TYPES[current];
+        if (!target) {
+            const message = `Dokument ${documentId}: Dokumenttyp "${current}" - keine Anpassung nötig.`;
+            logger.info(message);
+            respond(res, 200, { success: true, changed: false, documentType: current, message });
             return;
         }
-        if (quoteNos.length === 0) {
-            respond(res, 200, { success: true, linked: [], message: `Auftrag ${documentId} hat keine Angebotsnummer - nichts zu verknüpfen.` });
-            return;
+        if (!document.category) {
+            throw new Error(`Kategorie von Dokument ${documentId} konnte nicht ermittelt werden.`);
         }
-        const linked = [];
-        const notFound = [];
-        for (const quoteNo of quoteNos) {
-            const quoteId = await linkQuote(settings, repositoryId, quoteNo, orderNo);
-            if (quoteId) {
-                linked.push(quoteNo);
-            }
-            else {
-                notFound.push(quoteNo);
-            }
-        }
-        const message = [
-            linked.length ? `Auftrag ${orderNo} mit Angebot(en) ${linked.join(", ")} verknüpft.` : "",
-            notFound.length ? `Angebot(e) ${notFound.join(", ")} nicht gefunden.` : "",
-        ].filter(Boolean).join(" ");
+        await (0, updateDocument_1.updateDocument)(baseUri, apiKey, repositoryId, documentId, document.category, {
+            properties: [{ key: fieldDocumentType, values: [target] }],
+        });
+        const message = `Dokument ${documentId}: Dokumenttyp "${current}" -> "${target}".`;
         logger.info(message);
-        respond(res, 200, { success: true, linked, notFound, message });
+        respond(res, 200, { success: true, changed: true, documentType: target, message });
     }
     catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -414,52 +336,6 @@ module.exports = async (req, res) => {
         respond(res, 500, { success: false, message });
     }
 };
-// Sucht das Angebot mit der Belegnummer quoteNo und ergänzt dort orderNo in
-// den Auftragsnummern. Liefert die Dokument-Id oder undefined, wenn es kein
-// Angebot mit dieser Nummer gibt.
-async function linkQuote(settings, repositoryId, quoteNo, orderNo) {
-    const result = await (0, getDocumentsWithSourcemapping_1.getDocumentsWithSourcemapping)(settings.baseUri, settings.apiKey, repositoryId, `/dms/r/${repositoryId}/source`, { [settings.fieldDocumentNo]: [quoteNo] }, [settings.categoryQuotes]);
-    const quote = result.body.items?.[0];
-    if (!quote) {
-        return undefined;
-    }
-    const property = quote.sourceProperties.find((p) => p.key === settings.fieldOrderNos);
-    const orderNos = property?.values ? Object.values(property.values).filter(Boolean) : property?.value ? [property.value] : [];
-    if (orderNos.includes(orderNo)) {
-        logger.info(`Angebot ${quoteNo} (${quote.id}) enthält Auftrag ${orderNo} bereits.`);
-        return quote.id;
-    }
-    await (0, updateDocument_1.updateDocument)(settings.baseUri, settings.apiKey, repositoryId, quote.id, settings.categoryQuotes, {
-        properties: [{ key: settings.fieldOrderNos, values: [...orderNos, orderNo] }],
-    });
-    logger.info(`Angebot ${quoteNo} (${quote.id}): Auftrag ${orderNo} ergänzt.`);
-    return quote.id;
-}
-async function valuesFromDocument(settings, repositoryId, documentId) {
-    const document = (await (0, getSpecificDocument_1.getSpecificDocument)(settings.baseUri, settings.apiKey, repositoryId, documentId)).body;
-    const orderNo = document.objectProperties?.find((p) => p.id === settings.fieldDocumentNo)?.value;
-    const multi = document.multivalueProperties?.find((p) => p.id === settings.fieldQuoteNos);
-    // Angebotsnummern als Mehrfachfeld ({ "1": "...", ... }) oder notfalls als Einzelfeld.
-    const quoteNos = multi?.values
-        ? Object.values(multi.values)
-        : [document.objectProperties?.find((p) => p.id === settings.fieldQuoteNos)?.value];
-    return { orderNo: clean(orderNo), quoteNos: unique(quoteNos) };
-}
-// Body eines DMS-Webhooks: doc.properties = [{ id, value } | { id, values: [{ value }] }].
-function valuesFromWebhook(properties, settings) {
-    const find = (id) => properties.find((p) => p?.id === id);
-    const quoteProperty = find(settings.fieldQuoteNos);
-    const quoteNos = Array.isArray(quoteProperty?.values)
-        ? quoteProperty.values.map((v) => v?.value)
-        : [quoteProperty?.value];
-    return { orderNo: clean(find(settings.fieldDocumentNo)?.value), quoteNos: unique(quoteNos) };
-}
-function clean(value) {
-    return value === undefined || value === null ? "" : String(value).trim();
-}
-function unique(values) {
-    return [...new Set(values.map(clean).filter(Boolean))];
-}
 function parseBody(req) {
     try {
         return req.json?.() ?? {};
@@ -512,9 +388,9 @@ function respond(res, status, body) {
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	let __webpack_exports__ = __webpack_require__("./src/scripts/angebotMitAuftragVerknuepfen.ts");
+/******/ 	let __webpack_exports__ = __webpack_require__("./src/scripts/dokumenttypAnpassen.ts");
 /******/ 	module.exports = __webpack_exports__;
 /******/ 	
 /******/ })()
 ;
-//# sourceMappingURL=angebotMitAuftragVerknuepfen.js.map
+//# sourceMappingURL=dokumenttypAnpassen.js.map

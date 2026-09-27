@@ -272,7 +272,7 @@ const getSpecificDocument_1 = __webpack_require__(/*! ../../../../helper/dms/get
 const updateDocument_1 = __webpack_require__(/*! ../../../../helper/dms/updateDocument */ "../../helper/dms/updateDocument.ts");
 const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 /**
- * "Rechnungsleser Gutschriften verschieben" (ehemals
+ * "Rechnungsleser: Gutschriften verschieben" (ehemals
  * projects/_OLD/moveDocumentsOfDocumentReader/script.mjs, bisher nur per
  * DMS-Webhook aufgerufen): prüft beim Dokument mit der übergebenen DocId die
  * Dokumentart des Rechnungslesers und
