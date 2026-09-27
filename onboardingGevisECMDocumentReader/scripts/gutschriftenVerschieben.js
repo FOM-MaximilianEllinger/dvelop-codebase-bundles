@@ -2,6 +2,71 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
+/***/ "../../helper/dms/getDocumentPropertyValue.ts"
+/*!****************************************************!*\
+  !*** ../../helper/dms/getDocumentPropertyValue.ts ***!
+  \****************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getDocumentPropertyValue = getDocumentPropertyValue;
+const getSpecificDocument_1 = __webpack_require__(/*! ./getSpecificDocument */ "../../helper/dms/getSpecificDocument.ts");
+const getSpecificDocumentWithDefaultSource_1 = __webpack_require__(/*! ./getSpecificDocumentWithDefaultSource */ "../../helper/dms/getSpecificDocumentWithDefaultSource.ts");
+/**
+ * Liest den Wert einer DMS-Eigenschaft über ihre GUID (wie im Quell-Mapping
+ * bzw. in updateDocument verwendet). /dms/r/<repo>/o2/<id> liefert die
+ * Eigenschaften nur mit ihrer internen Nummer (z.B. "91") - deshalb zuerst
+ * über die Standardquelle (/o2m/<id>?sourceid=…), deren Eigenschaften nach
+ * GUID benannt sind; /o2 dient als Rückfall und für die Kategorie.
+ */
+async function getDocumentPropertyValue(baseUri, token, repositoryId, documentId, propertyGuid) {
+    const debug = [];
+    let value = "";
+    try {
+        const withSource = (await (0, getSpecificDocumentWithDefaultSource_1.getSpecificDocumentWithDefaultSource)(baseUri, token, repositoryId, documentId)).body;
+        value = findValue(withSource, propertyGuid);
+        debug.push(`o2m: ${describe(withSource)}`);
+    }
+    catch (error) {
+        debug.push(`o2m fehlgeschlagen: ${error}`);
+    }
+    const document = (await (0, getSpecificDocument_1.getSpecificDocument)(baseUri, token, repositoryId, documentId)).body;
+    if (!value) {
+        value = findValue(document, propertyGuid);
+        debug.push(`o2: ${describe(document)}`);
+    }
+    return { value, category: document.category, debug: debug.join(" | ") };
+}
+// Sucht die Eigenschaft in den bekannten Formen: sourceProperties (key),
+// objectProperties / multivalueProperties (id oder uuid).
+function findValue(source, guid) {
+    const key = guid.toLowerCase();
+    const matches = (p) => [p?.key, p?.id, p?.uuid].some((k) => typeof k === "string" && k.toLowerCase() === key);
+    const lists = [source?.sourceProperties, source?.objectProperties, source?.multivalueProperties];
+    for (const list of lists) {
+        const property = Array.isArray(list) ? list.find(matches) : undefined;
+        if (!property)
+            continue;
+        const raw = property.value ?? property.displayValue
+            ?? (Array.isArray(property.values) ? property.values[0]?.value ?? property.values[0]
+                : property.values && typeof property.values === "object" ? Object.values(property.values)[0] : undefined);
+        const text = raw === undefined || raw === null ? "" : String(raw).trim();
+        if (text)
+            return text;
+    }
+    return "";
+}
+function describe(source) {
+    const lists = ["sourceProperties", "objectProperties", "multivalueProperties"]
+        .filter((name) => Array.isArray(source?.[name]))
+        .map((name) => `${name}[${source[name].length}] ${source[name].slice(0, 40).map((p) => `${p.name ?? ""}(${p.key ?? p.uuid ?? p.id})=${JSON.stringify(p.value ?? p.values ?? "")}`).join(", ")}`);
+    return lists.length ? lists.join("; ") : `Felder: ${Object.keys(source ?? {}).join(", ")}`;
+}
+
+
+/***/ },
+
 /***/ "../../helper/dms/getRepositories.ts"
 /*!*******************************************!*\
   !*** ../../helper/dms/getRepositories.ts ***!
@@ -52,6 +117,44 @@ const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/perfo
  */
 async function getSpecificDocument(baseUri, token, repositoryId, documentId) {
     const url = `${baseUri}/dms/r/${repositoryId}/o2/${documentId}`;
+    const headers = {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    };
+    const options = {
+        method: "GET",
+        headers
+    };
+    return await (0, performHttpRequest_1.performHttpRequest)(url, options);
+}
+
+
+/***/ },
+
+/***/ "../../helper/dms/getSpecificDocumentWithDefaultSource.ts"
+/*!****************************************************************!*\
+  !*** ../../helper/dms/getSpecificDocumentWithDefaultSource.ts ***!
+  \****************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getSpecificDocumentWithDefaultSource = getSpecificDocumentWithDefaultSource;
+const performHttpRequest_1 = __webpack_require__(/*! ../performHttpRequest/performHttpRequest */ "../../helper/performHttpRequest/performHttpRequest.ts");
+/**
+ * Retrieves a specific document from the DMS (Document Management System) using the default source.
+ *
+ * @param baseUri - The base URI of the DMS API.
+ * @param token - The authorization token to access the DMS API.
+ * @param repositoryId - The ID of the repository where the document is stored.
+ * @param documentId - The ID of the document to retrieve.
+ * @returns A promise that resolves to an `ApiResponse` containing the document details.
+ *
+ * @template GetSpecificDocumentWithDefaultSource - The expected response type for the document details.
+ */
+async function getSpecificDocumentWithDefaultSource(baseUri, token, repositoryId, documentId) {
+    const url = `${baseUri}/dms/r/${repositoryId}/o2m/${documentId}?sourceid=/dms/r/${repositoryId}/source`;
     const headers = {
         "Authorization": `Bearer ${token}`,
         "Accept": "application/json",
@@ -268,7 +371,7 @@ function getLogger() {
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const getRepositories_1 = __webpack_require__(/*! ../../../../helper/dms/getRepositories */ "../../helper/dms/getRepositories.ts");
-const getSpecificDocument_1 = __webpack_require__(/*! ../../../../helper/dms/getSpecificDocument */ "../../helper/dms/getSpecificDocument.ts");
+const getDocumentPropertyValue_1 = __webpack_require__(/*! ../../../../helper/dms/getDocumentPropertyValue */ "../../helper/dms/getDocumentPropertyValue.ts");
 const updateDocument_1 = __webpack_require__(/*! ../../../../helper/dms/updateDocument */ "../../helper/dms/updateDocument.ts");
 const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../../helper/utils/logger.ts");
 /**
@@ -315,23 +418,21 @@ module.exports = async (req, res) => {
         if (!repositoryId) {
             throw new Error("Kein DMS-Repository gefunden.");
         }
-        let document = (await (0, getSpecificDocument_1.getSpecificDocument)(baseUri, apiKey, repositoryId, documentId)).body;
-        let documentType = readDocumentType(document, fieldDocumentType);
+        // Über die GUID lesen (/o2 kennt nur die interne Feldnummer, z.B. "91").
+        let document = await (0, getDocumentPropertyValue_1.getDocumentPropertyValue)(baseUri, apiKey, repositoryId, documentId, fieldDocumentType);
+        let documentType = document.value;
         if (!documentType) {
             // Beim Aufruf direkt nach dem Import sind die Eigenschaften ggf. noch
             // nicht geschrieben - einmal kurz warten und neu laden.
             await new Promise((resolve) => setTimeout(resolve, RELOAD_DELAY_MS));
-            document = (await (0, getSpecificDocument_1.getSpecificDocument)(baseUri, apiKey, repositoryId, documentId)).body;
-            documentType = readDocumentType(document, fieldDocumentType);
+            document = await (0, getDocumentPropertyValue_1.getDocumentPropertyValue)(baseUri, apiKey, repositoryId, documentId, fieldDocumentType);
+            documentType = document.value;
         }
         const kind = classify(documentType, valueMatch);
         if (!kind) {
             // Leer/unbekannt: nichts ändern (früher wurde daraus "Rechnung").
-            const properties = [...(document.objectProperties ?? []), ...(document.multivalueProperties ?? [])]
-                .map((p) => `${p.name ?? "?"} [${p.id}]=${JSON.stringify(p.value ?? p.values ?? "")}`)
-                .join("; ");
             const message = `Dokument ${documentId}: Dokumentart "${documentType}" nicht erkannt (Feld ${fieldDocumentType}) - unverändert.`;
-            logger.warn(`${message} Eigenschaften: ${properties.slice(0, 3000)}`);
+            logger.warn(`${message} Gelesen: ${document.debug.slice(0, 4000)}`);
             respond(res, 200, { success: true, changed: false, creditMemo: false, message });
             return;
         }
@@ -369,14 +470,6 @@ function classify(value, valueMatch) {
         return "creditMemo";
     }
     return INVOICE_VALUES.includes(normalized) ? "invoice" : undefined;
-}
-// Wert des Dokumenttyp-Felds: Einzelfeld (value/displayValue) oder erster
-// Wert eines Mehrfachfelds.
-function readDocumentType(document, fieldId) {
-    const single = document.objectProperties?.find((p) => p.id === fieldId);
-    const multi = document.multivalueProperties?.find((p) => p.id === fieldId);
-    const value = single?.value ?? single?.displayValue ?? (multi?.values ? Object.values(multi.values)[0] : undefined);
-    return value === undefined || value === null ? "" : String(value).trim();
 }
 function parseBody(req) {
     try {
