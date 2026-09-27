@@ -218,6 +218,8 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  * SQL über den Webindex-Designer) nach Dokumenten mit derselben
  * Lieferantennummer (VENDOR_NUM) UND derselben Rechnungsnummer
  * (InvoiceNumber). Das aktuelle Dokument selbst (DocumentUID) zählt nicht.
+ * Bei einer Dublette werden die Attribute IsDuplicate (true) und
+ * DuplicateDocumentIds (Liste der Ids der früheren Dokumente) gesetzt.
  *
  * customerVariables (vom Onboarding-Formular nur beim Neuanlegen gesetzt):
  * apiKey (verschlüsselt). Die Mandanten-Adresse kommt aus dem Header
@@ -228,6 +230,10 @@ const APP = "classcon-documentreader";
 const VENDOR_FIELD = "VENDOR_NUM";
 const INVOICE_FIELD = "InvoiceNumber";
 const DOCUMENT_ID_FIELD = "DocumentUID";
+// Ergebnis bei einer Dublette: Kennzeichen (boolean) und die Ids der früheren
+// Dokumente (Array).
+const DUPLICATE_FLAG_FIELD = "IsDuplicate";
+const DUPLICATE_IDS_FIELD = "DuplicateDocumentIds";
 module.exports = async (req, res) => {
     const body = parseBody(req);
     try {
@@ -242,7 +248,8 @@ module.exports = async (req, res) => {
             const duplicates = await findDuplicates(baseUri, apiKey, vendorNum, invoiceNumber, attribute(body, DOCUMENT_ID_FIELD));
             logger.info(`Lieferant "${vendorNum}", Rechnung "${invoiceNumber}": ${duplicates.length} Dublette(n) ${JSON.stringify(duplicates)}`);
             if (duplicates.length > 0) {
-                // TODO: Reaktion auf eine Dublette (z.B. Hinweis/Attribut setzen) - folgt.
+                setAttribute(body, DUPLICATE_FLAG_FIELD, true);
+                setAttribute(body, DUPLICATE_IDS_FIELD, duplicates.map((d) => d.documentId));
             }
         }
     }
@@ -306,6 +313,32 @@ function attribute(body, name) {
         }
     }
     return "";
+}
+// Schreibt ein Attribut im selben Format zurück, in dem die Attribute
+// ankommen: steckt VENDOR_NUM in einer Attributliste ({ Name, Value }), wird
+// dort ein Eintrag mit denselben Feldnamen ergänzt bzw. überschrieben - sonst
+// direkt als Feld.
+function setAttribute(body, name, value) {
+    const key = name.toLowerCase();
+    const nameOf = (entry) => String(entry?.Name ?? entry?.AttributeName ?? entry?.Id ?? entry?.name ?? "").toLowerCase();
+    for (const list of Object.values(body)) {
+        if (!Array.isArray(list))
+            continue;
+        const sample = list.find((entry) => nameOf(entry) === VENDOR_FIELD.toLowerCase());
+        if (!sample)
+            continue;
+        const nameKey = ["Name", "AttributeName", "Id", "name"].find((k) => k in sample) ?? "Name";
+        const valueKey = "Value" in sample ? "Value" : "value";
+        const existing = list.find((entry) => nameOf(entry) === key);
+        if (existing) {
+            existing[valueKey] = value;
+        }
+        else {
+            list.push({ [nameKey]: name, [valueKey]: value });
+        }
+        return;
+    }
+    body[name] = value;
 }
 function parseBody(req) {
     try {
