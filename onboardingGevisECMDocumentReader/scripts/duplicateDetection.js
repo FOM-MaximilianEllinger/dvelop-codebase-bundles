@@ -219,7 +219,8 @@ const logger_1 = __webpack_require__(/*! ../../../../helper/utils/logger */ "../
  * Lieferantennummer (VENDOR_NUM) UND derselben Rechnungsnummer
  * (InvoiceNumber). Das aktuelle Dokument selbst (DocumentUID) zählt nicht.
  * Bei einer Dublette werden die Attribute IsDuplicate (true) und
- * DuplicateDocumentIds (Liste der Ids der früheren Dokumente) gesetzt.
+ * DuplicateDocumentIds (Ids der früheren Dokumente) gesetzt - im Typ des
+ * Attributs im Rechnungsleser (Text-Attribut: "true" bzw. kommagetrennte Ids).
  *
  * customerVariables (vom Onboarding-Formular nur beim Neuanlegen gesetzt):
  * apiKey (verschlüsselt). Die Mandanten-Adresse kommt aus dem Header
@@ -323,26 +324,15 @@ function attribute(body, name) {
 // dort ein Eintrag mit denselben Feldnamen ergänzt bzw. überschrieben - sonst
 // direkt als Feld.
 function setAttribute(body, name, value) {
-    const key = name.toLowerCase();
-    const nameOf = (entry) => String(entry?.Name ?? entry?.AttributeName ?? entry?.Id ?? entry?.name ?? "").toLowerCase();
-    for (const list of Object.values(body)) {
-        if (!Array.isArray(list))
-            continue;
-        const sample = list.find((entry) => nameOf(entry) === VENDOR_FIELD.toLowerCase());
-        if (!sample)
-            continue;
-        const nameKey = ["Name", "AttributeName", "Id", "name"].find((k) => k in sample) ?? "Name";
-        const valueKey = "Value" in sample ? "Value" : "value";
-        const existing = list.find((entry) => nameOf(entry) === key);
-        if (existing) {
-            existing[valueKey] = value;
-        }
-        else {
-            list.push({ [nameKey]: name, [valueKey]: value });
-        }
-        return;
-    }
-    body[name] = value;
+    // Der Rechnungsleser schickt die Attribute flach ({ "VENDOR_NUM": "…" }) und
+    // übernimmt nur Werte im Typ des Attributs: ein Text-Attribut kommt als ""
+    // an und verwirft true bzw. ein Array - dann als Text zurückgeben
+    // ("true", Ids kommagetrennt). Boolean-/Listen-Attribute bekommen den Wert
+    // unverändert.
+    const current = body[name];
+    body[name] = typeof current === "string"
+        ? (Array.isArray(value) ? value.join(", ") : String(value))
+        : value;
 }
 function parseBody(req) {
     try {
