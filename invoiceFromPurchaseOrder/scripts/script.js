@@ -108,7 +108,7 @@ let logger = (0, logger_1.getLogger)();
  * .github/workflows/publish-bundles.yml stempelt beim Publish in BEIDE Bundles
  * denselben nächsten Stand (der Wert hier ist nur ein Platzhalter).
  */
-const VERSION_COUNTER = 3;
+const VERSION_COUNTER = 4;
 const BC_API = "https://api.businesscentral.dynamics.com";
 // Eigene GWS-API in Business Central (Bestellungen inkl. Zeilen, Lieferanten).
 const GWS_API = "api/gws/ecm/v1.0";
@@ -203,6 +203,19 @@ async function getOrder(settings, environment, companyId, orderNo) {
     if (order.buyFromVendorNo) {
         const vendorFilter = `$filter=${encodeURIComponent(`no eq ${odataString(String(order.buyFromVendorNo))}`)}`;
         vendor = (await bcGet(settings, `${base}/vendors?${vendorFilter}`)).value?.[0] ?? null;
+        // USt-IdNr. für die E-Rechnung: liefert die GWS-API sie nicht mit, aus der
+        // Standard-API (vendors.taxRegistrationNumber) ergänzen.
+        if (vendor && !vendorVatId(vendor)) {
+            try {
+                const standardFilter = `$filter=${encodeURIComponent(`number eq ${odataString(String(order.buyFromVendorNo))}`)}`;
+                const standard = (await bcGet(settings, `${bcBase(settings, environment)}/api/v2.0/companies(${companyId})/vendors?${standardFilter}`)).value?.[0];
+                if (standard?.taxRegistrationNumber)
+                    vendor.taxRegistrationNumber = standard.taxRegistrationNumber;
+            }
+            catch (error) {
+                logger.warn(`USt-IdNr. des Lieferanten nicht ladbar: ${error}`);
+            }
+        }
     }
     // Käufer = die Firma selbst (Anschrift, E-Mail, Währung) für die E-Rechnung;
     // Standard-API "companyInformation". Fehlt sie, bleibt buyer leer.
@@ -214,6 +227,9 @@ async function getOrder(settings, environment, companyId, orderNo) {
         logger.warn(`Firmendaten (companyInformation) nicht ladbar: ${error}`);
     }
     return { order, lines, vendor, buyer };
+}
+function vendorVatId(vendor) {
+    return String(vendor?.vatRegistrationNo ?? vendor?.vatRegistrationNumber ?? vendor?.taxRegistrationNumber ?? "").trim();
 }
 function requireEnvironment(body) {
     const environment = String(body.environment ?? "").trim();

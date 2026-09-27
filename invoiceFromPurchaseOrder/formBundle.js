@@ -508,8 +508,8 @@ function getTenantName(hostname = window.location.hostname) {
  * - ZUGFeRD 2 / Factur-X, Profil EN 16931: PDF/A-3 mit demselben XML als
  *   Anhang "factur-x.xml" (pdf-lib, wird bei Bedarf von cdnjs nachgeladen).
  *
- * Noch nicht enthalten: USt-IdNr./Steuernummer des Verkäufers (BT-31/BT-32).
- * Ohne sie meldet ein Validator die Regel BR-S-02 (Normalsatz) - kommt später.
+ * Geprüft (lokal) mit der KoSIT-Konfiguration XRechnung 3.0.2: XSD CII D16B
+ * sowie Schematron EN16931-CII und XRechnung-CII.
  */
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.FACTURX_FILE_NAME = void 0;
@@ -576,6 +576,14 @@ function missingEInvoiceFields(data, profile) {
     need(data.buyer.postcode, "PLZ des Käufers");
     need(data.buyer.country, "Land des Käufers");
     need(data.iban, "IBAN");
+    // BR-S-02 / BR-DE-16: bei steuerpflichtigen Positionen USt-IdNr. des Verkäufers.
+    if (data.vatRate > 0)
+        need(data.seller.vatId, "USt-IdNr. des Lieferanten");
+    for (const [party, label] of [[data.seller, "Lieferanten"], [data.buyer, "Käufers"]]) {
+        if (party.vatId && !/^[A-Z]{2}[A-Z0-9+*.]{2,13}$/.test(party.vatId)) {
+            missing.push(`gültige USt-IdNr. des ${label} (mit Länderkennung, z. B. DE123456789)`);
+        }
+    }
     if (data.lines.length === 0)
         missing.push("mindestens eine Rechnungsposition");
     if (profile === "xrechnung") {
@@ -626,6 +634,11 @@ function address(party) {
 function electronicAddress(party) {
     return party.email?.trim()
         ? `<ram:URIUniversalCommunication><ram:URIID schemeID="EM">${xml(party.email.trim())}</ram:URIID></ram:URIUniversalCommunication>`
+        : "";
+}
+function vatRegistration(party) {
+    return party.vatId?.trim()
+        ? `<ram:SpecifiedTaxRegistration><ram:ID schemeID="VA">${xml(party.vatId.trim())}</ram:ID></ram:SpecifiedTaxRegistration>`
         : "";
 }
 function sellerContact(party) {
@@ -679,11 +692,13 @@ function buildCiiXml(data, profile) {
         ${sellerContact(data.seller)}
         ${address(data.seller)}
         ${electronicAddress(data.seller)}
+        ${vatRegistration(data.seller)}
       </ram:SellerTradeParty>
       <ram:BuyerTradeParty>
         <ram:Name>${xml(data.buyer.name)}</ram:Name>
         ${address(data.buyer)}
         ${electronicAddress(data.buyer)}
+        ${vatRegistration(data.buyer)}
       </ram:BuyerTradeParty>
       ${data.orderReference ? `<ram:BuyerOrderReferencedDocument><ram:IssuerAssignedID>${xml(data.orderReference)}</ram:IssuerAssignedID></ram:BuyerOrderReferencedDocument>` : ""}
     </ram:ApplicableHeaderTradeAgreement>
@@ -958,7 +973,7 @@ const eInvoice_1 = __webpack_require__(/*! ./eInvoice */ "./src/forms/eInvoice.t
  * .github/workflows/publish-bundles.yml stempelt beim Publish in BEIDE Bundles
  * denselben nächsten Stand (der Wert hier ist nur ein Platzhalter).
  */
-const VERSION_COUNTER = 3;
+const VERSION_COUNTER = 4;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // Muss exakt dem Script-Namen in toolbox.meta.json ("scripts[].name") entsprechen.
 const SCRIPT_NAME = "Rechnung aus Bestellung";
@@ -1000,7 +1015,9 @@ const state = {
         buyerReference: "",
         sellerEmail: "",
         sellerPhone: "",
+        sellerVatId: "",
         buyerEmail: "",
+        buyerVatId: "",
     },
     details: undefined,
     // Welche Liste gerade lädt (für die Anzeige) und letzter Fehler.
@@ -1085,10 +1102,20 @@ async function selectOrder(no) {
                 buyerReference: String(details.order.no ?? ""),
                 sellerEmail: text(details.vendor?.email ?? details.vendor?.eMail),
                 sellerPhone: text(details.vendor?.phoneNumber ?? details.vendor?.phoneNo),
+                sellerVatId: normalizeVatId(details.vendor?.vatRegistrationNo ?? details.vendor?.vatRegistrationNumber ?? details.vendor?.taxRegistrationNumber, details.vendor?.country ?? details.vendor?.countryRegionCode),
                 buyerEmail: text(details.buyer?.email) || state.emailTo,
+                buyerVatId: normalizeVatId(details.buyer?.taxRegistrationNumber ?? details.buyer?.vatRegistrationNo, details.buyer?.country),
             };
         }
     });
+}
+// USt-IdNr. aus BC: Leerzeichen/Punkte/Bindestriche weg; fehlt die
+// Länderkennung (in BC bei Inlandsadressen üblich), die des Landes davorsetzen.
+function normalizeVatId(value, country) {
+    const id = text(value).toUpperCase().replace(/[\s.\-/]/g, "");
+    if (!id)
+        return "";
+    return /^[A-Z]{2}/.test(id) ? id : `${countryCode(country)}${id}`;
 }
 function text(value) {
     return value === undefined || value === null ? "" : String(value).trim();
@@ -1233,8 +1260,11 @@ function buildEInvoiceData(details, invoiceNo, issueDate) {
         seller: party(vendor, vendorName, state.eInvoice.sellerEmail.trim(), {
             id: text(vendor?.no ?? order.buyFromVendorNo),
             phone: state.eInvoice.sellerPhone.trim(),
+            vatId: state.eInvoice.sellerVatId.trim().toUpperCase(),
         }),
-        buyer: party(buyer, companyName(details), state.eInvoice.buyerEmail.trim()),
+        buyer: party(buyer, companyName(details), state.eInvoice.buyerEmail.trim(), {
+            vatId: state.eInvoice.buyerVatId.trim().toUpperCase() || undefined,
+        }),
         // Text-/Leerzeilen (ohne Menge und Betrag) gehören nicht in die E-Rechnung.
         lines: toInvoiceLines(details.lines)
             .filter((line) => line.quantity !== 0 || line.amount !== 0)
@@ -1284,6 +1314,9 @@ function buildDocDefinition(details, vatRate, invoiceNo, issueDate, eInvoice) {
     const lines = toInvoiceLines(details.lines);
     const sum = totals(lines, vatRate);
     const buyerName = companyName(details);
+    // USt-IdNr. (Pflichtangabe auf Rechnungen) - wie im Formular vorbelegt/geändert.
+    const sellerVatId = state.eInvoice.sellerVatId.trim().toUpperCase();
+    const buyerVatId = state.eInvoice.buyerVatId.trim().toUpperCase();
     const vendorName = String(vendor?.displayName ?? vendor?.name ?? order.buyFromVendorName ?? "");
     const vendorNo = String(vendor?.no ?? order.buyFromVendorNo ?? "");
     const orderDate = formatDate(order.orderDate ?? order.documentDate ?? order.systemCreatedAt);
@@ -1309,10 +1342,12 @@ function buildDocDefinition(details, vatRate, invoiceNo, issueDate, eInvoice) {
                     [
                         { text: vendorName, bold: true, fontSize: 12 },
                         ...vendorAddressLines(vendor).map((text) => ({ text })),
+                        ...(sellerVatId ? [{ text: `USt-IdNr.: ${sellerVatId}`, color: "#555" }] : []),
                         { text: "\n" },
                         { text: "Rechnungsempfänger", color: "#555", fontSize: 8 },
                         { text: buyerName, bold: true },
                         ...vendorAddressLines(details.buyer).map((text) => ({ text })),
+                        ...(buyerVatId ? [{ text: `USt-IdNr.: ${buyerVatId}`, color: "#555" }] : []),
                     ],
                     {
                         width: 230,
@@ -1652,7 +1687,9 @@ function renderEInvoiceOptions(details) {
         ${field("buyerReference", profile === "xrechnung" ? "Käuferreferenz / Leitweg-ID" : "Käuferreferenz")}
         ${field("sellerEmail", "E-Mail des Lieferanten", "email")}
         ${field("sellerPhone", "Telefon des Lieferanten", "tel")}
+        ${field("sellerVatId", "USt-IdNr. des Lieferanten", "text", "DE123456789")}
         ${field("buyerEmail", "E-Mail des Käufers", "email")}
+        ${field("buyerVatId", "USt-IdNr. des Käufers (optional)", "text", "DE123456789")}
       </div>
       <div class="ipo-hint" data-ipo="einvHint">${eInvoiceHintHtml(details, profile)}</div>
     </div>`;
@@ -1661,8 +1698,7 @@ function eInvoiceHintHtml(details, profile) {
     const missing = (0, eInvoice_1.missingEInvoiceFields)(buildEInvoiceData(details, "0", new Date()), profile);
     return (missing.length
         ? `<strong>Es fehlen Pflichtangaben:</strong> ${escapeHtml(missing.join(", "))}.`
-        : "Pflichtangaben vollständig.")
-        + " Die USt-IdNr. des Lieferanten ist noch nicht enthalten – ein Validator meldet dafür die Regel BR-S-02.";
+        : "Pflichtangaben vollständig.");
 }
 function renderContent() {
     const loadingText = {

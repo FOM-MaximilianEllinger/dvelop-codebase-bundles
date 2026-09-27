@@ -2555,7 +2555,7 @@ const extensionPoints_1 = __webpack_require__(/*! ../../../../helper/classcon-do
  * Stand nur ins veröffentlichte Bundle - der Wert hier ist ein Platzhalter und
  * wird nicht hochgezählt.
  */
-const VERSION_COUNTER = 26;
+const VERSION_COUNTER = 27;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 const BASE_URI = window.location.origin;
 const SUBDOMAIN = window.location.hostname.split(".")[0];
@@ -3686,6 +3686,7 @@ const steps = [
     {
         id: "masterDataCompanies",
         title: "Stammdaten: Mandanten",
+        skipReason: () => (companies.length ? undefined : "Keine Mandanten erfasst - Stammdaten werden nicht angepasst."),
         description: `Erzeugt aus den Mandanten der Konfiguration ${COMPANY_FILE_NAME} und lädt sie in die Stammdaten des Rechnungslesers hoch. Die vorhandene Datei wird ersetzt.`,
         // Mandanten kommen von der Konfigurationsseite; vor dem Hochladen fragen,
         // da die vorhandene Datei ersetzt wird.
@@ -3749,6 +3750,7 @@ const steps = [
         id: "metadataEndpoint",
         title: "Metadaten-Endpunkt VEO (Service Bus)",
         erp: ["veo"],
+        skipReason: () => (isVeoConfigEmpty() ? SKIP_EMPTY_CONFIG : undefined),
         description: "Richtet den Metadaten-Endpunkt des Rechnungslesers für VEO ein: Service Bus Connection String und Queue aus der Konfiguration, Bezug auf das Zielsystem und die Eigenschaften DvelopTenant, GWSNo, ExportType, type, subtype, erptype und CustomerId.",
         async check(apiKey) {
             if (!(await isEndpointConfigured(apiKey, "MetadataEndpointService"))) {
@@ -3795,6 +3797,7 @@ const steps = [
         id: "sftpEndpoint",
         title: "SFTP-Zielsystem gevis R-Linie",
         erp: ["gevisR"],
+        skipReason: () => (isSftpConfigEmpty() ? SKIP_EMPTY_CONFIG : undefined),
         description: "Richtet den SFTP-Server aus der Konfiguration als Zielsystem des Rechnungslesers ein (Host, Port, Benutzer, Kennwort, Verzeichnis).",
         async check(apiKey) {
             if (!(await isEndpointConfigured(apiKey, "SftpEndpointService"))) {
@@ -3894,6 +3897,15 @@ const veoConfig = { gwsNo: "", connectionString: "", queueName: `sbq-scan-in-${S
 // nur zur Laufzeit - NIE in den Code schreiben (die Bundles sind öffentlich).
 const sftpConfig = { host: "mt-sftp.gws.ms", port: "22", user: "", password: "", directory: "/out/dms/scandta" };
 // Prüft die SFTP-Angaben; liefert eine Fehlermeldung oder undefined.
+// Leer gelassen = nicht anpassen: der zugehörige Schritt wird übersprungen.
+// Host, Port, Verzeichnis bzw. Queue-Name haben Vorbelegungen und zählen nicht.
+function isSftpConfigEmpty() {
+    return !sftpConfig.user.trim() && !sftpConfig.password;
+}
+function isVeoConfigEmpty() {
+    return !veoConfig.gwsNo.trim() && !veoConfig.connectionString.trim();
+}
+const SKIP_EMPTY_CONFIG = "Konfiguration leer gelassen - wird nicht angepasst.";
 function validateSftpConfig() {
     if (!sftpConfig.host.trim()) {
         return "Bitte den SFTP-Host eingeben.";
@@ -4092,6 +4104,7 @@ const styles = `
   .onb-badge-exists { background: #cfe2ff; color: #084298; }
   .onb-badge-missing { background: #fff3cd; color: #997404; }
   .onb-badge-manual { background: #e2e3e5; color: #41464b; }
+  .onb-badge-skipped { background: #f1f3f5; color: #868e96; }
   .onb-badge-error { background: #f8d7da; color: #842029; }
   .onb-action { text-align: right; white-space: nowrap; }
   .onb-actions { display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
@@ -4131,6 +4144,7 @@ const STATE_LABELS = {
     missing: "Fehlt",
     manual: "Manuell",
     error: "Fehler",
+    skipped: "Übersprungen",
 };
 // Beschriftung des Zeilen-Buttons je nach geprüftem Status.
 const RUN_LABELS = {
@@ -4142,6 +4156,7 @@ const RUN_LABELS = {
     missing: "Anlegen",
     manual: "Ausführen",
     error: "Erneut versuchen",
+    skipped: "Übersprungen",
 };
 function escapeHtml(value) {
     return value
@@ -4202,7 +4217,7 @@ function renderConfigPage() {
       </div>
       <div class="onb-config-block" data-onb-veo-block ${erpSystem === "veo" ? "" : "hidden"}>
         <div class="onb-config-title">VEO-Anbindung</div>
-        <div class="onb-config-desc">Für den Metadaten-Endpunkt des Rechnungslesers (Azure Service Bus). Mandant: <strong>${escapeHtml(SUBDOMAIN)}</strong></div>
+        <div class="onb-config-desc">Für den Metadaten-Endpunkt des Rechnungslesers (Azure Service Bus). Mandant: <strong>${escapeHtml(SUBDOMAIN)}</strong>. Leer lassen, um den vorhandenen Endpunkt nicht anzupassen.</div>
         <div class="onb-veo-grid">
           <label>GWS-Nr.<input type="text" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" data-onb-veo="gwsNo" placeholder="z.B. 12345" value="${escapeHtml(veoConfig.gwsNo)}"></label>
           <label>Queue-Name<input type="text" autocomplete="off" class="form-control form-control-sm" data-onb-veo="queueName" value="${escapeHtml(veoConfig.queueName)}"></label>
@@ -4211,7 +4226,7 @@ function renderConfigPage() {
       </div>
       <div class="onb-config-block" data-onb-sftp-block ${erpSystem === "gevisR" ? "" : "hidden"}>
         <div class="onb-config-title">gevis R-Linie – SFTP-Server</div>
-        <div class="onb-config-desc">Hierhin übergibt der Rechnungsleser die Daten für gevis R-Linie.</div>
+        <div class="onb-config-desc">Hierhin übergibt der Rechnungsleser die Daten für gevis R-Linie. Benutzer und Kennwort leer lassen, um das vorhandene SFTP-Zielsystem nicht anzupassen.</div>
         <div class="onb-veo-grid">
           <label>Host<input type="text" autocomplete="off" class="form-control form-control-sm" data-onb-sftp="host" value="${escapeHtml(sftpConfig.host)}"></label>
           <label>Port<input type="text" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" data-onb-sftp="port" value="${escapeHtml(sftpConfig.port)}"></label>
@@ -4222,7 +4237,7 @@ function renderConfigPage() {
       </div>
       <div class="onb-config-block">
         <div class="onb-config-title">Stammdaten: Mandanten</div>
-        <div class="onb-config-desc">Alle Mandanten des Kunden - daraus wird <code>${COMPANY_FILE_NAME}</code> für die Stammdaten des Rechnungslesers erzeugt. * = Pflichtfeld</div>
+        <div class="onb-config-desc">Alle Mandanten des Kunden - daraus wird <code>${COMPANY_FILE_NAME}</code> für die Stammdaten des Rechnungslesers erzeugt. * = Pflichtfeld. Leer lassen, um die vorhandenen Stammdaten nicht anzupassen.</div>
         ${renderCompanyTable()}
       </div>
       <div data-onb-message></div>
@@ -4397,6 +4412,8 @@ function refreshView() {
         button.disabled = busy || !hasKey;
         const state = statuses.get(button.dataset.onbRun ?? "")?.state;
         button.textContent = RUN_LABELS[state ?? "unknown"];
+        if (state === "skipped")
+            button.disabled = true;
     });
     root.querySelectorAll("button[data-onb-action]").forEach((button) => {
         const action = button.dataset.onbAction;
@@ -4439,6 +4456,11 @@ async function withBusy(action) {
     }
 }
 async function checkStep(step) {
+    const skip = step.skipReason?.();
+    if (skip) {
+        setStatus(step.id, { state: "skipped", text: skip });
+        return;
+    }
     setStatus(step.id, { state: "checking", text: "" });
     try {
         setStatus(step.id, await step.check(apiKey.trim()));
@@ -4457,9 +4479,10 @@ async function checkAll() {
     const open = counts.filter((state) => state === "missing").length;
     const existing = counts.filter((state) => state === "exists").length;
     const errors = counts.filter((state) => state === "error").length;
+    const skipped = counts.filter((state) => state === "skipped").length;
     message = errors > 0
         ? { kind: "error", text: `${errors} Schritt(e) konnten nicht geprüft werden - ist der API-Key gültig?` }
-        : { kind: open > 0 ? "info" : "ok", text: `${open} fehlend, ${existing} vorhanden (können aktualisiert werden).` };
+        : { kind: open > 0 ? "info" : "ok", text: `${open} fehlend, ${existing} vorhanden (können aktualisiert werden)${skipped ? `, ${skipped} übersprungen (Konfiguration leer)` : ""}.` };
     refreshView();
 }
 // Führt einen Schritt aus und prüft ihn danach erneut. false = Fehler.
@@ -4483,6 +4506,12 @@ async function runStep(step) {
     }
 }
 async function runSingle(step) {
+    const skip = step.skipReason?.();
+    if (skip) {
+        message = { kind: "info", text: `„${step.title}“: ${skip}` };
+        refreshView();
+        return;
+    }
     await withBusy(async () => {
         if (step.beforeRun) {
             try {
@@ -4593,8 +4622,12 @@ async function goToSteps() {
         refreshView();
         return;
     }
-    const veoError = (erpSystem === "veo" ? validateVeoConfig() : erpSystem === "gevisR" ? validateSftpConfig() : undefined)
-        ?? validateCompanies();
+    // Leer gelassene Blöcke sind erlaubt (Schritt wird übersprungen), teilweise
+    // ausgefüllte werden vollständig geprüft.
+    const veoError = (erpSystem === "veo" && !isVeoConfigEmpty() ? validateVeoConfig()
+        : erpSystem === "gevisR" && !isSftpConfigEmpty() ? validateSftpConfig()
+            : undefined)
+        ?? (companies.length ? validateCompanies() : undefined);
     if (veoError) {
         message = { kind: "error", text: veoError };
         refreshView();
