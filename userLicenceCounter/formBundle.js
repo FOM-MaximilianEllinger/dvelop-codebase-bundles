@@ -519,8 +519,10 @@ const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExpo
  * Aktualisieren mit ausgerollt - im Process Studio Formular-Editor muss nichts
  * angelegt werden (Änderungen dort werden beim nächsten Update überschrieben).
  * Die Zählung startet direkt beim Laden des Formulars, das Script liefert ALLE
- * Benutzer als Daten (JSON, mit Kennzeichen technisch/@gws.ms/bezahlt), die
- * Darstellung inkl. Filter passiert hier.
+ * Benutzer als Daten (JSON, mit Kennzeichen @gws.ms/bezahlt), die
+ * Darstellung inkl. Filter passiert hier. Technische (API-)Benutzer liefert
+ * /identityprovider/scim/Users gar nicht aus - sie tauchen daher weder in der
+ * Liste noch in der Zählung auf und werden hier nicht dargestellt.
  *
  * VERSION_COUNTER unten NICHT umbenennen, der Name ist projektübergreifend
  * fest "VERSION_COUNTER" (siehe generateTargetForms.js) - muss bei einem
@@ -529,7 +531,7 @@ const tableExport_1 = __webpack_require__(/*! ../../../../helper/utils/tableExpo
  * BEIDE Bundles denselben nächsten Stand (nur ins veröffentlichte Bundle - der
  * Wert hier ist ein Platzhalter und wird nicht hochgezählt).
  */
-const VERSION_COUNTER = 13;
+const VERSION_COUNTER = 14;
 const logger = (0, logger_1.initLogger)(logger_1.LogLevel.INFO);
 // Muss exakt dem Script-Namen in toolbox.meta.json ("scripts[].name") entsprechen - so
 // findet die Toolbox das zugehörige Script anhand seines eindeutigen Namens
@@ -546,7 +548,6 @@ let displayedUsers = [];
 const CATEGORY_FILTERS = [
     { value: "all", label: "Alle Benutzer", attribute: "" },
     { value: "paid", label: "Bezahlte Benutzer", attribute: "paid" },
-    { value: "technical", label: "API-Benutzer", attribute: "technical" },
     { value: "gws", label: "Administrative Benutzer", attribute: "gws" },
 ];
 // Gleiche Optik wie die Toolbox (projects/Toolbox/src/forms/form.ts,
@@ -567,7 +568,6 @@ const styles = `
   .ulc-export { white-space: nowrap; }
   .ulc-badge { display: inline-block; font-size: 0.75em; font-weight: 600; padding: 2px 7px; border-radius: 10px; margin-right: 4px; white-space: nowrap; }
   .ulc-badge-paid { background: #d1e7dd; color: #0f5132; }
-  .ulc-badge-technical { background: #e2e3e5; color: #41464b; }
   .ulc-badge-gws { background: #fff3cd; color: #997404; }
   .ulc-body { padding: 12px; }
   .ulc-table-wrap { max-height: 65vh; overflow: auto; border: 1px solid #dee2e6; border-radius: 6px; }
@@ -644,9 +644,6 @@ function renderTypeBadges(user) {
     if (user.paid) {
         badges.push(`<span class="ulc-badge ulc-badge-paid">Bezahlt</span>`);
     }
-    if (user.technical) {
-        badges.push(`<span class="ulc-badge ulc-badge-technical">API-Benutzer</span>`);
-    }
     if (user.gwsDomain) {
         badges.push(`<span class="ulc-badge ulc-badge-gws">Administrativ</span>`);
     }
@@ -657,11 +654,11 @@ function renderUserRow(user, index) {
         ? `<a href="mailto:${escapeHtml(user.email)}">${escapeHtml(user.email)}</a>`
         : renderValue("");
     // data-search: alles, wonach das Suchfeld filtern kann, in Kleinbuchstaben.
-    // data-paid/-technical/-gws: für den Kategorie-Filter (siehe CATEGORY_FILTERS).
+    // data-paid/-gws: für den Kategorie-Filter (siehe CATEGORY_FILTERS).
     const search = [user.fullName, user.userName, user.email, user.id].join(" ").toLowerCase();
     const flag = (value) => (value ? "1" : "0");
     return `
-      <tr data-index="${index}" data-search="${escapeHtml(search)}" data-paid="${flag(user.paid)}" data-technical="${flag(user.technical)}" data-gws="${flag(user.gwsDomain)}">
+      <tr data-index="${index}" data-search="${escapeHtml(search)}" data-paid="${flag(user.paid)}" data-gws="${flag(user.gwsDomain)}">
         <td class="ulc-nr" data-ulc-nr>${index + 1}</td>
         <td>${renderValue(user.fullName, "ulc-name")}</td>
         <td>${renderValue(user.userName)}</td>
@@ -692,11 +689,10 @@ function renderResult(result) {
         <span class="ulc-title">Benutzer</span>
         <div class="ulc-stats">
           ${renderStat("Bezahlt", result.paid, "ulc-stat-paid")}
-          ${renderStat("API-Benutzer", result.technical)}
           ${renderStat("Administrativ", result.gwsDomain)}
           ${renderStat("Gesamt", result.total)}
         </div>
-        <div class="ulc-hint">Bezahlt = weder API-Benutzer noch administrativer Benutzer (@gws.ms)</div>
+        <div class="ulc-hint">Bezahlt = alle Benutzer außer administrativen Benutzern (@gws.ms). Technische (API-)Benutzer werden vom Identityprovider nicht aufgelistet und sind daher nicht enthalten.</div>
       </div>
       <div class="ulc-controls">
         <select class="form-control form-control-sm ulc-category" aria-label="Benutzer filtern">${options}</select>
@@ -755,7 +751,7 @@ function buildExportTable(section) {
     const visibleRows = Array.from(section.querySelectorAll("tr[data-index]"))
         .filter((row) => row.style.display !== "none");
     return {
-        headers: ["Nr.", "Name", "Benutzername", "E-Mail", "Bezahlt", "API-Benutzer", "Administrativ", "ID"],
+        headers: ["Nr.", "Name", "Benutzername", "E-Mail", "Bezahlt", "Administrativ", "ID"],
         rows: visibleRows
             .map((row) => displayedUsers[Number(row.dataset.index)])
             .filter((user) => !!user)
@@ -765,7 +761,6 @@ function buildExportTable(section) {
             user.userName,
             user.email,
             yesNo(user.paid),
-            yesNo(user.technical),
             yesNo(user.gwsDomain),
             user.id,
         ]),
