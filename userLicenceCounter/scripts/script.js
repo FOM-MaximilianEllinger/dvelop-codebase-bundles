@@ -647,7 +647,7 @@ let logger = (0, logger_1.getLogger)();
 // ein Platzhalter und wird nicht hochgezählt), damit die Toolbox (loadedTools-Grid)
 // erkennen kann, ob auf GitHub eine neuere Version dieses Tools liegt. Heißt
 // wie in jedem Toolbox-Tool-Projekt einheitlich "VERSION_COUNTER".
-const VERSION_COUNTER = 14;
+const VERSION_COUNTER = 15;
 module.exports = async (req, res) => {
     const credentials = new credentials_1.APICredentials("", req.var("baseUri"), req.var("apiKey"), "", new Date());
     await main(credentials, req, res);
