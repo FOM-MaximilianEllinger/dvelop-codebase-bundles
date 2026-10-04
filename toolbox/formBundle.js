@@ -4585,6 +4585,7 @@ createHTML: (html) => {
 				return;
 			}
 			if (instance) unmount(instance);
+			removePagePadding(host.ownerDocument);
 			host.innerHTML = "";
 			root = host.ownerDocument.createElement("div");
 			host.appendChild(root);
@@ -4597,6 +4598,22 @@ createHTML: (html) => {
 		form.on?.("render", () => {
 			if (!root?.isConnected) mountNow();
 		});
+	}
+	var PAGE_PADDING_STYLE_ID = "toolbox-no-page-padding";
+	/**
+	* Entfernt das seitliche Padding des dforms-Seitencontainers (MUI), damit
+	* die Werkzeuge - meist breite Tabellen - die volle Breite nutzen. Gilt für
+	* die ganze Seite; unbedenklich, weil jedes Bundle nur auf seiner eigenen
+	* Formularseite läuft. Die generierte Klasse (z.B. css-1783alc) ändert sich
+	* mit dforms-Updates, MuiContainer-root bleibt - doppelt angegeben, damit die
+	* Regel unabhängig von der Reihenfolge der Styles gewinnt.
+	*/
+	function removePagePadding(doc) {
+		if (doc.getElementById(PAGE_PADDING_STYLE_ID)) return;
+		const style = doc.createElement("style");
+		style.id = PAGE_PADDING_STYLE_ID;
+		style.textContent = ".MuiContainer-root.MuiContainer-root { padding-left: 0; padding-right: 0; }";
+		doc.head.appendChild(style);
 	}
 	//#endregion
 	//#region node_modules/svelte/src/internal/disclose-version.js
@@ -9382,8 +9399,8 @@ ${groups}`,
 		});
 		append($$anchor, fragment);
 	};
-	var toolCard = ($$anchor, target = noop, actions = noop, parts = noop, hint = noop) => {
-		var div = root_8();
+	var toolCard = ($$anchor, target = noop, actions = noop, parts = noop) => {
+		var div = root_7();
 		var div_1 = child(div);
 		var div_2 = child(div_1);
 		var span_3 = child(div_2);
@@ -9424,16 +9441,6 @@ ${groups}`,
 		if_block(node_7, ($$render) => {
 			if (parts()) $$render(consequent_5);
 		});
-		var node_9 = sibling(node_7, 2);
-		var consequent_6 = ($$anchor) => {
-			var div_5 = root_7();
-			var text_3 = only_child(div_5, true);
-			template_effect(() => set_text(text_3, hint()));
-			append($$anchor, div_5);
-		};
-		if_block(node_9, ($$render) => {
-			if (hint()) $$render(consequent_6);
-		});
 		reset(div);
 		template_effect(() => set_text(text_1, target().name));
 		append($$anchor, div);
@@ -9445,23 +9452,22 @@ ${groups}`,
 	var root_4 = /* @__PURE__ */ from_html(`<div class="tbx-tool-desc svelte-elr56e"> </div>`);
 	var root_5 = /* @__PURE__ */ from_html(`<div class="tbx-actions svelte-elr56e"><!></div>`);
 	var root_6 = /* @__PURE__ */ from_html(`<ul><!></ul>`);
-	var root_7 = /* @__PURE__ */ from_html(`<div class="tbx-hint svelte-elr56e"> </div>`);
-	var root_8 = /* @__PURE__ */ from_html(`<div class="tbx-tool svelte-elr56e"><div class="tbx-tool-header svelte-elr56e"><div><span class="tbx-tool-name svelte-elr56e"> </span><!> <!></div> <!></div> <!> <!></div>`);
-	var root_9 = /* @__PURE__ */ from_html(`<div class="tbx-empty svelte-elr56e">Werkzeuge werden geladen…</div>`);
-	var root_10 = /* @__PURE__ */ from_html(`<div class="tbx-empty svelte-elr56e">Alle verfügbaren Werkzeuge sind bereits installiert.</div>`);
-	var root_11 = /* @__PURE__ */ from_html(`<option> </option>`);
-	var root_12 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-sm btn-outline-secondary"> </button>`);
-	var root_13 = /* @__PURE__ */ from_html(`<li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e"> </span> <span class="tbx-part-status tbx-status-unknown svelte-elr56e"> </span> <!></li>`);
-	var root_14 = /* @__PURE__ */ from_html(`<select class="form-control form-control-sm"></select> <!>`, 1);
-	var root_15 = /* @__PURE__ */ from_html(`<div class="tbx-status-error svelte-elr56e"> </div>`);
-	var root_16 = /* @__PURE__ */ from_html(`<div class="tbx-empty svelte-elr56e">Noch keine Werkzeuge installiert.</div>`);
-	var root_17 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-sm btn-outline-secondary">Öffnen</button>`);
-	var root_18 = /* @__PURE__ */ from_html(`<!> <button type="button" class="btn btn-sm btn-primary"> </button>`, 1);
-	var root_19 = /* @__PURE__ */ from_html(`<li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e"> </span> <span> </span> <!></li>`);
-	var root_20 = /* @__PURE__ */ from_html(`<div class="tbx-root svelte-elr56e"><div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Toolbox</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><ul class="tbx-parts svelte-elr56e"><li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e">Formular</span><span> </span></li></ul></div></div> <div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Werkzeug hinzufügen</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><!></div></div> <div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Installierte Werkzeuge</span> <div class="tbx-actions svelte-elr56e"></div></div> <div class="tbx-section-body svelte-elr56e"><!></div></div></div>`);
+	var root_7 = /* @__PURE__ */ from_html(`<div class="tbx-tool svelte-elr56e"><div class="tbx-tool-header svelte-elr56e"><div><span class="tbx-tool-name svelte-elr56e"> </span><!> <!></div> <!></div> <!></div>`);
+	var root_8 = /* @__PURE__ */ from_html(`<div class="tbx-empty svelte-elr56e">Werkzeuge werden geladen…</div>`);
+	var root_9 = /* @__PURE__ */ from_html(`<div class="tbx-empty svelte-elr56e">Alle verfügbaren Werkzeuge sind bereits installiert.</div>`);
+	var root_10 = /* @__PURE__ */ from_html(`<option> </option>`);
+	var root_11 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-sm btn-outline-secondary"> </button>`);
+	var root_12 = /* @__PURE__ */ from_html(`<li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e"> </span> <span class="tbx-part-status tbx-status-unknown svelte-elr56e"> </span> <!></li>`);
+	var root_13 = /* @__PURE__ */ from_html(`<select class="form-control form-control-sm"></select> <!>`, 1);
+	var root_14 = /* @__PURE__ */ from_html(`<div class="tbx-status-error svelte-elr56e"> </div>`);
+	var root_15 = /* @__PURE__ */ from_html(`<div class="tbx-empty svelte-elr56e">Noch keine Werkzeuge installiert.</div>`);
+	var root_16 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-sm btn-outline-secondary">Öffnen</button>`);
+	var root_17 = /* @__PURE__ */ from_html(`<!> <button type="button" class="btn btn-sm btn-primary"> </button>`, 1);
+	var root_18 = /* @__PURE__ */ from_html(`<li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e"> </span> <span> </span> <!></li>`);
+	var root_19 = /* @__PURE__ */ from_html(`<div class="tbx-root svelte-elr56e"><div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Toolbox</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><ul class="tbx-parts svelte-elr56e"><li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e">Formular</span><span> </span></li></ul></div></div> <div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Werkzeug hinzufügen</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><!></div></div> <div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Installierte Werkzeuge</span> <div class="tbx-actions svelte-elr56e"></div></div> <div class="tbx-section-body svelte-elr56e"><!></div></div></div>`);
 	var $$css = {
 		hash: "svelte-elr56e",
-		code: ".tbx-root.svelte-elr56e {display:flex;flex-direction:column;gap:16px;}.tbx-section.svelte-elr56e {border:1px solid #dee2e6;border-radius:6px;background:#fff;}.tbx-section-header.svelte-elr56e {display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid #dee2e6;background:#f8f9fa;border-radius:6px 6px 0 0;}.tbx-section-title.svelte-elr56e {font-weight:600;font-size:1.05em;}.tbx-section-body.svelte-elr56e {padding:12px;display:flex;flex-direction:column;gap:10px;}.tbx-actions.svelte-elr56e {display:flex;gap:6px;flex-shrink:0;}.tbx-empty.svelte-elr56e {color:#6c757d;font-style:italic;}.tbx-tool.svelte-elr56e {border:1px solid #dee2e6;border-radius:6px;padding:10px 12px;background:#fff;}.tbx-tool-header.svelte-elr56e {display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;}.tbx-tool-name.svelte-elr56e {font-weight:600;font-size:1.05em;}.tbx-tool-desc.svelte-elr56e {color:#6c757d;font-size:0.9em;margin-top:4px;}.tbx-badge.svelte-elr56e {display:inline-block;font-size:0.75em;font-weight:600;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;}.tbx-badge-form.svelte-elr56e {background:#e7f1ff;color:#0b5ed7;}.tbx-badge-script.svelte-elr56e {background:#fff3cd;color:#997404;}.tbx-badge-link.svelte-elr56e {color:#6c757d;font-size:0.8em;margin-left:4px;vertical-align:middle;}.tbx-parts.svelte-elr56e {list-style:none;margin:8px 0 0;padding:0;font-size:0.9em;}.tbx-section-body.svelte-elr56e > .tbx-parts:where(.svelte-elr56e) {margin-top:0;}.tbx-parts.svelte-elr56e li:where(.svelte-elr56e) {padding:3px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}.tbx-parts-combined.svelte-elr56e {border-left:3px solid #adb5bd;padding-left:10px;}.tbx-part-label.svelte-elr56e {display:inline-block;min-width:80px;font-weight:600;}.tbx-part-status.svelte-elr56e {flex:1 1 auto;}.tbx-hint.svelte-elr56e {color:#6c757d;font-size:0.85em;margin-top:6px;}.tbx-status-ok.svelte-elr56e {color:#198754;}.tbx-status-outdated.svelte-elr56e {color:#b35c00;}.tbx-status-unknown.svelte-elr56e {color:#6c757d;}.tbx-status-error.svelte-elr56e {color:#dc3545;}"
+		code: ".tbx-root.svelte-elr56e {display:flex;flex-direction:column;gap:16px;}.tbx-section.svelte-elr56e {border:1px solid #dee2e6;border-radius:6px;background:#fff;}.tbx-section-header.svelte-elr56e {display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid #dee2e6;background:#f8f9fa;border-radius:6px 6px 0 0;}.tbx-section-title.svelte-elr56e {font-weight:600;font-size:1.05em;}.tbx-section-body.svelte-elr56e {padding:12px;display:flex;flex-direction:column;gap:10px;}.tbx-actions.svelte-elr56e {display:flex;gap:6px;flex-shrink:0;}.tbx-empty.svelte-elr56e {color:#6c757d;font-style:italic;}.tbx-tool.svelte-elr56e {border:1px solid #dee2e6;border-radius:6px;padding:10px 12px;background:#fff;}.tbx-tool-header.svelte-elr56e {display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;}.tbx-tool-name.svelte-elr56e {font-weight:600;font-size:1.05em;}.tbx-tool-desc.svelte-elr56e {color:#6c757d;font-size:0.9em;margin-top:4px;}.tbx-badge.svelte-elr56e {display:inline-block;font-size:0.75em;font-weight:600;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;}.tbx-badge-form.svelte-elr56e {background:#e7f1ff;color:#0b5ed7;}.tbx-badge-script.svelte-elr56e {background:#fff3cd;color:#997404;}.tbx-badge-link.svelte-elr56e {color:#6c757d;font-size:0.8em;margin-left:4px;vertical-align:middle;}.tbx-parts.svelte-elr56e {list-style:none;margin:8px 0 0;padding:0;font-size:0.9em;}.tbx-section-body.svelte-elr56e > .tbx-parts:where(.svelte-elr56e) {margin-top:0;}.tbx-parts.svelte-elr56e li:where(.svelte-elr56e) {padding:3px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}.tbx-parts-combined.svelte-elr56e {border-left:3px solid #adb5bd;padding-left:10px;}.tbx-part-label.svelte-elr56e {display:inline-block;min-width:80px;font-weight:600;}.tbx-part-status.svelte-elr56e {flex:1 1 auto;}.tbx-status-ok.svelte-elr56e {color:#198754;}.tbx-status-outdated.svelte-elr56e {color:#b35c00;}.tbx-status-unknown.svelte-elr56e {color:#6c757d;}.tbx-status-error.svelte-elr56e {color:#dc3545;}"
 	};
 	function Toolbox($$anchor, $$props) {
 		push($$props, true);
@@ -9531,82 +9537,82 @@ ${groups}`,
 		}
 		const toolboxButton = /* @__PURE__ */ user_derived(() => updateButton([state().toolboxStatus]));
 		const toolboxLine = /* @__PURE__ */ user_derived(() => statusLine(state().toolboxStatus));
-		var div_6 = root_20();
+		var div_5 = root_19();
+		var div_6 = child(div_5);
 		var div_7 = child(div_6);
-		var div_8 = child(div_7);
-		var div_9 = sibling(child(div_8), 2);
-		var button_1 = child(div_9);
-		var text_4 = only_child(button_1, true);
-		reset(div_9);
+		var div_8 = sibling(child(div_7), 2);
+		var button_1 = child(div_8);
+		var text_3 = only_child(button_1, true);
 		reset(div_8);
-		var div_10 = sibling(div_8, 2);
-		var ul_1 = child(div_10);
+		reset(div_7);
+		var div_9 = sibling(div_7, 2);
+		var ul_1 = child(div_9);
 		var li = child(ul_1);
 		var span_4 = sibling(child(li));
-		var text_5 = only_child(span_4, true);
+		var text_4 = only_child(span_4, true);
 		reset(li);
 		reset(ul_1);
-		reset(div_10);
-		reset(div_7);
-		var div_11 = sibling(div_7, 2);
-		var div_12 = child(div_11);
-		var div_13 = sibling(child(div_12), 2);
-		var button_2 = child(div_13);
-		var text_6 = only_child(button_2, true);
-		reset(div_13);
+		reset(div_9);
+		reset(div_6);
+		var div_10 = sibling(div_6, 2);
+		var div_11 = child(div_10);
+		var div_12 = sibling(child(div_11), 2);
+		var button_2 = child(div_12);
+		var text_5 = only_child(button_2, true);
 		reset(div_12);
-		var div_14 = sibling(div_12, 2);
-		var node_10 = child(div_14);
+		reset(div_11);
+		var div_13 = sibling(div_11, 2);
+		var node_9 = child(div_13);
+		var consequent_6 = ($$anchor) => {
+			append($$anchor, root_8());
+		};
 		var consequent_7 = ($$anchor) => {
 			append($$anchor, root_9());
 		};
-		var consequent_8 = ($$anchor) => {
-			append($$anchor, root_10());
-		};
 		var alternate = ($$anchor) => {
-			var fragment_1 = root_14();
+			var fragment_1 = root_13();
 			var select = first_child(fragment_1);
 			each(select, 21, () => state().available, (target) => target.id, ($$anchor, target) => {
-				var option = root_11();
-				var text_7 = only_child(option, true);
+				var option = root_10();
+				var text_6 = only_child(option, true);
 				var option_value = {};
 				template_effect(() => {
-					set_text(text_7, get(target).name);
+					set_text(text_6, get(target).name);
 					if (option_value !== (option_value = get(target).id)) option.value = (option.__value = option_value) ?? "";
 				});
 				append($$anchor, option);
 			});
 			reset(select);
 			init_select(select);
-			var node_11 = sibling(select, 2);
-			var consequent_10 = ($$anchor) => {
+			var node_10 = sibling(select, 2);
+			var consequent_9 = ($$anchor) => {
 				const previewParts = ($$anchor) => {
 					var fragment_2 = comment();
 					each(first_child(fragment_2), 17, () => toolParts(get(target)), (part) => part.key, ($$anchor, part) => {
 						const specs = /* @__PURE__ */ user_derived(() => get(part).kind === "script" ? get(part).script.customerVariables : []);
-						var li_1 = root_13();
+						var li_1 = root_12();
 						var span_5 = child(li_1);
-						var text_8 = only_child(span_5, true);
+						var text_7 = only_child(span_5, true);
 						var span_6 = sibling(span_5, 2);
-						var text_9 = only_child(span_6, true);
-						var node_13 = sibling(span_6, 2);
-						var consequent_9 = ($$anchor) => {
-							var button_3 = root_12();
-							var text_10 = only_child(button_3, true);
+						var text_8 = only_child(span_6, true);
+						var node_12 = sibling(span_6, 2);
+						var consequent_8 = ($$anchor) => {
+							var button_3 = root_11();
+							var text_9 = only_child(button_3, true);
 							template_effect(($0, $1) => {
 								button_3.disabled = $0;
-								set_text(text_10, $1);
+								set_text(text_9, $1);
 							}, [() => locked("available"), () => busyLabel(`${get(target).id}:${get(part).key}`, "Anlegen")]);
 							delegated("click", button_3, () => state().rollout("available", `${get(target).id}:${get(part).key}`, get(target), [get(part)], "angelegt"));
 							append($$anchor, button_3);
 						};
-						if_block(node_13, ($$render) => {
-							if (get(several)) $$render(consequent_9);
+						if_block(node_12, ($$render) => {
+							if (get(several)) $$render(consequent_8);
 						});
 						reset(li_1);
 						template_effect(($0, $1) => {
-							set_text(text_8, $0);
-							set_text(text_9, $1);
+							set_text(text_7, $0);
+							set_text(text_8, $1);
 						}, [() => partLabel(get(target), get(part)), () => get(specs).length > 0 ? `fragt beim Anlegen ab: ${get(specs).map((s) => s.label).join(", ")}` : "keine Eingaben nötig"]);
 						append($$anchor, li_1);
 					});
@@ -9614,59 +9620,59 @@ ${groups}`,
 				};
 				const target = /* @__PURE__ */ user_derived(() => state().selected);
 				const several = /* @__PURE__ */ user_derived(() => hasSeveralParts(get(target)));
-				toolCard($$anchor, () => get(target), () => void 0, () => get(target).type === "form" ? void 0 : previewParts, () => get(several) ? "„Erstellen“ legt alle Bestandteile an, einzelne lassen sich über „Anlegen“ separat anlegen." : "");
+				toolCard($$anchor, () => get(target), () => void 0, () => get(target).type === "form" ? void 0 : previewParts);
 			};
-			if_block(node_11, ($$render) => {
-				if (state().selected) $$render(consequent_10);
+			if_block(node_10, ($$render) => {
+				if (state().selected) $$render(consequent_9);
 			});
 			template_effect(($0) => select.disabled = $0, [() => locked("available")]);
 			bind_select_value(select, () => state().selectedId, ($$value) => state().selectedId = $$value);
 			append($$anchor, fragment_1);
 		};
-		if_block(node_10, ($$render) => {
-			if (!state().available) $$render(consequent_7);
-			else if (state().available.length === 0) $$render(consequent_8, 1);
+		if_block(node_9, ($$render) => {
+			if (!state().available) $$render(consequent_6);
+			else if (state().available.length === 0) $$render(consequent_7, 1);
 			else $$render(alternate, -1);
 		});
-		reset(div_14);
-		reset(div_11);
-		var div_17 = sibling(div_11, 2);
-		var div_18 = sibling(child(div_17), 2);
-		var node_14 = child(div_18);
+		reset(div_13);
+		reset(div_10);
+		var div_16 = sibling(div_10, 2);
+		var div_17 = sibling(child(div_16), 2);
+		var node_13 = child(div_17);
+		var consequent_10 = ($$anchor) => {
+			append($$anchor, root_8());
+		};
 		var consequent_11 = ($$anchor) => {
-			append($$anchor, root_9());
+			var div_19 = root_14();
+			var text_10 = only_child(div_19);
+			template_effect(() => set_text(text_10, `Installierte Werkzeuge konnten nicht ermittelt werden: ${state().listsError ?? ""}`));
+			append($$anchor, div_19);
 		};
 		var consequent_12 = ($$anchor) => {
-			var div_20 = root_15();
-			var text_11 = only_child(div_20);
-			template_effect(() => set_text(text_11, `Installierte Werkzeuge konnten nicht ermittelt werden: ${state().listsError ?? ""}`));
-			append($$anchor, div_20);
-		};
-		var consequent_13 = ($$anchor) => {
-			append($$anchor, root_16());
+			append($$anchor, root_15());
 		};
 		var alternate_1 = ($$anchor) => {
 			var fragment_4 = comment();
 			each(first_child(fragment_4), 17, () => state().loaded, (target) => target.id, ($$anchor, target) => {
 				const cardActions = ($$anchor) => {
 					const button = /* @__PURE__ */ user_derived(() => updateButton(get(parts).map((part) => get(statuses)?.[part.key])));
-					var fragment_5 = root_18();
-					var node_16 = first_child(fragment_5);
-					var consequent_14 = ($$anchor) => {
-						var button_4 = root_17();
+					var fragment_5 = root_17();
+					var node_15 = first_child(fragment_5);
+					var consequent_13 = ($$anchor) => {
+						var button_4 = root_16();
 						template_effect(($0) => button_4.disabled = $0, [() => locked("loaded") || state().opening[get(target).id]]);
 						delegated("click", button_4, () => state().open(get(target)));
 						append($$anchor, button_4);
 					};
 					var d = /* @__PURE__ */ user_derived(() => hasFormPart(get(target)));
-					if_block(node_16, ($$render) => {
-						if (get(d)) $$render(consequent_14);
+					if_block(node_15, ($$render) => {
+						if (get(d)) $$render(consequent_13);
 					});
-					var button_5 = sibling(node_16, 2);
-					var text_12 = only_child(button_5, true);
+					var button_5 = sibling(node_15, 2);
+					var text_11 = only_child(button_5, true);
 					template_effect(($0, $1) => {
 						button_5.disabled = $0;
-						set_text(text_12, $1);
+						set_text(text_11, $1);
 					}, [() => get(button).disabled || locked("loaded"), () => busyLabel(get(target).id, get(button).label)]);
 					delegated("click", button_5, () => state().rollout("loaded", get(target).id, get(target), get(parts), "aktualisiert"));
 					append($$anchor, fragment_5);
@@ -9677,30 +9683,30 @@ ${groups}`,
 						const status = /* @__PURE__ */ user_derived(() => get(statuses)?.[get(part).key]);
 						const line = /* @__PURE__ */ user_derived(() => statusLine(get(status)));
 						const button = /* @__PURE__ */ user_derived(() => partButton(get(status)));
-						var li_2 = root_19();
+						var li_2 = root_18();
 						var span_7 = child(li_2);
-						var text_13 = only_child(span_7, true);
+						var text_12 = only_child(span_7, true);
 						var span_8 = sibling(span_7, 2);
-						var text_14 = only_child(span_8, true);
-						var node_18 = sibling(span_8, 2);
-						var consequent_15 = ($$anchor) => {
-							var button_6 = root_12();
-							var text_15 = only_child(button_6, true);
+						var text_13 = only_child(span_8, true);
+						var node_17 = sibling(span_8, 2);
+						var consequent_14 = ($$anchor) => {
+							var button_6 = root_11();
+							var text_14 = only_child(button_6, true);
 							template_effect(($0, $1) => {
 								button_6.disabled = $0;
-								set_text(text_15, $1);
+								set_text(text_14, $1);
 							}, [() => get(button).disabled || locked("loaded"), () => busyLabel(`${get(target).id}:${get(part).key}`, get(button).label)]);
 							delegated("click", button_6, () => state().rollout("loaded", `${get(target).id}:${get(part).key}`, get(target), [get(part)], get(status)?.missing ? "angelegt" : "aktualisiert"));
 							append($$anchor, button_6);
 						};
-						if_block(node_18, ($$render) => {
-							if (get(several)) $$render(consequent_15);
+						if_block(node_17, ($$render) => {
+							if (get(several)) $$render(consequent_14);
 						});
 						reset(li_2);
 						template_effect(($0) => {
-							set_text(text_13, $0);
+							set_text(text_12, $0);
 							set_class(span_8, 1, `tbx-part-status ${get(line).css ?? ""}`, "svelte-elr56e");
-							set_text(text_14, get(line).text);
+							set_text(text_13, get(line).text);
 						}, [() => partLabel(get(target), get(part))]);
 						append($$anchor, li_2);
 					});
@@ -9709,26 +9715,26 @@ ${groups}`,
 				const statuses = /* @__PURE__ */ user_derived(() => state().partStatuses[get(target).id]);
 				const parts = /* @__PURE__ */ user_derived(() => toolParts(get(target)));
 				const several = /* @__PURE__ */ user_derived(() => hasSeveralParts(get(target)));
-				toolCard($$anchor, () => get(target), () => cardActions, () => cardParts, () => "");
+				toolCard($$anchor, () => get(target), () => cardActions, () => cardParts);
 			});
 			append($$anchor, fragment_4);
 		};
-		if_block(node_14, ($$render) => {
-			if (!state().loaded) $$render(consequent_11);
-			else if (state().listsError) $$render(consequent_12, 1);
-			else if (state().loaded.length === 0) $$render(consequent_13, 2);
+		if_block(node_13, ($$render) => {
+			if (!state().loaded) $$render(consequent_10);
+			else if (state().listsError) $$render(consequent_11, 1);
+			else if (state().loaded.length === 0) $$render(consequent_12, 2);
 			else $$render(alternate_1, -1);
 		});
-		reset(div_18);
 		reset(div_17);
-		reset(div_6);
+		reset(div_16);
+		reset(div_5);
 		template_effect(($0, $1, $2, $3) => {
 			button_1.disabled = $0;
-			set_text(text_4, $1);
+			set_text(text_3, $1);
 			set_class(span_4, 1, `tbx-part-status ${get(toolboxLine).css ?? ""}`, "svelte-elr56e");
-			set_text(text_5, get(toolboxLine).text);
+			set_text(text_4, get(toolboxLine).text);
 			button_2.disabled = $2;
-			set_text(text_6, $3);
+			set_text(text_5, $3);
 		}, [
 			() => get(toolboxButton).disabled || locked("toolbox"),
 			() => busyLabel("update-toolbox", get(toolboxButton).label),
@@ -9737,7 +9743,7 @@ ${groups}`,
 		]);
 		delegated("click", button_1, () => state().updateToolbox());
 		delegated("click", button_2, () => state().createSelected());
-		append($$anchor, div_6);
+		append($$anchor, div_5);
 		pop();
 	}
 	delegate(["click"]);

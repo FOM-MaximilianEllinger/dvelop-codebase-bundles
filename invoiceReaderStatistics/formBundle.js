@@ -4508,6 +4508,7 @@ createHTML: (html) => {
 				return;
 			}
 			if (instance) unmount(instance);
+			removePagePadding(host.ownerDocument);
 			host.innerHTML = "";
 			root = host.ownerDocument.createElement("div");
 			host.appendChild(root);
@@ -4520,6 +4521,22 @@ createHTML: (html) => {
 		form.on?.("render", () => {
 			if (!root?.isConnected) mountNow();
 		});
+	}
+	var PAGE_PADDING_STYLE_ID = "toolbox-no-page-padding";
+	/**
+	* Entfernt das seitliche Padding des dforms-Seitencontainers (MUI), damit
+	* die Werkzeuge - meist breite Tabellen - die volle Breite nutzen. Gilt für
+	* die ganze Seite; unbedenklich, weil jedes Bundle nur auf seiner eigenen
+	* Formularseite läuft. Die generierte Klasse (z.B. css-1783alc) ändert sich
+	* mit dforms-Updates, MuiContainer-root bleibt - doppelt angegeben, damit die
+	* Regel unabhängig von der Reihenfolge der Styles gewinnt.
+	*/
+	function removePagePadding(doc) {
+		if (doc.getElementById(PAGE_PADDING_STYLE_ID)) return;
+		const style = doc.createElement("style");
+		style.id = PAGE_PADDING_STYLE_ID;
+		style.textContent = ".MuiContainer-root.MuiContainer-root { padding-left: 0; padding-right: 0; }";
+		doc.head.appendChild(style);
 	}
 	//#endregion
 	//#region node_modules/svelte/src/internal/disclose-version.js

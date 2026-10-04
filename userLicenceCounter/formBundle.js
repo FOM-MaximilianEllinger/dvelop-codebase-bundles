@@ -50,86 +50,13 @@
 		return loggerInstance;
 	}
 	//#endregion
-	//#region ../../helper/performHttpRequest/performHttpRequest.ts
-	/**
-	* Performs an HTTP request and returns a structured response.
-	*
-	* @template T - The expected type of the response body.
-	* @param {string} url - The URL to which the request is sent.
-	* @param {RequestInit} options - The options for the HTTP request, such as method, headers, and body.
-	* @returns {Promise<ApiResponse<T>>} A promise that resolves to an `ApiResponse` object containing the response details.
-	* @throws {Error} Throws an error if the HTTP response status is not OK (status code outside the range 200-299).
-	*
-	* The function attempts to parse the response body based on the `Content-Type` header:
-	* - If the `Content-Type` includes "application/json", it parses the body as JSON.
-	* - Otherwise, it parses the body as plain text.
-	*
-	* If the response is not OK, the function throws an error with the status code and error message.
-	*/
-	var logger$1 = getLogger();
-	async function performHttpRequest(url, options) {
-		let body = {};
-		let errorMessage = "";
-		let response;
-		logger$1.debug(`[Request] ${options.method} ${url} | Headers: ${JSON.stringify(options.headers)} | Body: ${!(options.body instanceof Uint8Array) && options.body !== void 0 ? options.body : "[Binary body omitted]"}`);
-		try {
-			response = await fetch(url, options);
-		} catch (err) {
-			throw new Error(`Network error during fetch: ${err.message}`);
-		}
-		const contentType = response.headers.get("content-type") || "";
-		const parseBody = async () => {
-			try {
-				if (contentType.includes("application/json") || contentType.includes("application/hal+json")) return await response.json();
-				else if (contentType.includes("application/octet-stream") || contentType.includes("application/pdf")) {
-					const arrayBuffer = await response.arrayBuffer();
-					return new Uint8Array(arrayBuffer);
-				} else return await response.text();
-			} catch (e) {
-				return;
-			}
-		};
-		if (response.ok) {
-			const result = await parseBody();
-			if (result !== void 0) body = result;
-		} else {
-			const errorBody = await parseBody();
-			errorMessage = typeof errorBody === "string" ? errorBody : JSON.stringify(errorBody);
-			throw new Error(`HTTP error! status: ${response.status}, message: ${errorMessage}`);
-		}
-		return {
-			status: response.status,
-			statusText: response.statusText,
-			body,
-			bodyUsed: response.bodyUsed,
-			headers: response.headers,
-			ok: response.ok,
-			redirected: response.redirected,
-			type: response.type,
-			url: response.url
-		};
-	}
+	//#region node_modules/svelte/src/internal/disclose-version.js
+	if (typeof window !== "undefined") ((window.__svelte ??= {}).v ??= /* @__PURE__ */ new Set()).add("5");
 	//#endregion
-	//#region ../../helper/scripting/getAllScripts.ts
-	async function getAllScripts(baseUri, token) {
-		return await performHttpRequest(`${baseUri}/scripting/script`, {
-			method: "GET",
-			headers: {
-				Authorization: `Bearer ${token}`,
-				Accept: "application/json",
-				"Content-Type": "application/json"
-			}
-		});
-	}
-	//#endregion
-	//#region ../../helper/scripting/callScriptEndpoint.ts
-	async function callScriptEndpoint(baseUri, scriptId, method, headers, payload) {
-		return await performHttpRequest(`${baseUri}/scripting/script/${scriptId}/run`, {
-			method,
-			headers,
-			body: JSON.stringify(payload)
-		});
-	}
+	//#region node_modules/svelte/src/constants.js
+	var HYDRATION_ERROR = {};
+	var UNINITIALIZED = Symbol("uninitialized");
+	var NAMESPACE_HTML = "http://www.w3.org/1999/xhtml";
 	//#endregion
 	//#region node_modules/svelte/src/internal/shared/utils.js
 	var is_array = Array.isArray;
@@ -202,11 +129,6 @@
 		message = "The reaction that called `getAbortSignal()` was re-run or destroyed";
 	}();
 	var IS_XHTML = !!globalThis.document?.contentType && /* @__PURE__ */ globalThis.document.contentType.includes("xml");
-	//#endregion
-	//#region node_modules/svelte/src/constants.js
-	var HYDRATION_ERROR = {};
-	var UNINITIALIZED = Symbol("uninitialized");
-	var NAMESPACE_HTML = "http://www.w3.org/1999/xhtml";
 	/**
 	* Reading a derived belonging to a now-destroyed effect may result in stale values
 	*/
@@ -348,29 +270,6 @@
 	*/
 	function each_key_duplicate(a, b, value) {
 		throw new Error(`https://svelte.dev/e/each_key_duplicate`);
-	}
-	/**
-	* `%rune%` cannot be used inside an effect cleanup function
-	* @param {string} rune
-	* @returns {never}
-	*/
-	function effect_in_teardown(rune) {
-		throw new Error(`https://svelte.dev/e/effect_in_teardown`);
-	}
-	/**
-	* Effect cannot be created inside a `$derived` value that was not itself created inside an effect
-	* @returns {never}
-	*/
-	function effect_in_unowned_derived() {
-		throw new Error(`https://svelte.dev/e/effect_in_unowned_derived`);
-	}
-	/**
-	* `%rune%` can only be used inside an effect (e.g. during component initialisation)
-	* @param {string} rune
-	* @returns {never}
-	*/
-	function effect_orphan(rune) {
-		throw new Error(`https://svelte.dev/e/effect_orphan`);
 	}
 	/**
 	* Maximum update depth exceeded. This typically indicates that an effect reads and writes the same piece of state
@@ -2205,16 +2104,6 @@
 	//#region node_modules/svelte/src/internal/client/reactivity/effects.js
 	/** @import { Blocker, ComponentContext, ComponentContextLegacy, Derived, Effect, TemplateNode, TransitionManager } from '#client' */
 	/**
-	* @param {'$effect' | '$effect.pre' | '$inspect'} rune
-	*/
-	function validate_effect(rune) {
-		if (active_effect === null) {
-			if (active_reaction === null) effect_orphan(rune);
-			effect_in_unowned_derived();
-		}
-		if (is_destroying_effect) effect_in_teardown(rune);
-	}
-	/**
 	* @param {Effect} effect
 	* @param {Effect} parent_effect
 	*/
@@ -2295,18 +2184,6 @@
 		set_signal_status(effect, CLEAN);
 		effect.teardown = fn;
 		return effect;
-	}
-	/**
-	* Internal representation of `$effect(...)`
-	* @param {() => void | (() => void)} fn
-	*/
-	function user_effect(fn) {
-		validate_effect("$effect");
-		var flags = active_effect.f;
-		if (!active_reaction && (flags & 32) !== 0 && component_context !== null && !component_context.i) {
-			var context = component_context;
-			(context.e ??= []).push(fn);
-		} else return create_user_effect(fn);
 	}
 	/**
 	* @param {() => void | (() => void)} fn
@@ -2954,23 +2831,6 @@
 			untracking = previous_untracking;
 		}
 	}
-	/**
-	* Subset of delegated events which should be passive by default.
-	* These two are already passive via browser defaults on window, document and body.
-	* But since
-	* - we're delegating them
-	* - they happen often
-	* - they apply to mobile which is generally less performant
-	* we're marking them as passive by default for other elements, too.
-	*/
-	var PASSIVE_EVENTS = ["touchstart", "touchmove"];
-	/**
-	* Returns `true` if `name` is a passive event
-	* @param {string} name
-	*/
-	function is_passive_event(name) {
-		return PASSIVE_EVENTS.includes(name);
-	}
 	//#endregion
 	//#region node_modules/svelte/src/internal/client/dom/elements/events.js
 	/**
@@ -3197,6 +3057,23 @@ createHTML: (html) => {
 		}
 		if (anchor === null) return;
 		anchor.before(dom);
+	}
+	/**
+	* Subset of delegated events which should be passive by default.
+	* These two are already passive via browser defaults on window, document and body.
+	* But since
+	* - we're delegating them
+	* - they happen often
+	* - they apply to mobile which is generally less performant
+	* we're marking them as passive by default for other elements, too.
+	*/
+	var PASSIVE_EVENTS = ["touchstart", "touchmove"];
+	/**
+	* Returns `true` if `name` is a passive event
+	* @param {string} name
+	*/
+	function is_passive_event(name) {
+		return PASSIVE_EVENTS.includes(name);
 	}
 	//#endregion
 	//#region node_modules/svelte/src/reactivity/create-subscriber.js
@@ -4802,9 +4679,6 @@ createHTML: (html) => {
 	}
 	if (typeof HTMLElement === "function");
 	//#endregion
-	//#region node_modules/svelte/src/internal/disclose-version.js
-	if (typeof window !== "undefined") ((window.__svelte ??= {}).v ??= /* @__PURE__ */ new Set()).add("5");
-	//#endregion
 	//#region ../../helper/utils/tableExport.ts
 	/**
 	* CSV im von deutschem Excel erwarteten Format: Semikolon als Trennzeichen,
@@ -5085,8 +4959,7 @@ createHTML: (html) => {
 	var root_8 = /* @__PURE__ */ from_html(`<span class="id svelte-nd7kvc"> </span>`);
 	var root_9 = /* @__PURE__ */ from_html(`<tr><td class="nr svelte-nd7kvc"> </td><td class="svelte-nd7kvc"><!></td><td class="svelte-nd7kvc"><!></td><td class="svelte-nd7kvc"><!></td><td class="svelte-nd7kvc"><!> <!></td><td class="svelte-nd7kvc"><!></td></tr>`);
 	var root_10 = /* @__PURE__ */ from_html(`<tr><td colspan="6" class="muted svelte-nd7kvc">Keine Benutzer gefunden.</td></tr>`);
-	var root_11 = /* @__PURE__ */ from_html(`<div class="section svelte-nd7kvc"><div class="header svelte-nd7kvc"><div><span class="title svelte-nd7kvc">Benutzer</span> <div class="stats svelte-nd7kvc"><span class="stat stat-paid svelte-nd7kvc">Bezahlt: <strong class="svelte-nd7kvc"> </strong></span> <span class="stat svelte-nd7kvc">Administrativ: <strong class="svelte-nd7kvc"> </strong></span> <span class="stat svelte-nd7kvc">Gesamt: <strong class="svelte-nd7kvc"> </strong></span></div> <div class="hint">Bezahlt = alle Benutzer außer administrativen Benutzern (@gws.ms). Technische (API-)Benutzer werden vom
-          Identityprovider nicht aufgelistet und sind daher nicht enthalten.</div></div> <div class="controls svelte-nd7kvc"><select class="form-control form-control-sm category svelte-nd7kvc" aria-label="Benutzer filtern"></select> <input type="search" class="form-control form-control-sm search svelte-nd7kvc" placeholder="Suchen…" aria-label="Benutzer suchen"/> <div class="export-group svelte-nd7kvc"><button type="button" class="btn btn-sm btn-outline-secondary svelte-nd7kvc" title="Angezeigte Benutzer als CSV-Datei exportieren">CSV-Download</button> <button type="button" class="btn btn-sm btn-outline-secondary svelte-nd7kvc" title="Angezeigte Benutzer als Excel-Datei exportieren">Excel-Download</button></div></div></div> <div class="body svelte-nd7kvc"><div class="table-wrap svelte-nd7kvc"><table class="table table-sm table-hover table-striped svelte-nd7kvc"><thead class="svelte-nd7kvc"><tr><th class="nr svelte-nd7kvc">Nr.</th><th class="svelte-nd7kvc">Name</th><th class="svelte-nd7kvc">Benutzername</th><th class="svelte-nd7kvc">E-Mail</th><th class="svelte-nd7kvc">Typ</th><th class="svelte-nd7kvc">ID</th></tr></thead><tbody></tbody></table></div> <div class="footer svelte-nd7kvc"> </div></div></div>`);
+	var root_11 = /* @__PURE__ */ from_html(`<div class="section svelte-nd7kvc"><div class="header svelte-nd7kvc"><div><span class="title svelte-nd7kvc">Benutzer</span> <div class="stats svelte-nd7kvc"><span class="stat stat-paid svelte-nd7kvc">Bezahlt: <strong class="svelte-nd7kvc"> </strong></span> <span class="stat svelte-nd7kvc">Administrativ: <strong class="svelte-nd7kvc"> </strong></span> <span class="stat svelte-nd7kvc">Gesamt: <strong class="svelte-nd7kvc"> </strong></span></div></div> <div class="controls svelte-nd7kvc"><select class="form-control form-control-sm category svelte-nd7kvc" aria-label="Benutzer filtern"></select> <input type="search" class="form-control form-control-sm search svelte-nd7kvc" placeholder="Suchen…" aria-label="Benutzer suchen"/> <div class="export-group svelte-nd7kvc"><button type="button" class="btn btn-sm btn-outline-secondary svelte-nd7kvc" title="Angezeigte Benutzer als CSV-Datei exportieren">CSV-Download</button> <button type="button" class="btn btn-sm btn-outline-secondary svelte-nd7kvc" title="Angezeigte Benutzer als Excel-Datei exportieren">Excel-Download</button></div></div></div> <div class="body svelte-nd7kvc"><div class="table-wrap svelte-nd7kvc"><table class="table table-sm table-hover table-striped svelte-nd7kvc"><thead class="svelte-nd7kvc"><tr><th class="nr svelte-nd7kvc">Nr.</th><th class="svelte-nd7kvc">Name</th><th class="svelte-nd7kvc">Benutzername</th><th class="svelte-nd7kvc">E-Mail</th><th class="svelte-nd7kvc">Typ</th><th class="svelte-nd7kvc">ID</th></tr></thead><tbody></tbody></table></div> <div class="footer svelte-nd7kvc"> </div></div></div>`);
 	var $$css = {
 		hash: "svelte-nd7kvc",
 		code: ".section.svelte-nd7kvc {border:1px solid #dee2e6;border-radius:6px;background:#fff;}.header.svelte-nd7kvc {display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #dee2e6;background:#f8f9fa;border-radius:6px 6px 0 0;}.title.svelte-nd7kvc {font-weight:600;font-size:1.05em;}.stats.svelte-nd7kvc {display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}.stat.svelte-nd7kvc {font-size:0.8em;font-weight:600;padding:2px 9px;border-radius:10px;background:#e9ecef;color:#495057;}.stat.svelte-nd7kvc strong:where(.svelte-nd7kvc) {font-weight:700;}.stat-paid.svelte-nd7kvc {background:#d1e7dd;color:#0f5132;font-size:0.9em;}.controls.svelte-nd7kvc {display:flex;gap:6px;flex-wrap:wrap;align-items:center;}.category.svelte-nd7kvc {width:auto;flex:0 0 auto;}.search.svelte-nd7kvc {width:220px;flex:0 0 auto;}.export-group.svelte-nd7kvc {display:flex;gap:6px;flex-wrap:nowrap;}.export-group.svelte-nd7kvc button:where(.svelte-nd7kvc) {white-space:nowrap;}.badge-type.svelte-nd7kvc {display:inline-block;font-size:0.75em;font-weight:600;padding:2px 7px;border-radius:10px;margin-right:4px;white-space:nowrap;}.badge-paid.svelte-nd7kvc {background:#d1e7dd;color:#0f5132;}.badge-gws.svelte-nd7kvc {background:#fff3cd;color:#997404;}.body.svelte-nd7kvc {padding:12px;}.table-wrap.svelte-nd7kvc {max-height:65vh;overflow:auto;border:1px solid #dee2e6;border-radius:6px;}table.svelte-nd7kvc {margin:0;font-size:0.9em;}thead.svelte-nd7kvc th:where(.svelte-nd7kvc) {position:sticky;top:0;background:#f8f9fa;border-bottom:1px solid #dee2e6;white-space:nowrap;}td.svelte-nd7kvc {vertical-align:middle;}.nr.svelte-nd7kvc {color:#6c757d;width:3em;text-align:right;}.name.svelte-nd7kvc {font-weight:600;}.id.svelte-nd7kvc {color:#6c757d;font-family:monospace;font-size:0.85em;}.muted.svelte-nd7kvc {color:#adb5bd;font-style:italic;}.footer.svelte-nd7kvc {color:#6c757d;font-size:0.85em;margin-top:8px;}.loading.svelte-nd7kvc {display:flex;align-items:center;gap:10px;color:#6c757d;padding:12px;}.error.svelte-nd7kvc {color:#842029;background:#f8d7da;border:1px solid #f5c2c7;border-radius:6px;padding:10px 12px;}"
@@ -5094,22 +4967,17 @@ createHTML: (html) => {
 	function UserLicenceOverview($$anchor, $$props) {
 		push($$props, true);
 		append_styles($$anchor, $$css);
-		let filters = prop($$props, "filters", 7);
-		let category = /* @__PURE__ */ state(proxy(untrack(() => filters().category)));
-		let term = /* @__PURE__ */ state(proxy(untrack(() => filters().term)));
-		user_effect(() => {
-			filters().category = get(category);
-			filters().term = get(term);
-		});
-		const users = /* @__PURE__ */ user_derived(() => $$props.view.kind === "result" ? sortUsers($$props.view.result.users) : []);
+		let state = prop($$props, "state", 7);
+		const view = /* @__PURE__ */ user_derived(() => state().view);
+		const users = /* @__PURE__ */ user_derived(() => get(view).kind === "result" ? sortUsers(get(view).result.users) : []);
 		const visibleUsers = /* @__PURE__ */ user_derived(() => {
-			const filter = CATEGORY_FILTERS.find((entry) => entry.value === get(category)) ?? CATEGORY_FILTERS[0];
-			const search = get(term).trim().toLowerCase();
+			const filter = CATEGORY_FILTERS.find((entry) => entry.value === state().category) ?? CATEGORY_FILTERS[0];
+			const search = state().term.trim().toLowerCase();
 			return get(users).filter((user) => filter.matches(user) && matchesSearch(user, search));
 		});
 		function download(format) {
-			const count = exportUsers(get(visibleUsers), get(category), format);
-			$$props.onExported?.(count, format);
+			const count = exportUsers(get(visibleUsers), state().category, format);
+			getLogger().debug(`${count} Benutzer als ${format.toUpperCase()} exportiert.`);
 		}
 		function preventSubmit(event) {
 			if (event.key === "Enter") event.preventDefault();
@@ -5123,7 +4991,7 @@ createHTML: (html) => {
 			var div_1 = root_1();
 			var text = sibling(child(div_1));
 			reset(div_1);
-			template_effect(() => set_text(text, ` ${$$props.view.message ?? ""}`));
+			template_effect(() => set_text(text, ` ${get(view).message ?? ""}`));
 			append($$anchor, div_1);
 		};
 		var alternate_4 = ($$anchor) => {
@@ -5141,7 +5009,6 @@ createHTML: (html) => {
 			var text_3 = only_child(sibling(child(span_2)), true);
 			reset(span_2);
 			reset(div_5);
-			next(2);
 			reset(div_4);
 			var div_6 = sibling(div_4, 2);
 			var select = child(div_6);
@@ -5268,21 +5135,21 @@ createHTML: (html) => {
 			reset(div_8);
 			reset(div_2);
 			template_effect(($0) => {
-				set_text(text_1, $$props.view.result.paid);
-				set_text(text_2, $$props.view.result.gwsDomain);
-				set_text(text_3, $$props.view.result.total);
+				set_text(text_1, get(view).result.paid);
+				set_text(text_2, get(view).result.gwsDomain);
+				set_text(text_3, get(view).result.total);
 				set_text(text_10, `${get(visibleUsers).length ?? ""} von ${get(users).length ?? ""} Benutzern angezeigt · Stand ${$0 ?? ""}`);
-			}, [() => $$props.view.countedAt.toLocaleString("de-DE")]);
-			bind_select_value(select, () => get(category), ($$value) => set(category, $$value));
+			}, [() => get(view).countedAt.toLocaleString("de-DE")]);
+			bind_select_value(select, () => state().category, ($$value) => state().category = $$value);
 			delegated("keydown", input, preventSubmit);
-			bind_value(input, () => get(term), ($$value) => set(term, $$value));
+			bind_value(input, () => state().term, ($$value) => state().term = $$value);
 			delegated("click", button, () => download("csv"));
 			delegated("click", button_1, () => download("xlsx"));
 			append($$anchor, div_2);
 		};
 		if_block(node, ($$render) => {
-			if ($$props.view.kind === "loading") $$render(consequent);
-			else if ($$props.view.kind === "error") $$render(consequent_1, 1);
+			if (get(view).kind === "loading") $$render(consequent);
+			else if (get(view).kind === "error") $$render(consequent_1, 1);
 			else $$render(alternate_4, -1);
 		});
 		append($$anchor, fragment);
@@ -5290,86 +5157,214 @@ createHTML: (html) => {
 	}
 	delegate(["keydown", "click"]);
 	//#endregion
-	//#region src/forms/form.ts
-	var logger = initLogger(LogLevel.INFO);
-	var SCRIPT_NAME = "User-Lizenz-Zähler";
-	var resultKey = "result";
-	function getErrorMessage(error) {
-		return error instanceof Error ? error.message : String(error);
+	//#region ../Toolbox/shared/mountInForm.ts
+	/**
+	* Hängt eine Svelte-Komponente in die HTML-Element-Komponente eines
+	* dforms-/Formio-Formulars ein (Standard-Key "result", siehe
+	* src/forms/form.json der Projekte) - direkt in deren ref="html"-Kind statt
+	* component.content + redraw(), damit Formio's Hülle erhalten bleibt.
+	*
+	* Zeichnet Formio die Komponente neu (oder war sie beim Aufruf noch nicht
+	* gerendert), ist der Inhalt weg - dann wird die Komponente automatisch neu
+	* eingehängt. Zustand, der das überdauern soll, gehört deshalb nicht in die
+	* Komponente, sondern in ein .svelte.ts-Modul, das per Prop hereinkommt.
+	*/
+	function mountInForm(form, component, props, key = "result") {
+		let root;
+		let instance;
+		const mountNow = () => {
+			const formComponent = form.getComponent?.(key);
+			const host = formComponent?.refs?.html ?? formComponent?.element?.querySelector?.("[ref=\"html\"]") ?? formComponent?.element;
+			if (!host) {
+				getLogger().warn(`Komponente "${key}" nicht im Formular gefunden (oder noch nicht gerendert).`);
+				return;
+			}
+			if (instance) unmount(instance);
+			removePagePadding(host.ownerDocument);
+			host.innerHTML = "";
+			root = host.ownerDocument.createElement("div");
+			host.appendChild(root);
+			instance = mount(component, {
+				target: root,
+				props
+			});
+		};
+		mountNow();
+		form.on?.("render", () => {
+			if (!root?.isConnected) mountNow();
+		});
 	}
-	var currentView;
-	var filters = {
-		category: "all",
-		term: ""
-	};
-	var mountedApp;
-	var mountedRoot;
-	function getContentHost(form) {
-		const component = form.getComponent?.(resultKey);
-		if (!component) return void 0;
-		return component.refs?.html ?? component.element?.querySelector?.("[ref=\"html\"]") ?? component.element ?? void 0;
+	var PAGE_PADDING_STYLE_ID = "toolbox-no-page-padding";
+	/**
+	* Entfernt das seitliche Padding des dforms-Seitencontainers (MUI), damit
+	* die Werkzeuge - meist breite Tabellen - die volle Breite nutzen. Gilt für
+	* die ganze Seite; unbedenklich, weil jedes Bundle nur auf seiner eigenen
+	* Formularseite läuft. Die generierte Klasse (z.B. css-1783alc) ändert sich
+	* mit dforms-Updates, MuiContainer-root bleibt - doppelt angegeben, damit die
+	* Regel unabhängig von der Reihenfolge der Styles gewinnt.
+	*/
+	function removePagePadding(doc) {
+		if (doc.getElementById(PAGE_PADDING_STYLE_ID)) return;
+		const style = doc.createElement("style");
+		style.id = PAGE_PADDING_STYLE_ID;
+		style.textContent = ".MuiContainer-root.MuiContainer-root { padding-left: 0; padding-right: 0; }";
+		doc.head.appendChild(style);
 	}
-	function mountContent(form) {
-		if (!currentView) return;
-		const host = getContentHost(form);
-		if (!host) {
-			logger.warn(`Komponente "${resultKey}" nicht im Formular gefunden (oder noch nicht gerendert).`);
-			return;
+	//#endregion
+	//#region ../../helper/performHttpRequest/performHttpRequest.ts
+	/**
+	* Performs an HTTP request and returns a structured response.
+	*
+	* @template T - The expected type of the response body.
+	* @param {string} url - The URL to which the request is sent.
+	* @param {RequestInit} options - The options for the HTTP request, such as method, headers, and body.
+	* @returns {Promise<ApiResponse<T>>} A promise that resolves to an `ApiResponse` object containing the response details.
+	* @throws {Error} Throws an error if the HTTP response status is not OK (status code outside the range 200-299).
+	*
+	* The function attempts to parse the response body based on the `Content-Type` header:
+	* - If the `Content-Type` includes "application/json", it parses the body as JSON.
+	* - Otherwise, it parses the body as plain text.
+	*
+	* If the response is not OK, the function throws an error with the status code and error message.
+	*/
+	var logger$1 = getLogger();
+	async function performHttpRequest(url, options) {
+		let body = {};
+		let errorMessage = "";
+		let response;
+		logger$1.debug(`[Request] ${options.method} ${url} | Headers: ${JSON.stringify(options.headers)} | Body: ${!(options.body instanceof Uint8Array) && options.body !== void 0 ? options.body : "[Binary body omitted]"}`);
+		try {
+			response = await fetch(url, options);
+		} catch (err) {
+			throw new Error(`Network error during fetch: ${err.message}`);
 		}
-		if (mountedApp) {
-			unmount(mountedApp);
-			mountedApp = void 0;
+		const contentType = response.headers.get("content-type") || "";
+		const parseBody = async () => {
+			try {
+				if (contentType.includes("application/json") || contentType.includes("application/hal+json")) return await response.json();
+				else if (contentType.includes("application/octet-stream") || contentType.includes("application/pdf")) {
+					const arrayBuffer = await response.arrayBuffer();
+					return new Uint8Array(arrayBuffer);
+				} else return await response.text();
+			} catch (e) {
+				return;
+			}
+		};
+		if (response.ok) {
+			const result = await parseBody();
+			if (result !== void 0) body = result;
+		} else {
+			const errorBody = await parseBody();
+			errorMessage = typeof errorBody === "string" ? errorBody : JSON.stringify(errorBody);
+			throw new Error(`HTTP error! status: ${response.status}, message: ${errorMessage}`);
 		}
-		host.innerHTML = "";
-		mountedRoot = host.ownerDocument.createElement("div");
-		host.appendChild(mountedRoot);
-		mountedApp = mount(UserLicenceOverview, {
-			target: mountedRoot,
-			props: {
-				view: currentView,
-				filters,
-				onExported: (count, format) => logger.debug(`${count} Benutzer als ${format.toUpperCase()} exportiert.`)
+		return {
+			status: response.status,
+			statusText: response.statusText,
+			body,
+			bodyUsed: response.bodyUsed,
+			headers: response.headers,
+			ok: response.ok,
+			redirected: response.redirected,
+			type: response.type,
+			url: response.url
+		};
+	}
+	//#endregion
+	//#region ../../helper/scripting/getAllScripts.ts
+	async function getAllScripts(baseUri, token) {
+		return await performHttpRequest(`${baseUri}/scripting/script`, {
+			method: "GET",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				Accept: "application/json",
+				"Content-Type": "application/json"
 			}
 		});
 	}
-	function showView(form, view) {
-		currentView = view;
-		mountContent(form);
+	//#endregion
+	//#region ../../helper/scripting/callScriptEndpoint.ts
+	async function callScriptEndpoint(baseUri, scriptId, method, headers, payload) {
+		return await performHttpRequest(`${baseUri}/scripting/script/${scriptId}/run`, {
+			method,
+			headers,
+			body: JSON.stringify(payload)
+		});
+	}
+	//#endregion
+	//#region src/forms/licenceState.svelte.ts
+	var SCRIPT_NAME = "User-Lizenz-Zähler";
+	function getErrorMessage(error) {
+		return error instanceof Error ? error.message : String(error);
 	}
 	/**
-	* Sucht die Script-Id per Name (siehe SCRIPT_NAME), ruft sie per
-	* callScriptEndpoint auf und stellt das Ergebnis in der Content-Komponente
-	* "result" dar (siehe showView) - dieselbe Browser-Session (window.location.origin) wie bei
-	* allen anderen dforms/Scripting-Aufrufen der Toolbox-Familie, ein API-Key
-	* ist dafür nicht nötig.
+	* Zustand der Lizenzübersicht. Lebt außerhalb der Komponente (siehe
+	* mountInForm), damit Ergebnis und Filter ein Neuzeichnen durch Formio
+	* überdauern.
 	*/
-	async function runUserLicenceCounter(form) {
-		showView(form, { kind: "loading" });
-		try {
-			const baseUri = window.location.origin;
-			const script = (await getAllScripts(baseUri, "")).body.find((s) => s.name === SCRIPT_NAME);
-			if (!script?.id) throw new Error(`Script "${SCRIPT_NAME}" wurde nicht gefunden - wurde es bereits über die Toolbox angelegt?`);
-			const response = await callScriptEndpoint(baseUri, script.id, "POST", { "Content-Type": "application/json" }, {});
-			if (typeof response.body === "string" || !Array.isArray(response.body?.users) || typeof response.body.paid !== "number") throw new Error(`Unerwartete Antwort von Script "${SCRIPT_NAME}" - bitte das Script über die Toolbox aktualisieren.`);
-			showView(form, {
-				kind: "result",
-				result: response.body,
-				countedAt: /* @__PURE__ */ new Date()
-			});
-		} catch (error) {
-			logger.error(`Fehler beim Ausführen von "${SCRIPT_NAME}": ${getErrorMessage(error)}`);
-			showView(form, {
-				kind: "error",
-				message: getErrorMessage(error)
-			});
+	var LicenceOverview = class {
+		#view;
+		get view() {
+			return get(this.#view);
 		}
-	}
+		set view(value) {
+			set(this.#view, value, true);
+		}
+		#category;
+		get category() {
+			return get(this.#category);
+		}
+		set category(value) {
+			set(this.#category, value, true);
+		}
+		#term;
+		get term() {
+			return get(this.#term);
+		}
+		set term(value) {
+			set(this.#term, value, true);
+		}
+		constructor() {
+			this.#view = /* @__PURE__ */ state(proxy({ kind: "loading" }));
+			this.#category = /* @__PURE__ */ state("all");
+			this.#term = /* @__PURE__ */ state("");
+		}
+		/**
+		* Sucht die Script-Id per Name (siehe SCRIPT_NAME) und ruft das Script per
+		* callScriptEndpoint auf - über die Browser-Session (window.location.origin)
+		* wie alle anderen dforms/Scripting-Aufrufe der Toolbox-Familie, ein
+		* API-Key ist dafür nicht nötig.
+		*/
+		async load() {
+			this.view = { kind: "loading" };
+			try {
+				const baseUri = window.location.origin;
+				const script = (await getAllScripts(baseUri, "")).body.find((s) => s.name === SCRIPT_NAME);
+				if (!script?.id) throw new Error(`Script "${SCRIPT_NAME}" wurde nicht gefunden - wurde es bereits über die Toolbox angelegt?`);
+				const response = await callScriptEndpoint(baseUri, script.id, "POST", { "Content-Type": "application/json" }, {});
+				if (typeof response.body === "string" || !Array.isArray(response.body?.users) || typeof response.body.paid !== "number") throw new Error(`Unerwartete Antwort von Script "${SCRIPT_NAME}" - bitte das Script über die Toolbox aktualisieren.`);
+				this.view = {
+					kind: "result",
+					result: response.body,
+					countedAt: /* @__PURE__ */ new Date()
+				};
+			} catch (error) {
+				getLogger().error(`Fehler beim Ausführen von "${SCRIPT_NAME}": ${getErrorMessage(error)}`);
+				this.view = {
+					kind: "error",
+					message: getErrorMessage(error)
+				};
+			}
+		}
+	};
+	//#endregion
+	//#region src/forms/form.ts
+	var logger = initLogger(LogLevel.INFO);
 	window.formInit = function(form, data) {
 		logger.debug("User-Lizenz-Zähler-Formular initialisiert.");
-		form.on?.("render", () => {
-			if (currentView && !mountedRoot?.isConnected) mountContent(form);
-		});
-		runUserLicenceCounter(form);
+		const state = new LicenceOverview();
+		mountInForm(form, UserLicenceOverview, { state });
+		state.load();
 	};
 	//#endregion
 })();

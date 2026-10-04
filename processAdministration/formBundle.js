@@ -4412,7 +4412,7 @@ createHTML: (html) => {
 	* @param {Node} anchor
 	* @param {{ hash: string, code: string }} css
 	*/
-	function append_styles(anchor, css) {
+	function append_styles$1(anchor, css) {
 		effect(() => {
 			anchor = active_effect?.parent?.nodes?.start ?? anchor;
 			var root = anchor.getRootNode();
@@ -4451,6 +4451,90 @@ createHTML: (html) => {
 		}
 		return classname === "" ? null : classname;
 	}
+	/**
+	*
+	* @param {Record<string,any>} styles
+	* @param {boolean} important
+	*/
+	function append_styles(styles, important = false) {
+		var separator = important ? " !important;" : ";";
+		var css = "";
+		for (var key of Object.keys(styles)) {
+			var value = styles[key];
+			if (value != null && value !== "") css += " " + key + ": " + value + separator;
+		}
+		return css;
+	}
+	/**
+	* @param {string} name
+	* @returns {string}
+	*/
+	function to_css_name(name) {
+		if (name[0] !== "-" || name[1] !== "-") return name.toLowerCase();
+		return name;
+	}
+	/**
+	* @param {any} value
+	* @param {Record<string, any> | [Record<string, any>, Record<string, any>]} [styles]
+	* @returns {string | null}
+	*/
+	function to_style(value, styles) {
+		if (styles) {
+			var new_style = "";
+			/** @type {Record<string,any> | undefined} */
+			var normal_styles;
+			/** @type {Record<string,any> | undefined} */
+			var important_styles;
+			if (Array.isArray(styles)) {
+				normal_styles = styles[0];
+				important_styles = styles[1];
+			} else normal_styles = styles;
+			if (value) {
+				value = String(value).replaceAll(/\/\*.*?\*\//g, "").trim();
+				/** @type {boolean | '"' | "'"} */
+				var in_str = false;
+				var in_apo = 0;
+				var in_comment = false;
+				var reserved_names = [];
+				if (normal_styles) reserved_names.push(...Object.keys(normal_styles).map(to_css_name));
+				if (important_styles) reserved_names.push(...Object.keys(important_styles).map(to_css_name));
+				var start_index = 0;
+				var name_index = -1;
+				const len = value.length;
+				for (var i = 0; i < len; i++) {
+					var c = value[i];
+					if (in_comment) {
+						if (c === "/" && value[i - 1] === "*") in_comment = false;
+					} else if (in_str) {
+						if (in_str === c) in_str = false;
+					} else if (c === "/" && value[i + 1] === "*") in_comment = true;
+					else if (c === "\"" || c === "'") in_str = c;
+					else if (c === "(") in_apo++;
+					else if (c === ")") in_apo--;
+					if (!in_comment && in_str === false && in_apo === 0) {
+						if (c === ":" && name_index === -1) name_index = i;
+						else if (c === ";" || i === len - 1) {
+							if (name_index !== -1) {
+								var name = to_css_name(value.substring(start_index, name_index).trim());
+								if (!reserved_names.includes(name)) {
+									if (c !== ";") i++;
+									var property = value.substring(start_index, i).trim();
+									new_style += " " + property + ";";
+								}
+							}
+							start_index = i + 1;
+							name_index = -1;
+						}
+					}
+				}
+			}
+			if (normal_styles) new_style += append_styles(normal_styles);
+			if (important_styles) new_style += append_styles(important_styles, true);
+			new_style = new_style.trim();
+			return new_style === "" ? null : new_style;
+		}
+		return value == null ? null : String(value);
+	}
 	//#endregion
 	//#region node_modules/svelte/src/internal/client/dom/elements/class.js
 	/**
@@ -4477,6 +4561,46 @@ createHTML: (html) => {
 			if (prev_classes == null || is_present !== !!prev_classes[key]) dom.classList.toggle(key, is_present);
 		}
 		return next_classes;
+	}
+	//#endregion
+	//#region node_modules/svelte/src/internal/client/dom/elements/style.js
+	/**
+	* @param {Element & ElementCSSInlineStyle} dom
+	* @param {Record<string, any>} prev
+	* @param {Record<string, any>} next
+	* @param {string} [priority]
+	*/
+	function update_styles(dom, prev = {}, next, priority) {
+		for (var key in next) {
+			var value = next[key];
+			if (prev[key] !== value) {
+				if (next[key] == null) dom.style.removeProperty(key);
+				else dom.style.setProperty(key, value, priority);
+			}
+		}
+	}
+	/**
+	* @param {Element & ElementCSSInlineStyle} dom
+	* @param {string | null} value
+	* @param {Record<string, any> | [Record<string, any>, Record<string, any>]} [prev_styles]
+	* @param {Record<string, any> | [Record<string, any>, Record<string, any>]} [next_styles]
+	*/
+	function set_style(dom, value, prev_styles, next_styles) {
+		var prev = dom[STYLE_CACHE];
+		if (hydrating || prev !== value) {
+			var next_style_attr = to_style(value, next_styles);
+			if (!hydrating || next_style_attr !== dom.getAttribute("style")) {
+				if (next_style_attr == null) dom.removeAttribute("style");
+				else dom.style.cssText = next_style_attr;
+			}
+			/** @type {any} */ dom[STYLE_CACHE] = value;
+		} else if (next_styles) {
+			if (Array.isArray(next_styles)) {
+				update_styles(dom, prev_styles?.[0], next_styles[0]);
+				update_styles(dom, prev_styles?.[1], next_styles[1], "important");
+			} else update_styles(dom, prev_styles, next_styles);
+		}
+		return next_styles;
 	}
 	//#endregion
 	//#region node_modules/svelte/src/internal/client/dom/elements/bindings/select.js
@@ -4906,6 +5030,7 @@ createHTML: (html) => {
 				return;
 			}
 			if (instance) unmount(instance);
+			removePagePadding(host.ownerDocument);
 			host.innerHTML = "";
 			root = host.ownerDocument.createElement("div");
 			host.appendChild(root);
@@ -4918,6 +5043,22 @@ createHTML: (html) => {
 		form.on?.("render", () => {
 			if (!root?.isConnected) mountNow();
 		});
+	}
+	var PAGE_PADDING_STYLE_ID = "toolbox-no-page-padding";
+	/**
+	* Entfernt das seitliche Padding des dforms-Seitencontainers (MUI), damit
+	* die Werkzeuge - meist breite Tabellen - die volle Breite nutzen. Gilt für
+	* die ganze Seite; unbedenklich, weil jedes Bundle nur auf seiner eigenen
+	* Formularseite läuft. Die generierte Klasse (z.B. css-1783alc) ändert sich
+	* mit dforms-Updates, MuiContainer-root bleibt - doppelt angegeben, damit die
+	* Regel unabhängig von der Reihenfolge der Styles gewinnt.
+	*/
+	function removePagePadding(doc) {
+		if (doc.getElementById(PAGE_PADDING_STYLE_ID)) return;
+		const style = doc.createElement("style");
+		style.id = PAGE_PADDING_STYLE_ID;
+		style.textContent = ".MuiContainer-root.MuiContainer-root { padding-left: 0; padding-right: 0; }";
+		doc.head.appendChild(style);
 	}
 	//#endregion
 	//#region node_modules/svelte/src/internal/disclose-version.js
@@ -5088,48 +5229,54 @@ createHTML: (html) => {
 	var root_2$1 = /* @__PURE__ */ from_html(`<select class="svelte-1re2if"></select>`);
 	var root_3$1 = /* @__PURE__ */ from_html(`<input type="text" placeholder="Filtern…" class="svelte-1re2if"/>`);
 	var root_4$1 = /* @__PURE__ */ from_html(`<th><!></th>`);
-	var root_5$1 = /* @__PURE__ */ from_html(`<tr><td> </td><td> </td><td> </td><td> </td><td> </td><td> </td></tr>`);
-	var root_6$1 = /* @__PURE__ */ from_html(`<tr><td colspan="6">Keine Jobs gefunden.</td></tr>`);
+	var root_5$1 = /* @__PURE__ */ from_html(`<tr><td class="svelte-1re2if"> </td><td class="svelte-1re2if"> </td><td class="svelte-1re2if"> </td><td class="svelte-1re2if"> </td><td class="svelte-1re2if"> </td><td class="svelte-1re2if"> </td></tr>`);
+	var root_6$1 = /* @__PURE__ */ from_html(`<tr><td colspan="6" class="svelte-1re2if">Keine Jobs gefunden.</td></tr>`);
 	var root_7$1 = /* @__PURE__ */ from_html(`<table class="table table-striped svelte-1re2if"><thead class="svelte-1re2if"><tr></tr><tr></tr></thead><tbody></tbody></table>`);
 	var root_8$1 = /* @__PURE__ */ from_html(`<div class="toolbar svelte-1re2if"><span class="status svelte-1re2if"> </span> <button type="button" class="btn btn-default">Aktualisieren</button></div> <!>`, 1);
 	var $$css$1 = {
 		hash: "svelte-1re2if",
-		code: ".toolbar.svelte-1re2if {display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}.status.svelte-1re2if {color:#6c757d;}table.svelte-1re2if {width:100%;}.sortable.svelte-1re2if {cursor:pointer;user-select:none;white-space:nowrap;}thead.svelte-1re2if select:where(.svelte-1re2if), thead.svelte-1re2if input:where(.svelte-1re2if) {width:100%;}"
+		code: ".toolbar.svelte-1re2if {display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}.status.svelte-1re2if {color:#6c757d;}\n  /* Feste Spaltenbreiten (siehe columns): sonst richtet sich die Tabelle nach\n     dem Inhalt der gerade sichtbaren Zeilen und verspringt beim Filtern. */table.svelte-1re2if {width:100%;table-layout:fixed;}td.svelte-1re2if {overflow-wrap:anywhere;}.sortable.svelte-1re2if {cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}thead.svelte-1re2if select:where(.svelte-1re2if), thead.svelte-1re2if input:where(.svelte-1re2if) {width:100%;min-width:0;box-sizing:border-box;}"
 	};
 	function JobsList($$anchor, $$props) {
 		push($$props, true);
-		append_styles($$anchor, $$css$1);
+		append_styles$1($$anchor, $$css$1);
 		let jobs = prop($$props, "jobs", 7);
 		const columns = [
 			{
 				label: "Typ",
 				field: "type",
-				filter: "type"
+				filter: "type",
+				width: "15%"
 			},
 			{
 				label: "Prozess",
 				field: "processKey",
-				filter: "processKey"
+				filter: "processKey",
+				width: "29%"
 			},
 			{
 				label: "Version",
 				field: "processVersion",
-				filter: "version"
+				filter: "version",
+				width: "8%"
 			},
 			{
 				label: "Status",
 				field: "state",
-				filter: "state"
+				filter: "state",
+				width: "12%"
 			},
 			{
 				label: "Erstellt",
 				field: "creationDate",
-				filter: "created"
+				filter: "created",
+				width: "18%"
 			},
 			{
 				label: "Gestartet",
 				field: "startDate",
-				filter: "started"
+				filter: "started",
+				width: "18%"
 			}
 		];
 		const typeOptions = [{
@@ -5160,8 +5307,13 @@ createHTML: (html) => {
 			var tr = child(thead);
 			each(tr, 21, () => columns, (column) => column.field, ($$anchor, column) => {
 				var th = root$1();
+				let styles;
 				var text_1 = only_child(th);
-				template_effect(() => set_text(text_1, `${get(column).label ?? ""}${jobs().sort.field === get(column).field ? jobs().sort.direction === "asc" ? " ▲" : " ▼" : ""}`));
+				template_effect(() => {
+					set_attribute(th, "title", get(column).label);
+					styles = set_style(th, "", styles, { width: get(column).width });
+					set_text(text_1, `${get(column).label ?? ""}${jobs().sort.field === get(column).field ? jobs().sort.direction === "asc" ? " ▲" : " ▼" : ""}`);
+				});
 				delegated("click", th, () => jobs().toggleSort(get(column).field));
 				append($$anchor, th);
 			});
@@ -5464,7 +5616,7 @@ createHTML: (html) => {
 	};
 	function ScriptLogsView($$anchor, $$props) {
 		push($$props, true);
-		append_styles($$anchor, $$css);
+		append_styles$1($$anchor, $$css);
 		let logs = prop($$props, "logs", 7);
 		const statusOptions = [
 			{

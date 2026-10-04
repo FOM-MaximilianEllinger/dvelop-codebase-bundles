@@ -4762,6 +4762,7 @@ createHTML: (html) => {
 				return;
 			}
 			if (instance) unmount(instance);
+			removePagePadding(host.ownerDocument);
 			host.innerHTML = "";
 			root = host.ownerDocument.createElement("div");
 			host.appendChild(root);
@@ -4774,6 +4775,22 @@ createHTML: (html) => {
 		form.on?.("render", () => {
 			if (!root?.isConnected) mountNow();
 		});
+	}
+	var PAGE_PADDING_STYLE_ID = "toolbox-no-page-padding";
+	/**
+	* Entfernt das seitliche Padding des dforms-Seitencontainers (MUI), damit
+	* die Werkzeuge - meist breite Tabellen - die volle Breite nutzen. Gilt für
+	* die ganze Seite; unbedenklich, weil jedes Bundle nur auf seiner eigenen
+	* Formularseite läuft. Die generierte Klasse (z.B. css-1783alc) ändert sich
+	* mit dforms-Updates, MuiContainer-root bleibt - doppelt angegeben, damit die
+	* Regel unabhängig von der Reihenfolge der Styles gewinnt.
+	*/
+	function removePagePadding(doc) {
+		if (doc.getElementById(PAGE_PADDING_STYLE_ID)) return;
+		const style = doc.createElement("style");
+		style.id = PAGE_PADDING_STYLE_ID;
+		style.textContent = ".MuiContainer-root.MuiContainer-root { padding-left: 0; padding-right: 0; }";
+		doc.head.appendChild(style);
 	}
 	//#endregion
 	//#region ../Toolbox/shared/swal.ts
@@ -5053,10 +5070,10 @@ createHTML: (html) => {
 	var root_2 = /* @__PURE__ */ from_html(`<span class="muted svelte-8c0gc0">–</span>`);
 	var root_3 = /* @__PURE__ */ from_html(`<tr><td class="check svelte-8c0gc0"><input type="checkbox" class="svelte-8c0gc0"/></td><td class="svelte-8c0gc0"><!></td><td class="svelte-8c0gc0"><!></td><td class="num svelte-8c0gc0"><!></td><td class="nowrap svelte-8c0gc0"><!></td></tr>`);
 	var root_4 = /* @__PURE__ */ from_html(`<tr><td colspan="5" class="muted svelte-8c0gc0">Keine Einträge gefunden.</td></tr>`);
-	var root_5 = /* @__PURE__ */ from_html(`<div class="section svelte-8c0gc0"><div class="header svelte-8c0gc0"><div><span class="title svelte-8c0gc0"> </span> <div class="hint svelte-8c0gc0">Markierte Stapel können gelöscht oder erneut klassifiziert werden.</div></div> <div class="filters svelte-8c0gc0"><label class="field svelte-8c0gc0"><span class="svelte-8c0gc0">Stapelname</span> <input type="search" class="form-control form-control-sm name svelte-8c0gc0" placeholder="Stapelname suchen…"/></label> <label class="field svelte-8c0gc0"><span class="svelte-8c0gc0">Datum von</span> <input type="date" class="form-control form-control-sm date svelte-8c0gc0"/></label> <label class="field svelte-8c0gc0"><span class="svelte-8c0gc0">Datum bis</span> <input type="date" class="form-control form-control-sm date svelte-8c0gc0"/></label> <button type="button" class="btn btn-sm btn-outline-secondary">Filter zurücksetzen</button></div></div> <div class="body svelte-8c0gc0"><!> <div class="table-wrap svelte-8c0gc0"><table class="table table-sm table-hover table-striped svelte-8c0gc0"><thead class="svelte-8c0gc0"><tr><th class="check svelte-8c0gc0"><input type="checkbox" title="Alle angezeigten markieren / entmarkieren" class="svelte-8c0gc0"/></th><th class="svelte-8c0gc0">Beschreibung</th><th class="svelte-8c0gc0">Erstellt von</th><th class="num svelte-8c0gc0">Dokumente</th><th class="svelte-8c0gc0">Erstellungsdatum</th></tr></thead><tbody><!></tbody></table></div> <div class="footer svelte-8c0gc0"><span class="status svelte-8c0gc0"> </span> <div class="actions svelte-8c0gc0"><button type="button" class="btn btn-sm btn-outline-secondary svelte-8c0gc0">Aktualisieren</button> <button type="button" class="btn btn-sm btn-success svelte-8c0gc0">Erneut klassifizieren</button> <button type="button" class="btn btn-sm btn-danger svelte-8c0gc0">Markierte löschen</button></div></div></div></div>`);
+	var root_5 = /* @__PURE__ */ from_html(`<div class="section svelte-8c0gc0"><div class="header svelte-8c0gc0"><span class="title svelte-8c0gc0"> </span> <div class="filters svelte-8c0gc0"><label class="field svelte-8c0gc0"><span class="svelte-8c0gc0">Stapelname</span> <input type="search" class="form-control form-control-sm name svelte-8c0gc0" placeholder="Stapelname suchen…"/></label> <label class="field svelte-8c0gc0"><span class="svelte-8c0gc0">Datum von</span> <input type="date" class="form-control form-control-sm date svelte-8c0gc0"/></label> <label class="field svelte-8c0gc0"><span class="svelte-8c0gc0">Datum bis</span> <input type="date" class="form-control form-control-sm date svelte-8c0gc0"/></label> <button type="button" class="btn btn-sm btn-outline-secondary">Filter zurücksetzen</button></div></div> <div class="body svelte-8c0gc0"><!> <div class="table-wrap svelte-8c0gc0"><table class="table table-sm table-hover table-striped svelte-8c0gc0"><thead class="svelte-8c0gc0"><tr><th class="check svelte-8c0gc0"><input type="checkbox" title="Alle angezeigten markieren / entmarkieren" class="svelte-8c0gc0"/></th><th class="svelte-8c0gc0">Beschreibung</th><th class="svelte-8c0gc0">Erstellt von</th><th class="num svelte-8c0gc0">Dokumente</th><th class="svelte-8c0gc0">Erstellungsdatum</th></tr></thead><tbody><!></tbody></table></div> <div class="footer svelte-8c0gc0"><span class="status svelte-8c0gc0"> </span> <div class="actions svelte-8c0gc0"><button type="button" class="btn btn-sm btn-outline-secondary svelte-8c0gc0">Aktualisieren</button> <button type="button" class="btn btn-sm btn-success svelte-8c0gc0">Erneut klassifizieren</button> <button type="button" class="btn btn-sm btn-danger svelte-8c0gc0">Markierte löschen</button></div></div></div></div>`);
 	var $$css = {
 		hash: "svelte-8c0gc0",
-		code: ".section.svelte-8c0gc0 {border:1px solid #dee2e6;border-radius:6px;background:#fff;}.header.svelte-8c0gc0 {display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #dee2e6;background:#f8f9fa;border-radius:6px 6px 0 0;}.title.svelte-8c0gc0 {font-weight:600;font-size:1.05em;}.hint.svelte-8c0gc0 {color:#6c757d;font-size:0.85em;margin-top:4px;}.filters.svelte-8c0gc0 {display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;}.field.svelte-8c0gc0 {display:flex;flex-direction:column;gap:2px;margin:0;}.field.svelte-8c0gc0 span:where(.svelte-8c0gc0) {font-size:0.75em;font-weight:600;color:#495057;}.name.svelte-8c0gc0 {width:220px;}.date.svelte-8c0gc0 {width:150px;}.body.svelte-8c0gc0 {padding:12px;}.table-wrap.svelte-8c0gc0 {max-height:60vh;overflow:auto;border:1px solid #dee2e6;border-radius:6px;}table.svelte-8c0gc0 {margin:0;font-size:0.9em;}thead.svelte-8c0gc0 th:where(.svelte-8c0gc0) {position:sticky;top:0;z-index:1;background:#f8f9fa;border-bottom:1px solid #dee2e6;white-space:nowrap;}td.svelte-8c0gc0 {vertical-align:middle;}.check.svelte-8c0gc0 {width:2.5em;text-align:center;}.check.svelte-8c0gc0 input:where(.svelte-8c0gc0) {width:15px;height:15px;cursor:pointer;}.num.svelte-8c0gc0 {text-align:right;white-space:nowrap;}.nowrap.svelte-8c0gc0 {white-space:nowrap;}.muted.svelte-8c0gc0 {color:#adb5bd;font-style:italic;}.footer.svelte-8c0gc0 {display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;}.status.svelte-8c0gc0 {color:#6c757d;font-size:0.85em;}.actions.svelte-8c0gc0 {display:flex;gap:6px;flex-wrap:nowrap;}.actions.svelte-8c0gc0 .btn:where(.svelte-8c0gc0) {white-space:nowrap;}.loading.svelte-8c0gc0 {display:flex;align-items:center;gap:10px;color:#6c757d;padding:12px;}.error.svelte-8c0gc0 {color:#842029;background:#f8d7da;border:1px solid #f5c2c7;border-radius:6px;padding:10px 12px;margin-bottom:10px;}"
+		code: ".section.svelte-8c0gc0 {border:1px solid #dee2e6;border-radius:6px;background:#fff;}.header.svelte-8c0gc0 {display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #dee2e6;background:#f8f9fa;border-radius:6px 6px 0 0;}.title.svelte-8c0gc0 {font-weight:600;font-size:1.05em;}.filters.svelte-8c0gc0 {display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;}.field.svelte-8c0gc0 {display:flex;flex-direction:column;gap:2px;margin:0;}.field.svelte-8c0gc0 span:where(.svelte-8c0gc0) {font-size:0.75em;font-weight:600;color:#495057;}.name.svelte-8c0gc0 {width:220px;}.date.svelte-8c0gc0 {width:150px;}.body.svelte-8c0gc0 {padding:12px;}.table-wrap.svelte-8c0gc0 {max-height:60vh;overflow:auto;border:1px solid #dee2e6;border-radius:6px;}table.svelte-8c0gc0 {margin:0;font-size:0.9em;}thead.svelte-8c0gc0 th:where(.svelte-8c0gc0) {position:sticky;top:0;z-index:1;background:#f8f9fa;border-bottom:1px solid #dee2e6;white-space:nowrap;}td.svelte-8c0gc0 {vertical-align:middle;}.check.svelte-8c0gc0 {width:2.5em;text-align:center;}.check.svelte-8c0gc0 input:where(.svelte-8c0gc0) {width:15px;height:15px;cursor:pointer;}.num.svelte-8c0gc0 {text-align:right;white-space:nowrap;}.nowrap.svelte-8c0gc0 {white-space:nowrap;}.muted.svelte-8c0gc0 {color:#adb5bd;font-style:italic;}.footer.svelte-8c0gc0 {display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;}.status.svelte-8c0gc0 {color:#6c757d;font-size:0.85em;}.actions.svelte-8c0gc0 {display:flex;gap:6px;flex-wrap:nowrap;}.actions.svelte-8c0gc0 .btn:where(.svelte-8c0gc0) {white-space:nowrap;}.loading.svelte-8c0gc0 {display:flex;align-items:center;gap:10px;color:#6c757d;padding:12px;}.error.svelte-8c0gc0 {color:#842029;background:#f8d7da;border:1px solid #f5c2c7;border-radius:6px;padding:10px 12px;margin-bottom:10px;}"
 	};
 	function BatchCleanup($$anchor, $$props) {
 		push($$props, true);
@@ -5081,12 +5098,10 @@ createHTML: (html) => {
 		}
 		var div = root_5();
 		var div_1 = child(div);
-		var div_2 = child(div_1);
-		var text$1 = only_child(child(div_2), true);
-		next(2);
-		reset(div_2);
-		var div_3 = sibling(div_2, 2);
-		var label = child(div_3);
+		var span = child(div_1);
+		var text$1 = only_child(span, true);
+		var div_2 = sibling(span, 2);
+		var label = child(div_2);
 		var input = sibling(child(label), 2);
 		remove_input_defaults(input);
 		reset(label);
@@ -5099,22 +5114,22 @@ createHTML: (html) => {
 		remove_input_defaults(input_2);
 		reset(label_2);
 		var button = sibling(label_2, 2);
-		reset(div_3);
+		reset(div_2);
 		reset(div_1);
-		var div_4 = sibling(div_1, 2);
-		var node = child(div_4);
+		var div_3 = sibling(div_1, 2);
+		var node = child(div_3);
 		var consequent = ($$anchor) => {
-			var div_5 = root();
-			var text_1 = sibling(child(div_5));
-			reset(div_5);
+			var div_4 = root();
+			var text_1 = sibling(child(div_4));
+			reset(div_4);
 			template_effect(() => set_text(text_1, ` ${cleanup().loadError ?? ""}`));
-			append($$anchor, div_5);
+			append($$anchor, div_4);
 		};
 		if_block(node, ($$render) => {
 			if (cleanup().loadError) $$render(consequent);
 		});
-		var div_6 = sibling(node, 2);
-		var table = child(div_6);
+		var div_5 = sibling(node, 2);
+		var table = child(div_5);
 		var thead = child(table);
 		var tr = child(thead);
 		var th = child(tr);
@@ -5213,17 +5228,17 @@ createHTML: (html) => {
 		});
 		reset(tbody);
 		reset(table);
-		reset(div_6);
-		var div_7 = sibling(div_6, 2);
-		var span_5 = child(div_7);
+		reset(div_5);
+		var div_6 = sibling(div_5, 2);
+		var span_5 = child(div_6);
 		var text_6 = only_child(span_5, true);
-		var div_8 = sibling(span_5, 2);
-		var button_1 = child(div_8);
+		var div_7 = sibling(span_5, 2);
+		var button_1 = child(div_7);
 		var button_2 = sibling(button_1, 2);
 		var button_3 = sibling(button_2, 2);
-		reset(div_8);
 		reset(div_7);
-		reset(div_4);
+		reset(div_6);
+		reset(div_3);
 		reset(div);
 		template_effect(() => {
 			set_text(text$1, cleanup().api.title);

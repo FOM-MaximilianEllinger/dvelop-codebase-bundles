@@ -4789,6 +4789,7 @@ createHTML: (html) => {
 				return;
 			}
 			if (instance) unmount(instance);
+			removePagePadding(host.ownerDocument);
 			host.innerHTML = "";
 			root = host.ownerDocument.createElement("div");
 			host.appendChild(root);
@@ -4801,6 +4802,22 @@ createHTML: (html) => {
 		form.on?.("render", () => {
 			if (!root?.isConnected) mountNow();
 		});
+	}
+	var PAGE_PADDING_STYLE_ID = "toolbox-no-page-padding";
+	/**
+	* Entfernt das seitliche Padding des dforms-Seitencontainers (MUI), damit
+	* die Werkzeuge - meist breite Tabellen - die volle Breite nutzen. Gilt für
+	* die ganze Seite; unbedenklich, weil jedes Bundle nur auf seiner eigenen
+	* Formularseite läuft. Die generierte Klasse (z.B. css-1783alc) ändert sich
+	* mit dforms-Updates, MuiContainer-root bleibt - doppelt angegeben, damit die
+	* Regel unabhängig von der Reihenfolge der Styles gewinnt.
+	*/
+	function removePagePadding(doc) {
+		if (doc.getElementById(PAGE_PADDING_STYLE_ID)) return;
+		const style = doc.createElement("style");
+		style.id = PAGE_PADDING_STYLE_ID;
+		style.textContent = ".MuiContainer-root.MuiContainer-root { padding-left: 0; padding-right: 0; }";
+		doc.head.appendChild(style);
 	}
 	//#endregion
 	//#region node_modules/svelte/src/internal/disclose-version.js
@@ -13764,15 +13781,15 @@ createHTML: (html) => {
 	var root_1 = /* @__PURE__ */ from_html(`<option> </option>`);
 	var root_2 = /* @__PURE__ */ from_html(`<div class="block-desc svelte-1sl4uka"> </div>`);
 	var root_3 = /* @__PURE__ */ from_html(`<label><input type="radio" name="onb-erp" class="svelte-1sl4uka"/> <span class="erp-label svelte-1sl4uka"> <span class="erp-desc svelte-1sl4uka"> </span></span></label>`);
-	var root_4 = /* @__PURE__ */ from_html(`<div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">VEO-Anbindung</div> <div class="block-desc svelte-1sl4uka">Für den Metadaten-Endpunkt des Rechnungslesers (Azure Service Bus). Mandant: <strong> </strong>. Leer lassen, um den vorhandenen Endpunkt nicht anzupassen.</div> <div class="grid svelte-1sl4uka"><label class="svelte-1sl4uka">GWS-Nr.<input type="text" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" placeholder="z.B. 12345"/></label> <label class="svelte-1sl4uka">Queue-Name<input type="text" autocomplete="off" class="form-control form-control-sm"/></label> <label class="wide svelte-1sl4uka">Service Bus Connection String<input type="password" autocomplete="off" class="form-control form-control-sm" placeholder="Endpoint=sb://…;SharedAccessKeyName=…;SharedAccessKey=…"/></label></div></div>`);
-	var root_5 = /* @__PURE__ */ from_html(`<div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">gevis R-Linie – SFTP-Server</div> <div class="block-desc svelte-1sl4uka">Hierhin übergibt der Rechnungsleser die Daten für gevis R-Linie. Benutzer und Kennwort leer lassen, um das vorhandene SFTP-Zielsystem nicht anzupassen.</div> <div class="grid svelte-1sl4uka"><label class="svelte-1sl4uka">Host<input type="text" autocomplete="off" class="form-control form-control-sm"/></label> <label class="svelte-1sl4uka">Port<input type="text" inputmode="numeric" autocomplete="off" class="form-control form-control-sm"/></label> <label class="svelte-1sl4uka">Benutzer<input type="text" autocomplete="off" class="form-control form-control-sm"/></label> <label class="svelte-1sl4uka">Kennwort<input type="password" autocomplete="new-password" class="form-control form-control-sm"/></label> <label class="wide svelte-1sl4uka">Verzeichnis<input type="text" autocomplete="off" class="form-control form-control-sm"/></label></div></div>`);
+	var root_4 = /* @__PURE__ */ from_html(`<div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">VEO-Anbindung</div> <div class="block-desc svelte-1sl4uka">Leer lassen, um den vorhandenen Endpunkt nicht anzupassen.</div> <div class="grid svelte-1sl4uka"><label class="svelte-1sl4uka">GWS-Nr.<input type="text" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" placeholder="z.B. 12345"/></label> <label class="svelte-1sl4uka">Queue-Name<input type="text" autocomplete="off" class="form-control form-control-sm"/></label> <label class="wide svelte-1sl4uka">Service Bus Connection String<input type="password" autocomplete="off" class="form-control form-control-sm" placeholder="Endpoint=sb://…;SharedAccessKeyName=…;SharedAccessKey=…"/></label></div></div>`);
+	var root_5 = /* @__PURE__ */ from_html(`<div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">gevis R-Linie – SFTP-Server</div> <div class="block-desc svelte-1sl4uka">Benutzer und Kennwort leer lassen, um das vorhandene SFTP-Zielsystem nicht anzupassen.</div> <div class="grid svelte-1sl4uka"><label class="svelte-1sl4uka">Host<input type="text" autocomplete="off" class="form-control form-control-sm"/></label> <label class="svelte-1sl4uka">Port<input type="text" inputmode="numeric" autocomplete="off" class="form-control form-control-sm"/></label> <label class="svelte-1sl4uka">Benutzer<input type="text" autocomplete="off" class="form-control form-control-sm"/></label> <label class="svelte-1sl4uka">Kennwort<input type="password" autocomplete="new-password" class="form-control form-control-sm"/></label> <label class="wide svelte-1sl4uka">Verzeichnis<input type="text" autocomplete="off" class="form-control form-control-sm"/></label></div></div>`);
 	var root_6 = /* @__PURE__ */ from_html(`<th class="svelte-1sl4uka"> </th>`);
 	var root_7 = /* @__PURE__ */ from_html(`<td class="svelte-1sl4uka"><input type="text" class="form-control form-control-sm svelte-1sl4uka"/></td>`);
 	var root_8 = /* @__PURE__ */ from_html(`<tr><!><td class="svelte-1sl4uka"><button type="button" class="btn btn-sm btn-link text-danger p-0" title="Zeile entfernen">✕</button></td></tr>`);
-	var root_9 = /* @__PURE__ */ from_html(`<div class="section svelte-1sl4uka"><div class="header svelte-1sl4uka"><div class="title svelte-1sl4uka">Onboarding gevis ECM Rechnungsleser – Konfiguration</div> <div class="hint svelte-1sl4uka">Mandant <strong> </strong> · Schritt 1 von 2: Grundeinstellungen für das Onboarding.</div></div> <div class="body svelte-1sl4uka"><div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">API-Key</div> <div class="block-desc svelte-1sl4uka">Mit diesem Key wird eingerichtet; er wird außerdem im Gutschriften-Skript hinterlegt.</div> <div class="key svelte-1sl4uka"><input type="password" autocomplete="off" class="form-control form-control-sm key-input svelte-1sl4uka" placeholder="API-Key eingeben…" aria-label="API-Key"/> <button type="button" class="btn btn-sm btn-outline-secondary svelte-1sl4uka" title="Legt für einen Benutzer einen neuen API-Key an">Neuen API-Key erstellen</button></div></div> <div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">Berechtigungsgruppe</div> <div class="block-desc svelte-1sl4uka">Diese Gruppe wird in den Stapelprofilen und Postfächern berechtigt.</div> <div class="group-options svelte-1sl4uka"><label class="group-option svelte-1sl4uka"><input type="radio" name="onb-group-mode" value="new"/> <span class="group-label svelte-1sl4uka">Neue Gruppe anlegen:</span> <input type="text" class="form-control form-control-sm group-input svelte-1sl4uka" placeholder="Gruppenname"/></label> <label class="group-option svelte-1sl4uka"><input type="radio" name="onb-group-mode" value="existing"/> <span class="group-label svelte-1sl4uka">Vorhandene Gruppe verwenden:</span> <select class="form-control form-control-sm group-input svelte-1sl4uka"><option>– Gruppe auswählen –</option><!></select></label></div> <!></div> <div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">ERP-Zielsystem</div> <div class="block-desc svelte-1sl4uka">An welches ERP-System übergibt der Rechnungsleser?</div> <div class="erp-options svelte-1sl4uka"></div></div> <!> <!> <div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">Stammdaten: Mandanten</div> <div class="block-desc svelte-1sl4uka">Alle Mandanten des Kunden - daraus wird <code> </code> für die Stammdaten des Rechnungslesers erzeugt. * = Pflichtfeld. Leer lassen, um die vorhandenen Stammdaten nicht anzupassen.</div> <div class="company-wrap svelte-1sl4uka"><table class="company-table svelte-1sl4uka"><thead><tr><!><th class="svelte-1sl4uka"></th></tr></thead><tbody></tbody></table></div> <button type="button" class="btn btn-sm btn-outline-secondary mt-2">+ Mandant hinzufügen</button></div> <!> <div class="actions svelte-1sl4uka"><button type="button" class="btn btn-sm btn-primary svelte-1sl4uka">Weiter</button></div></div></div>`);
+	var root_9 = /* @__PURE__ */ from_html(`<div class="section svelte-1sl4uka"><div class="header svelte-1sl4uka"><div class="title svelte-1sl4uka">Onboarding gevis ECM Rechnungsleser – Konfiguration</div> <div class="hint svelte-1sl4uka">Mandant <strong> </strong> · Schritt 1 von 2</div></div> <div class="body svelte-1sl4uka"><div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">API-Key</div> <div class="block-desc svelte-1sl4uka">Wird auch im Gutschriften-Skript hinterlegt.</div> <div class="key svelte-1sl4uka"><input type="password" autocomplete="off" class="form-control form-control-sm key-input svelte-1sl4uka" placeholder="API-Key eingeben…" aria-label="API-Key"/> <button type="button" class="btn btn-sm btn-outline-secondary svelte-1sl4uka" title="Legt für einen Benutzer einen neuen API-Key an">Neuen API-Key erstellen</button></div></div> <div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">Berechtigungsgruppe</div> <div class="block-desc svelte-1sl4uka">Wird in Stapelprofilen und Postfächern berechtigt.</div> <div class="group-options svelte-1sl4uka"><label class="group-option svelte-1sl4uka"><input type="radio" name="onb-group-mode" value="new"/> <span class="group-label svelte-1sl4uka">Neue Gruppe anlegen:</span> <input type="text" class="form-control form-control-sm group-input svelte-1sl4uka" placeholder="Gruppenname"/></label> <label class="group-option svelte-1sl4uka"><input type="radio" name="onb-group-mode" value="existing"/> <span class="group-label svelte-1sl4uka">Vorhandene Gruppe verwenden:</span> <select class="form-control form-control-sm group-input svelte-1sl4uka"><option>– Gruppe auswählen –</option><!></select></label></div> <!></div> <div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">ERP-Zielsystem</div> <div class="block-desc svelte-1sl4uka">An welches ERP-System übergibt der Rechnungsleser?</div> <div class="erp-options svelte-1sl4uka"></div></div> <!> <!> <div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">Stammdaten: Mandanten</div> <div class="block-desc svelte-1sl4uka">Ergibt <code> </code>. * = Pflichtfeld. Leer lassen, um die Stammdaten nicht anzupassen.</div> <div class="company-wrap svelte-1sl4uka"><table class="company-table svelte-1sl4uka"><thead><tr><!><th class="svelte-1sl4uka"></th></tr></thead><tbody></tbody></table></div> <button type="button" class="btn btn-sm btn-outline-secondary mt-2">+ Mandant hinzufügen</button></div> <!> <div class="actions svelte-1sl4uka"><button type="button" class="btn btn-sm btn-primary svelte-1sl4uka">Weiter</button></div></div></div>`);
 	var root_10 = /* @__PURE__ */ from_html(`<span class="status-text svelte-1sl4uka"> </span>`);
 	var root_11 = /* @__PURE__ */ from_html(`<tr><td class="nr svelte-1sl4uka"> </td><td class="svelte-1sl4uka"><div class="step-title svelte-1sl4uka"> </div><div class="step-desc svelte-1sl4uka"> </div></td><td class="status svelte-1sl4uka"><span> </span> <!></td><td class="action svelte-1sl4uka"><button type="button" class="btn btn-sm btn-outline-primary"> </button></td></tr>`);
-	var root_12 = /* @__PURE__ */ from_html(`<div class="section svelte-1sl4uka"><div class="header svelte-1sl4uka"><div class="title svelte-1sl4uka">Onboarding gevis ECM Rechnungsleser</div> <div class="hint svelte-1sl4uka">Mandant <strong> </strong> · Schritt 2 von 2: Fehlendes wird angelegt, Vorhandenes auf die Vorlage aktualisiert - einzeln oder gesammelt.</div> <div class="summary svelte-1sl4uka"><span>ERP-Zielsystem: <strong class="svelte-1sl4uka"> </strong></span> <span>Gruppe: <strong class="svelte-1sl4uka"> </strong></span> <span>API-Key: <strong class="svelte-1sl4uka"> </strong></span> <button type="button" class="btn btn-sm btn-link p-0">Konfiguration ändern</button></div></div> <div class="body svelte-1sl4uka"><div class="key svelte-1sl4uka"><button type="button" class="btn btn-sm btn-outline-secondary svelte-1sl4uka">Status prüfen</button></div> <!> <div class="table-wrap svelte-1sl4uka"><table class="table table-sm svelte-1sl4uka"><thead class="svelte-1sl4uka"><tr><th class="nr svelte-1sl4uka">Nr.</th><th class="svelte-1sl4uka">Schritt</th><th class="svelte-1sl4uka">Status</th><th class="svelte-1sl4uka"></th></tr></thead><tbody></tbody></table></div> <div class="actions svelte-1sl4uka"><button type="button" class="btn btn-sm btn-outline-primary svelte-1sl4uka">Alle fehlenden anlegen</button> <button type="button" class="btn btn-sm btn-primary svelte-1sl4uka">Alles anlegen / aktualisieren</button></div></div></div>`);
+	var root_12 = /* @__PURE__ */ from_html(`<div class="section svelte-1sl4uka"><div class="header svelte-1sl4uka"><div class="title svelte-1sl4uka">Onboarding gevis ECM Rechnungsleser</div> <div class="hint svelte-1sl4uka">Mandant <strong> </strong> · Schritt 2 von 2</div> <div class="summary svelte-1sl4uka"><span>ERP-Zielsystem: <strong class="svelte-1sl4uka"> </strong></span> <span>Gruppe: <strong class="svelte-1sl4uka"> </strong></span> <span>API-Key: <strong class="svelte-1sl4uka"> </strong></span> <button type="button" class="btn btn-sm btn-link p-0">Konfiguration ändern</button></div></div> <div class="body svelte-1sl4uka"><div class="key svelte-1sl4uka"><button type="button" class="btn btn-sm btn-outline-secondary svelte-1sl4uka">Status prüfen</button></div> <!> <div class="table-wrap svelte-1sl4uka"><table class="table table-sm svelte-1sl4uka"><thead class="svelte-1sl4uka"><tr><th class="nr svelte-1sl4uka">Nr.</th><th class="svelte-1sl4uka">Schritt</th><th class="svelte-1sl4uka">Status</th><th class="svelte-1sl4uka"></th></tr></thead><tbody></tbody></table></div> <div class="actions svelte-1sl4uka"><button type="button" class="btn btn-sm btn-outline-primary svelte-1sl4uka">Alle fehlenden anlegen</button> <button type="button" class="btn btn-sm btn-primary svelte-1sl4uka">Alles anlegen / aktualisieren</button></div></div></div>`);
 	var $$css = {
 		hash: "svelte-1sl4uka",
 		code: ".section.svelte-1sl4uka {border:1px solid #dee2e6;border-radius:6px;background:#fff;}.header.svelte-1sl4uka {padding:10px 12px;border-bottom:1px solid #dee2e6;background:#f8f9fa;border-radius:6px 6px 0 0;}.title.svelte-1sl4uka {font-weight:600;font-size:1.05em;}.hint.svelte-1sl4uka {color:#6c757d;font-size:0.85em;margin-top:4px;}.body.svelte-1sl4uka {padding:12px;}.key.svelte-1sl4uka {display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;}.key-input.svelte-1sl4uka {flex:1 1 340px;min-width:0;}.key.svelte-1sl4uka .btn:where(.svelte-1sl4uka), .actions.svelte-1sl4uka .btn:where(.svelte-1sl4uka) {white-space:nowrap;}.message.svelte-1sl4uka {border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:0.9em;}.message-info.svelte-1sl4uka {background:#e7f1ff;color:#084298;border:1px solid #b6d4fe;}.message-ok.svelte-1sl4uka {background:#d1e7dd;color:#0f5132;border:1px solid #badbcc;}.message-error.svelte-1sl4uka {background:#f8d7da;color:#842029;border:1px solid #f5c2c7;}.table-wrap.svelte-1sl4uka {border:1px solid #dee2e6;border-radius:6px;overflow:auto;}table.table.svelte-1sl4uka {margin:0;font-size:0.9em;}.table.svelte-1sl4uka thead:where(.svelte-1sl4uka) th:where(.svelte-1sl4uka) {background:#f8f9fa;border-bottom:1px solid #dee2e6;white-space:nowrap;}.table.svelte-1sl4uka td:where(.svelte-1sl4uka) {vertical-align:middle;}.nr.svelte-1sl4uka {color:#6c757d;width:2.5em;text-align:right;}.step-title.svelte-1sl4uka {font-weight:600;}.step-desc.svelte-1sl4uka {color:#6c757d;font-size:0.85em;}.status.svelte-1sl4uka {min-width:180px;}.status-text.svelte-1sl4uka {display:block;font-size:0.8em;color:#6c757d;margin-top:2px;}.badge-state.svelte-1sl4uka {display:inline-block;font-size:0.75em;font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap;}.badge-unknown.svelte-1sl4uka {background:#e9ecef;color:#495057;}.badge-checking.svelte-1sl4uka, .badge-running.svelte-1sl4uka {background:#e7f1ff;color:#084298;}.badge-done.svelte-1sl4uka {background:#d1e7dd;color:#0f5132;}.badge-exists.svelte-1sl4uka {background:#cfe2ff;color:#084298;}.badge-missing.svelte-1sl4uka {background:#fff3cd;color:#997404;}.badge-manual.svelte-1sl4uka {background:#e2e3e5;color:#41464b;}.badge-skipped.svelte-1sl4uka {background:#f1f3f5;color:#868e96;}.badge-error.svelte-1sl4uka {background:#f8d7da;color:#842029;}.action.svelte-1sl4uka {text-align:right;white-space:nowrap;}.actions.svelte-1sl4uka {display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap;margin-top:12px;}.block.svelte-1sl4uka {margin-bottom:18px;}.block-title.svelte-1sl4uka {font-weight:600;margin-bottom:2px;}.block-desc.svelte-1sl4uka {color:#6c757d;font-size:0.85em;margin-bottom:6px;}.company-wrap.svelte-1sl4uka {overflow-x:auto;}.company-table.svelte-1sl4uka {border-collapse:collapse;font-size:0.85em;width:100%;}.company-table.svelte-1sl4uka th:where(.svelte-1sl4uka) {text-align:left;padding:2px 4px;white-space:nowrap;font-weight:600;}.company-table.svelte-1sl4uka td:where(.svelte-1sl4uka) {padding:2px;}.company-table.svelte-1sl4uka input:where(.svelte-1sl4uka) {min-width:110px;width:100%;}.grid.svelte-1sl4uka {display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:8px 12px;}.grid.svelte-1sl4uka label:where(.svelte-1sl4uka) {display:flex;flex-direction:column;gap:4px;font-size:0.85em;margin:0;}.wide.svelte-1sl4uka {grid-column:1 / -1;}.erp-options.svelte-1sl4uka {display:flex;gap:10px;flex-wrap:wrap;}.erp.svelte-1sl4uka {display:flex;gap:8px;align-items:flex-start;border:1px solid #dee2e6;border-radius:6px;padding:10px 12px;cursor:pointer;min-width:220px;margin:0;}.erp.svelte-1sl4uka:hover {border-color:#86b7fe;}.erp-selected.svelte-1sl4uka {border-color:#0d6efd;background:#f1f6ff;}.erp.svelte-1sl4uka input:where(.svelte-1sl4uka) {margin-top:3px;}.erp-label.svelte-1sl4uka {font-weight:600;}.erp-desc.svelte-1sl4uka {display:block;color:#6c757d;font-size:0.8em;font-weight:normal;}.summary.svelte-1sl4uka {display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:0.85em;margin-top:6px;}.summary.svelte-1sl4uka strong:where(.svelte-1sl4uka) {font-weight:600;}.group-options.svelte-1sl4uka {display:flex;flex-direction:column;gap:6px;margin-top:8px;}.group-option.svelte-1sl4uka {display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:0.85em;margin:0;}.group-label.svelte-1sl4uka {width:15em;flex:0 0 auto;}.group-input.svelte-1sl4uka {width:280px;max-width:100%;}"
@@ -13920,12 +13937,8 @@ createHTML: (html) => {
 			var node_4 = sibling(div_10, 2);
 			var consequent_2 = ($$anchor) => {
 				var div_12 = root_4();
-				var div_13 = sibling(child(div_12), 2);
-				var text_6 = only_child(sibling(child(div_13)), true);
-				next();
-				reset(div_13);
-				var div_14 = sibling(div_13, 2);
-				var label_3 = child(div_14);
+				var div_13 = sibling(child(div_12), 4);
+				var label_3 = child(div_13);
 				var input_5 = sibling(child(label_3));
 				remove_input_defaults(input_5);
 				reset(label_3);
@@ -13937,9 +13950,8 @@ createHTML: (html) => {
 				var input_7 = sibling(child(label_5));
 				remove_input_defaults(input_7);
 				reset(label_5);
-				reset(div_14);
+				reset(div_13);
 				reset(div_12);
-				template_effect(() => set_text(text_6, SUBDOMAIN));
 				delegated("keydown", input_5, preventSubmit);
 				bind_value(input_5, () => config.veo.gwsNo, ($$value) => config.veo.gwsNo = $$value);
 				delegated("keydown", input_6, preventSubmit);
@@ -13953,9 +13965,9 @@ createHTML: (html) => {
 			});
 			var node_5 = sibling(node_4, 2);
 			var consequent_3 = ($$anchor) => {
-				var div_15 = root_5();
-				var div_16 = sibling(child(div_15), 4);
-				var label_6 = child(div_16);
+				var div_14 = root_5();
+				var div_15 = sibling(child(div_14), 4);
+				var label_6 = child(div_15);
 				var input_8 = sibling(child(label_6));
 				remove_input_defaults(input_8);
 				reset(label_6);
@@ -13975,8 +13987,8 @@ createHTML: (html) => {
 				var input_12 = sibling(child(label_10));
 				remove_input_defaults(input_12);
 				reset(label_10);
-				reset(div_16);
 				reset(div_15);
+				reset(div_14);
 				delegated("keydown", input_8, preventSubmit);
 				bind_value(input_8, () => config.sftp.host, ($$value) => config.sftp.host = $$value);
 				delegated("keydown", input_9, preventSubmit);
@@ -13987,24 +13999,24 @@ createHTML: (html) => {
 				bind_value(input_11, () => config.sftp.password, ($$value) => config.sftp.password = $$value);
 				delegated("keydown", input_12, preventSubmit);
 				bind_value(input_12, () => config.sftp.directory, ($$value) => config.sftp.directory = $$value);
-				append($$anchor, div_15);
+				append($$anchor, div_14);
 			};
 			if_block(node_5, ($$render) => {
 				if (config.erpSystem === "gevisR") $$render(consequent_3);
 			});
-			var div_17 = sibling(node_5, 2);
-			var div_18 = sibling(child(div_17), 2);
-			var text_7 = only_child(sibling(child(div_18)), true);
+			var div_16 = sibling(node_5, 2);
+			var div_17 = sibling(child(div_16), 2);
+			var text_6 = only_child(sibling(child(div_17)), true);
 			next();
-			reset(div_18);
-			var div_19 = sibling(div_18, 2);
-			var table = child(div_19);
+			reset(div_17);
+			var div_18 = sibling(div_17, 2);
+			var table = child(div_18);
 			var thead = child(table);
 			var tr = child(thead);
 			each(child(tr), 17, () => COMPANY_COLUMNS, (column) => column.key, ($$anchor, column) => {
 				var th = root_6();
-				var text_8 = only_child(th);
-				template_effect(() => set_text(text_8, `${get(column).label ?? ""}${get(column).required ? " *" : ""}`));
+				var text_7 = only_child(th);
+				template_effect(() => set_text(text_7, `${get(column).label ?? ""}${get(column).required ? " *" : ""}`));
 				append($$anchor, th);
 			});
 			next();
@@ -14035,10 +14047,10 @@ createHTML: (html) => {
 			reset(tbody);
 			bind_this(tbody, ($$value) => set(companyBody, $$value), () => get(companyBody));
 			reset(table);
-			reset(div_19);
-			var button_2 = sibling(div_19, 2);
-			reset(div_17);
-			var node_8 = sibling(div_17, 2);
+			reset(div_18);
+			var button_2 = sibling(div_18, 2);
+			reset(div_16);
+			var node_8 = sibling(div_16, 2);
 			messageBox(node_8);
 			var button_3 = only_child(sibling(node_8, 2));
 			reset(div_4);
@@ -14053,7 +14065,7 @@ createHTML: (html) => {
 				input_3.disabled = !config.availableGroups.length;
 				select.disabled = !config.availableGroups.length;
 				if (select_value !== (select_value = config.selectedGroupId)) select.value = (select.__value = select_value) ?? "", select_option(select, select_value);
-				set_text(text_7, COMPANY_FILE_NAME);
+				set_text(text_6, COMPANY_FILE_NAME);
 				button_3.disabled = view.busy || !get(hasKey) || config.erpSystem === "";
 			});
 			delegated("input", input, (e) => setApiKey(e.currentTarget.value));
@@ -14079,51 +14091,51 @@ createHTML: (html) => {
 			append($$anchor, div_1);
 		};
 		var alternate = ($$anchor) => {
-			var div_21 = root_12();
-			var div_22 = child(div_21);
-			var div_23 = sibling(child(div_22), 2);
-			var text_9 = only_child(sibling(child(div_23)), true);
+			var div_20 = root_12();
+			var div_21 = child(div_20);
+			var div_22 = sibling(child(div_21), 2);
+			var text_8 = only_child(sibling(child(div_22)), true);
 			next();
-			reset(div_23);
-			var div_24 = sibling(div_23, 2);
-			var span_2 = child(div_24);
-			var text_10 = only_child(sibling(child(span_2)), true);
+			reset(div_22);
+			var div_23 = sibling(div_22, 2);
+			var span_2 = child(div_23);
+			var text_9 = only_child(sibling(child(span_2)), true);
 			reset(span_2);
 			var span_3 = sibling(span_2, 2);
-			var text_11 = only_child(sibling(child(span_3)), true);
+			var text_10 = only_child(sibling(child(span_3)), true);
 			reset(span_3);
 			var span_4 = sibling(span_3, 2);
-			var text_12 = only_child(sibling(child(span_4)));
+			var text_11 = only_child(sibling(child(span_4)));
 			reset(span_4);
 			var button_4 = sibling(span_4, 2);
-			reset(div_24);
-			reset(div_22);
-			var div_25 = sibling(div_22, 2);
-			var div_26 = child(div_25);
-			var button_5 = only_child(div_26);
-			var node_9 = sibling(div_26, 2);
+			reset(div_23);
+			reset(div_21);
+			var div_24 = sibling(div_21, 2);
+			var div_25 = child(div_24);
+			var button_5 = only_child(div_25);
+			var node_9 = sibling(div_25, 2);
 			messageBox(node_9);
-			var div_27 = sibling(node_9, 2);
-			var table_1 = child(div_27);
+			var div_26 = sibling(node_9, 2);
+			var table_1 = child(div_26);
 			var tbody_1 = sibling(child(table_1));
 			each(tbody_1, 23, activeSteps, (step) => step.id, ($$anchor, step, index) => {
 				const status = /* @__PURE__ */ user_derived(() => view.statuses[get(step).id]);
 				var tr_2 = root_11();
 				var td_2 = child(tr_2);
-				var text_13 = only_child(td_2, true);
+				var text_12 = only_child(td_2, true);
 				var td_3 = sibling(td_2);
-				var div_28 = child(td_3);
-				var text_14 = only_child(div_28, true);
-				var text_15 = only_child(sibling(div_28), true);
+				var div_27 = child(td_3);
+				var text_13 = only_child(div_27, true);
+				var text_14 = only_child(sibling(div_27), true);
 				reset(td_3);
 				var td_4 = sibling(td_3);
 				var span_5 = child(td_4);
-				var text_16 = only_child(span_5, true);
+				var text_15 = only_child(span_5, true);
 				var node_10 = sibling(span_5, 2);
 				var consequent_5 = ($$anchor) => {
 					var span_6 = root_10();
-					var text_17 = only_child(span_6, true);
-					template_effect(() => set_text(text_17, get(status).text));
+					var text_16 = only_child(span_6, true);
+					template_effect(() => set_text(text_16, get(status).text));
 					append($$anchor, span_6);
 				};
 				if_block(node_10, ($$render) => {
@@ -14132,35 +14144,35 @@ createHTML: (html) => {
 				reset(td_4);
 				var td_5 = sibling(td_4);
 				var button_6 = child(td_5);
-				var text_18 = only_child(button_6, true);
+				var text_17 = only_child(button_6, true);
 				reset(td_5);
 				reset(tr_2);
 				template_effect(() => {
-					set_text(text_13, get(index) + 1);
-					set_text(text_14, get(step).title);
-					set_text(text_15, get(step).description);
+					set_text(text_12, get(index) + 1);
+					set_text(text_13, get(step).title);
+					set_text(text_14, get(step).description);
 					set_class(span_5, 1, `badge-state badge-${get(status).state ?? ""}`, "svelte-1sl4uka");
-					set_text(text_16, STATE_LABELS[get(status).state]);
+					set_text(text_15, STATE_LABELS[get(status).state]);
 					button_6.disabled = view.busy || !get(hasKey) || get(status).state === "skipped";
-					set_text(text_18, RUN_LABELS[get(status).state]);
+					set_text(text_17, RUN_LABELS[get(status).state]);
 				});
 				delegated("click", button_6, () => runSingle(get(step)));
 				append($$anchor, tr_2);
 			});
 			reset(tbody_1);
 			reset(table_1);
-			reset(div_27);
-			var div_30 = sibling(div_27, 2);
-			var button_7 = child(div_30);
+			reset(div_26);
+			var div_29 = sibling(div_26, 2);
+			var button_7 = child(div_29);
 			var button_8 = sibling(button_7, 2);
-			reset(div_30);
-			reset(div_25);
-			reset(div_21);
+			reset(div_29);
+			reset(div_24);
+			reset(div_20);
 			template_effect(($0, $1, $2) => {
-				set_text(text_9, SUBDOMAIN);
-				set_text(text_10, $0);
-				set_text(text_11, $1);
-				set_text(text_12, `••••${$2 ?? ""}`);
+				set_text(text_8, SUBDOMAIN);
+				set_text(text_9, $0);
+				set_text(text_10, $1);
+				set_text(text_11, `••••${$2 ?? ""}`);
 				button_4.disabled = view.busy;
 				button_5.disabled = view.busy || !get(hasKey);
 				button_7.disabled = view.busy || !get(hasKey);
@@ -14178,7 +14190,7 @@ createHTML: (html) => {
 				"exists",
 				"manual"
 			], "Alles anlegen bzw. aktualisieren?"));
-			append($$anchor, div_21);
+			append($$anchor, div_20);
 		};
 		if_block(node_1, ($$render) => {
 			if (view.page === "config") $$render(consequent_4);
