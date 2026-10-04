@@ -4585,7 +4585,7 @@ createHTML: (html) => {
 				return;
 			}
 			if (instance) unmount(instance);
-			removePagePadding(host.ownerDocument);
+			removePagePadding(host);
 			host.innerHTML = "";
 			root = host.ownerDocument.createElement("div");
 			host.appendChild(root);
@@ -4599,21 +4599,20 @@ createHTML: (html) => {
 			if (!root?.isConnected) mountNow();
 		});
 	}
-	var PAGE_PADDING_STYLE_ID = "toolbox-no-page-padding";
+	var PADDED_MUI_CLASSES = ["MuiContainer-root", "MuiBox-root"];
 	/**
-	* Entfernt das seitliche Padding des dforms-Seitencontainers (MUI), damit
-	* die Werkzeuge - meist breite Tabellen - die volle Breite nutzen. Gilt für
-	* die ganze Seite; unbedenklich, weil jedes Bundle nur auf seiner eigenen
-	* Formularseite läuft. Die generierte Klasse (z.B. css-1783alc) ändert sich
-	* mit dforms-Updates, MuiContainer-root bleibt - doppelt angegeben, damit die
-	* Regel unabhängig von der Reihenfolge der Styles gewinnt.
+	* Entfernt das seitliche Padding der dforms-Seitenelemente (MUI-Container und
+	* -Boxen), die das Formular umschließen, damit die Werkzeuge - meist breite
+	* Tabellen - die volle Breite nutzen. Bewusst nur die Vorfahren des Formulars,
+	* nicht alle MuiBox-root der Seite (die nutzt dforms z.B. auch in Kopfzeile
+	* und Navigation). Direkt am Element gesetzt: schlägt die generierten Klassen
+	* (z.B. css-1783alc, css-3p1e6c), die sich mit dforms-Updates ändern.
 	*/
-	function removePagePadding(doc) {
-		if (doc.getElementById(PAGE_PADDING_STYLE_ID)) return;
-		const style = doc.createElement("style");
-		style.id = PAGE_PADDING_STYLE_ID;
-		style.textContent = ".MuiContainer-root.MuiContainer-root { padding-left: 0; padding-right: 0; }";
-		doc.head.appendChild(style);
+	function removePagePadding(host) {
+		for (let element = host.parentElement; element; element = element.parentElement) if (PADDED_MUI_CLASSES.some((name) => element.classList.contains(name))) {
+			element.style.paddingLeft = "0";
+			element.style.paddingRight = "0";
+		}
 	}
 	//#endregion
 	//#region node_modules/svelte/src/internal/disclose-version.js
@@ -9464,7 +9463,7 @@ ${groups}`,
 	var root_16 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-sm btn-outline-secondary">Öffnen</button>`);
 	var root_17 = /* @__PURE__ */ from_html(`<!> <button type="button" class="btn btn-sm btn-primary"> </button>`, 1);
 	var root_18 = /* @__PURE__ */ from_html(`<li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e"> </span> <span> </span> <!></li>`);
-	var root_19 = /* @__PURE__ */ from_html(`<div class="tbx-root svelte-elr56e"><div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Toolbox</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><ul class="tbx-parts svelte-elr56e"><li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e">Formular</span><span> </span></li></ul></div></div> <div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Werkzeug hinzufügen</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><!></div></div> <div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Installierte Werkzeuge</span> <div class="tbx-actions svelte-elr56e"></div></div> <div class="tbx-section-body svelte-elr56e"><!></div></div></div>`);
+	var root_19 = /* @__PURE__ */ from_html(`<div class="tbx-root svelte-elr56e"><div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Toolbox</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><ul class="tbx-parts svelte-elr56e"><li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e">Formular</span><span> </span></li></ul></div></div> <div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Werkzeug hinzufügen</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><!></div></div> <div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Installierte Werkzeuge</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary" title="Bringt alle installierten Werkzeuge mit neuerer Version auf den aktuellen Stand"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><!></div></div></div>`);
 	var $$css = {
 		hash: "svelte-elr56e",
 		code: ".tbx-root.svelte-elr56e {display:flex;flex-direction:column;gap:16px;}.tbx-section.svelte-elr56e {border:1px solid #dee2e6;border-radius:6px;background:#fff;}.tbx-section-header.svelte-elr56e {display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid #dee2e6;background:#f8f9fa;border-radius:6px 6px 0 0;}.tbx-section-title.svelte-elr56e {font-weight:600;font-size:1.05em;}.tbx-section-body.svelte-elr56e {padding:12px;display:flex;flex-direction:column;gap:10px;}.tbx-actions.svelte-elr56e {display:flex;gap:6px;flex-shrink:0;}.tbx-empty.svelte-elr56e {color:#6c757d;font-style:italic;}.tbx-tool.svelte-elr56e {border:1px solid #dee2e6;border-radius:6px;padding:10px 12px;background:#fff;}.tbx-tool-header.svelte-elr56e {display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;}.tbx-tool-name.svelte-elr56e {font-weight:600;font-size:1.05em;}.tbx-tool-desc.svelte-elr56e {color:#6c757d;font-size:0.9em;margin-top:4px;}.tbx-badge.svelte-elr56e {display:inline-block;font-size:0.75em;font-weight:600;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;}.tbx-badge-form.svelte-elr56e {background:#e7f1ff;color:#0b5ed7;}.tbx-badge-script.svelte-elr56e {background:#fff3cd;color:#997404;}.tbx-badge-link.svelte-elr56e {color:#6c757d;font-size:0.8em;margin-left:4px;vertical-align:middle;}.tbx-parts.svelte-elr56e {list-style:none;margin:8px 0 0;padding:0;font-size:0.9em;}.tbx-section-body.svelte-elr56e > .tbx-parts:where(.svelte-elr56e) {margin-top:0;}.tbx-parts.svelte-elr56e li:where(.svelte-elr56e) {padding:3px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}.tbx-parts-combined.svelte-elr56e {border-left:3px solid #adb5bd;padding-left:10px;}.tbx-part-label.svelte-elr56e {display:inline-block;min-width:80px;font-weight:600;}.tbx-part-status.svelte-elr56e {flex:1 1 auto;}.tbx-status-ok.svelte-elr56e {color:#198754;}.tbx-status-outdated.svelte-elr56e {color:#b35c00;}.tbx-status-unknown.svelte-elr56e {color:#6c757d;}.tbx-status-error.svelte-elr56e {color:#dc3545;}"
@@ -9536,6 +9535,7 @@ ${groups}`,
 			return state().busy?.buttonId === buttonId ? state().busy.label : label;
 		}
 		const toolboxButton = /* @__PURE__ */ user_derived(() => updateButton([state().toolboxStatus]));
+		const updateAllLabel = /* @__PURE__ */ user_derived(() => !state().outdatedTools ? CHECKING_LABEL : state().outdatedTools.length === 0 ? "Alle aktuell" : `Alle Werkzeuge aktualisieren (${state().outdatedTools.length})`);
 		const toolboxLine = /* @__PURE__ */ user_derived(() => statusLine(state().toolboxStatus));
 		var div_5 = root_19();
 		var div_6 = child(div_5);
@@ -9637,16 +9637,22 @@ ${groups}`,
 		reset(div_13);
 		reset(div_10);
 		var div_16 = sibling(div_10, 2);
-		var div_17 = sibling(child(div_16), 2);
-		var node_13 = child(div_17);
+		var div_17 = child(div_16);
+		var div_18 = sibling(child(div_17), 2);
+		var button_4 = child(div_18);
+		var text_10 = only_child(button_4, true);
+		reset(div_18);
+		reset(div_17);
+		var div_19 = sibling(div_17, 2);
+		var node_13 = child(div_19);
 		var consequent_10 = ($$anchor) => {
 			append($$anchor, root_8());
 		};
 		var consequent_11 = ($$anchor) => {
-			var div_19 = root_14();
-			var text_10 = only_child(div_19);
-			template_effect(() => set_text(text_10, `Installierte Werkzeuge konnten nicht ermittelt werden: ${state().listsError ?? ""}`));
-			append($$anchor, div_19);
+			var div_21 = root_14();
+			var text_11 = only_child(div_21);
+			template_effect(() => set_text(text_11, `Installierte Werkzeuge konnten nicht ermittelt werden: ${state().listsError ?? ""}`));
+			append($$anchor, div_21);
 		};
 		var consequent_12 = ($$anchor) => {
 			append($$anchor, root_15());
@@ -9659,22 +9665,22 @@ ${groups}`,
 					var fragment_5 = root_17();
 					var node_15 = first_child(fragment_5);
 					var consequent_13 = ($$anchor) => {
-						var button_4 = root_16();
-						template_effect(($0) => button_4.disabled = $0, [() => locked("loaded") || state().opening[get(target).id]]);
-						delegated("click", button_4, () => state().open(get(target)));
-						append($$anchor, button_4);
+						var button_5 = root_16();
+						template_effect(($0) => button_5.disabled = $0, [() => locked("loaded") || state().opening[get(target).id]]);
+						delegated("click", button_5, () => state().open(get(target)));
+						append($$anchor, button_5);
 					};
 					var d = /* @__PURE__ */ user_derived(() => hasFormPart(get(target)));
 					if_block(node_15, ($$render) => {
 						if (get(d)) $$render(consequent_13);
 					});
-					var button_5 = sibling(node_15, 2);
-					var text_11 = only_child(button_5, true);
+					var button_6 = sibling(node_15, 2);
+					var text_12 = only_child(button_6, true);
 					template_effect(($0, $1) => {
-						button_5.disabled = $0;
-						set_text(text_11, $1);
+						button_6.disabled = $0;
+						set_text(text_12, $1);
 					}, [() => get(button).disabled || locked("loaded"), () => busyLabel(get(target).id, get(button).label)]);
-					delegated("click", button_5, () => state().rollout("loaded", get(target).id, get(target), get(parts), "aktualisiert"));
+					delegated("click", button_6, () => state().rollout("loaded", get(target).id, get(target), get(parts), "aktualisiert"));
 					append($$anchor, fragment_5);
 				};
 				const cardParts = ($$anchor) => {
@@ -9685,28 +9691,28 @@ ${groups}`,
 						const button = /* @__PURE__ */ user_derived(() => partButton(get(status)));
 						var li_2 = root_18();
 						var span_7 = child(li_2);
-						var text_12 = only_child(span_7, true);
+						var text_13 = only_child(span_7, true);
 						var span_8 = sibling(span_7, 2);
-						var text_13 = only_child(span_8, true);
+						var text_14 = only_child(span_8, true);
 						var node_17 = sibling(span_8, 2);
 						var consequent_14 = ($$anchor) => {
-							var button_6 = root_11();
-							var text_14 = only_child(button_6, true);
+							var button_7 = root_11();
+							var text_15 = only_child(button_7, true);
 							template_effect(($0, $1) => {
-								button_6.disabled = $0;
-								set_text(text_14, $1);
+								button_7.disabled = $0;
+								set_text(text_15, $1);
 							}, [() => get(button).disabled || locked("loaded"), () => busyLabel(`${get(target).id}:${get(part).key}`, get(button).label)]);
-							delegated("click", button_6, () => state().rollout("loaded", `${get(target).id}:${get(part).key}`, get(target), [get(part)], get(status)?.missing ? "angelegt" : "aktualisiert"));
-							append($$anchor, button_6);
+							delegated("click", button_7, () => state().rollout("loaded", `${get(target).id}:${get(part).key}`, get(target), [get(part)], get(status)?.missing ? "angelegt" : "aktualisiert"));
+							append($$anchor, button_7);
 						};
 						if_block(node_17, ($$render) => {
 							if (get(several)) $$render(consequent_14);
 						});
 						reset(li_2);
 						template_effect(($0) => {
-							set_text(text_12, $0);
+							set_text(text_13, $0);
 							set_class(span_8, 1, `tbx-part-status ${get(line).css ?? ""}`, "svelte-elr56e");
-							set_text(text_13, get(line).text);
+							set_text(text_14, get(line).text);
 						}, [() => partLabel(get(target), get(part))]);
 						append($$anchor, li_2);
 					});
@@ -9725,24 +9731,29 @@ ${groups}`,
 			else if (state().loaded.length === 0) $$render(consequent_12, 2);
 			else $$render(alternate_1, -1);
 		});
-		reset(div_17);
+		reset(div_19);
 		reset(div_16);
 		reset(div_5);
-		template_effect(($0, $1, $2, $3) => {
+		template_effect(($0, $1, $2, $3, $4, $5) => {
 			button_1.disabled = $0;
 			set_text(text_3, $1);
 			set_class(span_4, 1, `tbx-part-status ${get(toolboxLine).css ?? ""}`, "svelte-elr56e");
 			set_text(text_4, get(toolboxLine).text);
 			button_2.disabled = $2;
 			set_text(text_5, $3);
+			button_4.disabled = $4;
+			set_text(text_10, $5);
 		}, [
 			() => get(toolboxButton).disabled || locked("toolbox"),
 			() => busyLabel("update-toolbox", get(toolboxButton).label),
 			() => !state().available?.length || locked("available"),
-			() => busyLabel("create", "Erstellen")
+			() => busyLabel("create", "Erstellen"),
+			() => !state().outdatedTools?.length || locked("loaded"),
+			() => busyLabel("update-all", get(updateAllLabel))
 		]);
 		delegated("click", button_1, () => state().updateToolbox());
 		delegated("click", button_2, () => state().createSelected());
+		delegated("click", button_4, () => state().updateAll());
 		append($$anchor, div_5);
 		pop();
 	}
@@ -9813,6 +9824,13 @@ ${groups}`,
 		set selected(value) {
 			set(this.#selected, value);
 		}
+		#outdatedTools;
+		get outdatedTools() {
+			return get(this.#outdatedTools);
+		}
+		set outdatedTools(value) {
+			set(this.#outdatedTools, value);
+		}
 		constructor() {
 			this.#toolboxStatus = /* @__PURE__ */ state();
 			this.#available = /* @__PURE__ */ state();
@@ -9823,6 +9841,20 @@ ${groups}`,
 			this.#busy = /* @__PURE__ */ state();
 			this.#opening = /* @__PURE__ */ state(proxy({}));
 			this.#selected = /* @__PURE__ */ user_derived(() => this.available?.find((t) => t.id === this.selectedId));
+			this.#outdatedTools = /* @__PURE__ */ user_derived(() => {
+				if (!this.loaded) return void 0;
+				const result = [];
+				for (const target of this.loaded) {
+					const statuses = this.partStatuses[target.id];
+					if (!statuses) return void 0;
+					const parts = toolParts(target).filter((part) => statuses[part.key] && isPartOutdated(statuses[part.key]));
+					if (parts.length > 0) result.push({
+						target,
+						parts
+					});
+				}
+				return result;
+			});
 		}
 		init() {
 			this.checkToolbox();
@@ -9912,6 +9944,46 @@ ${groups}`,
 				this.busy = void 0;
 				await showErrorAlert(`Fehler beim ${action} von "${target.name}"`, error);
 			}
+		}
+		/**
+		* "Alle Werkzeuge aktualisieren": bringt nacheinander jedes installierte
+		* Werkzeug mit veralteten oder fehlenden Bestandteilen auf den neuesten
+		* Stand (nur diese Bestandteile). Schlägt ein Werkzeug fehl oder wird die
+		* Abfrage von Script-Werten abgebrochen, geht es mit den übrigen weiter -
+		* am Ende eine Zusammenfassung.
+		*/
+		async updateAll() {
+			const todo = this.outdatedTools ?? [];
+			if (todo.length === 0) return;
+			const updated = [];
+			const skipped = [];
+			const failed = [];
+			try {
+				for (const [index, { target, parts }] of todo.entries()) {
+					this.busy = {
+						section: "loaded",
+						buttonId: "update-all",
+						label: `Aktualisiere ${index + 1}/${todo.length}…`
+					};
+					try {
+						if (await rolloutParts(target, parts)) updated.push(target.name);
+						else skipped.push(target.name);
+					} catch (error) {
+						getLogger().error(`Fehler beim Aktualisieren von "${target.name}": ${getErrorMessage(error)}`);
+						failed.push(`${target.name}: ${getErrorMessage(error)}`);
+					}
+				}
+			} finally {
+				await this.refreshLists();
+				this.busy = void 0;
+			}
+			const lines = [
+				updated.length ? `Aktualisiert: ${updated.join(", ")}.` : "",
+				skipped.length ? `Übersprungen (Abfrage abgebrochen): ${skipped.join(", ")}.` : "",
+				failed.length ? `Fehler: ${failed.join("; ")}` : ""
+			].filter(Boolean).join(" ");
+			if (failed.length) await showErrorAlert("Nicht alle Werkzeuge aktualisiert", lines);
+			else await showSuccessAlert("Werkzeuge aktualisiert", lines);
 		}
 		async open(target) {
 			if (!hasFormPart(target)) return;

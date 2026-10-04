@@ -4762,7 +4762,7 @@ createHTML: (html) => {
 				return;
 			}
 			if (instance) unmount(instance);
-			removePagePadding(host.ownerDocument);
+			removePagePadding(host);
 			host.innerHTML = "";
 			root = host.ownerDocument.createElement("div");
 			host.appendChild(root);
@@ -4776,21 +4776,20 @@ createHTML: (html) => {
 			if (!root?.isConnected) mountNow();
 		});
 	}
-	var PAGE_PADDING_STYLE_ID = "toolbox-no-page-padding";
+	var PADDED_MUI_CLASSES = ["MuiContainer-root", "MuiBox-root"];
 	/**
-	* Entfernt das seitliche Padding des dforms-Seitencontainers (MUI), damit
-	* die Werkzeuge - meist breite Tabellen - die volle Breite nutzen. Gilt für
-	* die ganze Seite; unbedenklich, weil jedes Bundle nur auf seiner eigenen
-	* Formularseite läuft. Die generierte Klasse (z.B. css-1783alc) ändert sich
-	* mit dforms-Updates, MuiContainer-root bleibt - doppelt angegeben, damit die
-	* Regel unabhängig von der Reihenfolge der Styles gewinnt.
+	* Entfernt das seitliche Padding der dforms-Seitenelemente (MUI-Container und
+	* -Boxen), die das Formular umschließen, damit die Werkzeuge - meist breite
+	* Tabellen - die volle Breite nutzen. Bewusst nur die Vorfahren des Formulars,
+	* nicht alle MuiBox-root der Seite (die nutzt dforms z.B. auch in Kopfzeile
+	* und Navigation). Direkt am Element gesetzt: schlägt die generierten Klassen
+	* (z.B. css-1783alc, css-3p1e6c), die sich mit dforms-Updates ändern.
 	*/
-	function removePagePadding(doc) {
-		if (doc.getElementById(PAGE_PADDING_STYLE_ID)) return;
-		const style = doc.createElement("style");
-		style.id = PAGE_PADDING_STYLE_ID;
-		style.textContent = ".MuiContainer-root.MuiContainer-root { padding-left: 0; padding-right: 0; }";
-		doc.head.appendChild(style);
+	function removePagePadding(host) {
+		for (let element = host.parentElement; element; element = element.parentElement) if (PADDED_MUI_CLASSES.some((name) => element.classList.contains(name))) {
+			element.style.paddingLeft = "0";
+			element.style.paddingRight = "0";
+		}
 	}
 	//#endregion
 	//#region ../Toolbox/shared/swal.ts
