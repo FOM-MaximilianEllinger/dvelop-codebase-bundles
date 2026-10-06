@@ -153,6 +153,24 @@ async function getBatchTasks(baseUri, token, subscriptionId) {
 	});
 }
 //#endregion
+//#region ../../helper/classcon-documentreader/getPdf.ts
+/**
+* Liefert die Dokumentansicht eines Dokuments im Rechnungsleser als HTML
+* (GET /classcon-documentreader/DocumentProcessing/GetPdf?taskID=<taskId>&documentID=<documentNumber>).
+*
+* @param documentId - Nummer des Dokuments im Stapel, z.B. "00000".
+* @param token - API-Key; leer = Browser-Session.
+*/
+async function getPdf(baseUri, token, taskId, documentId) {
+	return await performHttpRequest(`${baseUri}/classcon-documentreader/DocumentProcessing/GetPdf?taskID=${encodeURIComponent(taskId)}&documentID=${encodeURIComponent(documentId)}`, {
+		method: "GET",
+		headers: {
+			...token ? { Authorization: `Bearer ${token}` } : {},
+			Accept: "text/html"
+		}
+	});
+}
+//#endregion
 //#region ../../helper/classcon-documentreader/getFeatures.ts
 /**
 * Liefert die Features (Kacheln) des Rechnungslesers - analog zu
@@ -199,14 +217,27 @@ var APP = "classcon-documentreader";
 var VENDOR_FIELD = "VENDOR_NUM";
 var INVOICE_FIELD = "InvoiceNumber";
 var DOCUMENT_ID_FIELD = "DocumentUID";
+var ORDER_FIELD = "OrderNum";
 var DUPLICATE_FLAG_FIELD = "IsDuplicate";
 var DUPLICATE_IDS_FIELD = "DuplicateDocumentIds";
 module.exports = async (req, res) => {
 	const body = parseBody(req);
 	logger.info(`Eingang: ${JSON.stringify(body).slice(0, 4e3)}`);
 	try {
-		const current = await findCurrentBatchDocument(req.get("x-dv-baseuri"), req.var("apiKey"), body);
+		const baseUri = req.get("x-dv-baseuri");
+		const apiKey = req.var("apiKey");
+		const current = await findCurrentBatchDocument(baseUri, apiKey, body);
 		logger.info(`Aktuelles Dokument: ${JSON.stringify(current)}`);
+		if (current?.candidates === 1) {
+			const html = String((await getPdf(baseUri, apiKey, current.taskId, current.documentNumber)).body ?? "");
+			const metadataText = extractScriptVariable(html, "metadataText");
+			logger.info(metadataText === void 0 ? `metadataText nicht gefunden (HTML ${html.length} Zeichen): ${html.slice(0, 2e3)}` : `metadataText: ${metadataText}`);
+			const orderNum = xmlElementText(metadataText ?? "", "PurchaseOrderReference");
+			if (orderNum) {
+				logger.info(`${ORDER_FIELD}: "${attribute(body, ORDER_FIELD)}" -> "${orderNum}" (PurchaseOrderReference)`);
+				setAttribute(body, ORDER_FIELD, orderNum);
+			}
+		}
 	} catch (error) {
 		logger.error(`Stapelsuche fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
 	}
@@ -325,6 +356,34 @@ async function findCurrentBatchDocument(baseUri, apiKey, body) {
 var listRank = (list) => list === "tasksInProgress" ? 0 : 1;
 function documentsOf(entry) {
 	return entry.batchTask?.documentMetaDataList ?? entry.documentModels ?? [];
+}
+/**
+* Liest den Wert einer Variablen aus dem <script> einer HTML-Seite
+* (`var name = "…";`, `name: '…'` o.ä.): Zeichenketten in Anführungszeichen
+* werden entschlüsselt, sonst kommt der Rohtext bis zum Zeilenende bzw. ";"
+* zurück.
+*/
+function extractScriptVariable(html, name) {
+	const quoted = new RegExp(String.raw`\b${name}\s*[:=]\s*(["'` + "`" + String.raw`])((?:\\[\s\S]|(?!\1)[^\\])*)\1`).exec(html);
+	if (quoted) {
+		const [, quote, raw] = quoted;
+		try {
+			const json = quote === "\"" ? raw : raw.replace(/\\(['`])/g, "$1").replace(/"/g, "\\\"");
+			return JSON.parse(`"${json}"`);
+		} catch {
+			return raw;
+		}
+	}
+	return new RegExp(String.raw`\b${name}\s*[:=]\s*([^;\r\n]*)`).exec(html)?.[1]?.trim();
+}
+/**
+* Text des ersten XML-Elements mit diesem lokalen Namen - mit beliebigem
+* Namespace-Präfix (<xr:Name>, <ram:Name>, <Name>) und Attributen. Entities
+* (&amp; …) werden aufgelöst; leer = nicht vorhanden.
+*/
+function xmlElementText(xml, localName) {
+	const text = xml.includes("\\u003c") ? xml.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16))) : xml;
+	return (new RegExp(String.raw`<(?:[\w.-]+:)?${localName}(?:\s[^>]*)?>([\s\S]*?)</(?:[\w.-]+:)?${localName}\s*>`).exec(text)?.[1] ?? "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&amp;/g, "&").trim();
 }
 //#endregion
 
