@@ -289,11 +289,23 @@ var ticksToMs = (ticks) => (ticks - TICKS_UNIX_EPOCH) / 1e4;
 async function findCurrentBatchDocument(baseUri, apiKey, body) {
 	const fileName = attribute(body, "OriginalFileName").toLowerCase();
 	const creator = attribute(body, "BatchCreator").toLowerCase();
-	if (!fileName) return;
+	if (!fileName || !creator) {
+		logger.info(`Keine Stapelsuche: OriginalFileName "${fileName}" / BatchCreator "${creator}" unvollständig.`);
+		return;
+	}
 	const processedAt = Date.parse(attribute(body, "ProcessingDateTime").replace(/(\.\d{3})\d+/, "$1"));
 	const subscriptionId = (await getDocumentReaderFeatures(baseUri, apiKey)).body.features?.find((f) => f.url?.includes(APP))?.url?.split("/").pop();
 	if (!subscriptionId) throw new Error("Subscription-ID des Rechnungslesers nicht gefunden.");
-	const candidates = ((await getBatchTasks(baseUri, apiKey, subscriptionId)).body?.tasksIndex ?? []).map((t) => t.batchTask).filter((task) => !creator || task.creator?.toLowerCase() === creator).filter((task) => isNaN(processedAt) || ticksToMs(task.creationTimeStamp) <= processedAt).flatMap((task) => (task.documentMetaDataList ?? []).filter((doc) => doc.displayName?.trim().toLowerCase() === fileName).map((doc) => ({
+	const tasks = (await getBatchTasks(baseUri, apiKey, subscriptionId)).body?.tasksIndex ?? [];
+	logger.info(`Gesucht: Datei "${fileName}", Ersteller "${creator}", vor ${isNaN(processedAt) ? "-" : new Date(processedAt).toISOString()}`);
+	logger.info(`${tasks.length} offene(r) Stapel: ${JSON.stringify(tasks.map(({ batchTask: t }) => ({
+		taskId: t.taskId,
+		creator: t.creator,
+		created: new Date(ticksToMs(t.creationTimeStamp)).toISOString(),
+		status: t.status,
+		docs: (t.documentMetaDataList ?? []).map((d) => `${d.documentNumber}: ${d.displayName} (${d.documentStatus})`)
+	})))}`);
+	const candidates = tasks.map((t) => t.batchTask).filter((task) => !creator || task.creator?.toLowerCase() === creator).filter((task) => isNaN(processedAt) || ticksToMs(task.creationTimeStamp) <= processedAt).flatMap((task) => (task.documentMetaDataList ?? []).filter((doc) => doc.displayName?.trim().toLowerCase() === fileName).map((doc) => ({
 		task,
 		doc
 	}))).sort((a, b) => b.task.creationTimeStamp - a.task.creationTimeStamp);
