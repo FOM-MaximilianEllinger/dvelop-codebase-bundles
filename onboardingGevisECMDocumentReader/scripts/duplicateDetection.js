@@ -277,14 +277,12 @@ function parseBody(req) {
 		return {};
 	}
 }
-var TICKS_UNIX_EPOCH = 0x89f7ff5f7b58000;
-var ticksToMs = (ticks) => (ticks - TICKS_UNIX_EPOCH) / 1e4;
 /**
-* Sucht das aktuelle Dokument in den offenen Stapeln des Rechnungslesers
-* (GetBatchTasksNew): Dateiname (OriginalFileName = displayName) und
-* Ersteller des Stapels (BatchCreator = creator) müssen passen. Passen
-* mehrere, gewinnt der jüngste Stapel, der vor ProcessingDateTime angelegt
-* wurde.
+* Sucht das aktuelle Dokument in den Stapeln des Rechnungslesers
+* (GetBatchTasksNew, Listen tasksInProgress und tasksIndex): Dateiname
+* (OriginalFileName = displayName) und Ersteller des Stapels
+* (BatchCreator = creator) müssen passen. Passen mehrere, gewinnen Stapel in
+* Verarbeitung vor offenen, danach der jüngste Stapel.
 */
 async function findCurrentBatchDocument(baseUri, apiKey, body) {
 	const fileName = attribute(body, "OriginalFileName").toLowerCase();
@@ -293,30 +291,40 @@ async function findCurrentBatchDocument(baseUri, apiKey, body) {
 		logger.info(`Keine Stapelsuche: OriginalFileName "${fileName}" / BatchCreator "${creator}" unvollständig.`);
 		return;
 	}
-	const processedAt = Date.parse(attribute(body, "ProcessingDateTime").replace(/(\.\d{3})\d+/, "$1"));
 	const subscriptionId = (await getDocumentReaderFeatures(baseUri, apiKey)).body.features?.find((f) => f.url?.includes(APP))?.url?.split("/").pop();
 	if (!subscriptionId) throw new Error("Subscription-ID des Rechnungslesers nicht gefunden.");
-	const tasks = (await getBatchTasks(baseUri, apiKey, subscriptionId)).body?.tasksIndex ?? [];
-	logger.info(`Gesucht: Datei "${fileName}", Ersteller "${creator}", vor ${isNaN(processedAt) ? "-" : new Date(processedAt).toISOString()}`);
-	logger.info(`${tasks.length} offene(r) Stapel: ${JSON.stringify(tasks.map(({ batchTask: t }) => ({
-		taskId: t.taskId,
-		creator: t.creator,
-		created: new Date(ticksToMs(t.creationTimeStamp)).toISOString(),
-		status: t.status,
-		docs: (t.documentMetaDataList ?? []).map((d) => `${d.documentNumber}: ${d.displayName} (${d.documentStatus})`)
+	const result = (await getBatchTasks(baseUri, apiKey, subscriptionId)).body;
+	const tasks = [["tasksInProgress", result?.tasksInProgress], ["tasksIndex", result?.tasksIndex]].flatMap(([list, entries]) => (entries ?? []).map((entry) => ({
+		list,
+		entry
+	})));
+	logger.info(`Gesucht: Datei "${fileName}", Ersteller "${creator}"`);
+	logger.info(`${tasks.length} Stapel: ${JSON.stringify(tasks.map(({ list, entry }) => ({
+		list,
+		taskId: entry.batchTask?.taskId,
+		creator: entry.batchTask?.creator,
+		created: entry.creationTime,
+		status: entry.batchTask?.status,
+		docs: documentsOf(entry).map((d) => `${d.documentNumber}: ${d.displayName} (${d.documentStatus})`)
 	})))}`);
-	const candidates = tasks.map((t) => t.batchTask).filter((task) => !creator || task.creator?.toLowerCase() === creator).filter((task) => isNaN(processedAt) || ticksToMs(task.creationTimeStamp) <= processedAt).flatMap((task) => (task.documentMetaDataList ?? []).filter((doc) => doc.displayName?.trim().toLowerCase() === fileName).map((doc) => ({
-		task,
+	const candidates = tasks.filter(({ entry }) => entry.batchTask?.creator?.toLowerCase() === creator).flatMap(({ list, entry }) => documentsOf(entry).filter((doc) => doc.displayName?.trim().toLowerCase() === fileName).map((doc) => ({
+		list,
+		task: entry.batchTask,
 		doc
-	}))).sort((a, b) => b.task.creationTimeStamp - a.task.creationTimeStamp);
+	}))).sort((a, b) => listRank(a.list) - listRank(b.list) || (b.task.creationTimeStamp ?? 0) - (a.task.creationTimeStamp ?? 0));
 	const match = candidates[0];
 	return match && {
-		subscriptionId: match.task.subscriptionId,
-		processSequenceId: match.task.processSequenceId,
-		taskId: match.task.taskId,
-		documentNumber: match.doc.documentNumber,
+		list: match.list,
+		subscriptionId: match.task.subscriptionId ?? subscriptionId,
+		processSequenceId: match.task.processSequenceId ?? "",
+		taskId: match.task.taskId ?? "",
+		documentNumber: match.doc.documentNumber ?? "",
 		candidates: candidates.length
 	};
+}
+var listRank = (list) => list === "tasksInProgress" ? 0 : 1;
+function documentsOf(entry) {
+	return entry.batchTask?.documentMetaDataList ?? entry.documentModels ?? [];
 }
 //#endregion
 
