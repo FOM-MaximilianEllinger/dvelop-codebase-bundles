@@ -164,6 +164,7 @@ var DOCUMENT_ID_FIELD = "DocumentUID";
 var DUPLICATE_FLAG_FIELD = "IsDuplicate";
 var DUPLICATE_IDS_FIELD = "DuplicateDocumentIds";
 module.exports = async (req, res) => {
+	dumpRequest(req);
 	const body = parseBody(req);
 	logger.info(`Eingang: ${JSON.stringify(body).slice(0, 4e3)}`);
 	try {
@@ -232,6 +233,22 @@ function parseBody(req) {
 	} catch {
 		return {};
 	}
+}
+function dumpRequest(req) {
+	const members = {};
+	for (let o = req; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) for (const key of Object.getOwnPropertyNames(o)) if (!(key in members)) members[key] = typeof req[key];
+	logger.info(`req-Member: ${JSON.stringify(members)}`);
+	for (const [key, type] of Object.entries(members)) {
+		if (type === "function" || key === "constructor") continue;
+		try {
+			logger.info(`req.${key} = ${JSON.stringify(req[key]).slice(0, 4e3)}`);
+		} catch {
+			logger.info(`req.${key} = <nicht serialisierbar>`);
+		}
+	}
+	try {
+		logger.info(`req.text() = ${String(req.text?.()).slice(0, 4e3)}`);
+	} catch {}
 }
 //#endregion
 
