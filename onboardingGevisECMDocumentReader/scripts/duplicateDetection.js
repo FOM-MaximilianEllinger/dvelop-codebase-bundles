@@ -136,6 +136,44 @@ async function executeSqlQuery(baseUri, token, app, sqlQuery, connectionString =
 	});
 }
 //#endregion
+//#region ../../helper/classcon-documentreader/getBatchTasks.ts
+/**
+* Liefert die offenen Stapel des Rechnungslesers
+* (GET /classcon-documentreader/DocumentProcessing/GetBatchTasksNew?id=<subscriptionId>).
+*
+* @param token - API-Key; leer = Browser-Session.
+*/
+async function getBatchTasks(baseUri, token, subscriptionId) {
+	return await performHttpRequest(`${baseUri}/classcon-documentreader/DocumentProcessing/GetBatchTasksNew?id=${encodeURIComponent(subscriptionId)}`, {
+		method: "GET",
+		headers: {
+			...token ? { Authorization: `Bearer ${token}` } : {},
+			Accept: "application/json"
+		}
+	});
+}
+//#endregion
+//#region ../../helper/classcon-documentreader/getFeatures.ts
+/**
+* Liefert die Features (Kacheln) des Rechnungslesers - analog zu
+* classconorderconfirmations/getFeatures. Die URL eines Features endet auf
+* die Subscription-ID.
+*
+* @param baseUri - The base URI of the API.
+* @param token - Optional bearer token; ohne Token wird die Browser-Session genutzt.
+*/
+async function getDocumentReaderFeatures(baseUri, token) {
+	return await performHttpRequest(`${baseUri}/classcon-documentreader/getFeatures`, {
+		method: "GET",
+		headers: {
+			...token ? { "Authorization": `Bearer ${token}` } : {},
+			"Accept": "application/json",
+			"Content-Type": "application/json",
+			"Accept-Language": "de-DE"
+		}
+	});
+}
+//#endregion
 //#region src/scripts/duplicateDetection.ts
 /**
 * "Rechnungsleser: Dublettenerkennung": wird vom Rechnungsleser nach der
@@ -164,9 +202,14 @@ var DOCUMENT_ID_FIELD = "DocumentUID";
 var DUPLICATE_FLAG_FIELD = "IsDuplicate";
 var DUPLICATE_IDS_FIELD = "DuplicateDocumentIds";
 module.exports = async (req, res) => {
-	await dumpRequest(req);
 	const body = parseBody(req);
 	logger.info(`Eingang: ${JSON.stringify(body).slice(0, 4e3)}`);
+	try {
+		const current = await findCurrentBatchDocument(req.get("x-dv-baseuri"), req.var("apiKey"), body);
+		logger.info(`Aktuelles Dokument: ${JSON.stringify(current)}`);
+	} catch (error) {
+		logger.error(`Stapelsuche fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+	}
 	try {
 		const vendorNum = attribute(body, VENDOR_FIELD);
 		const invoiceNumber = attribute(body, INVOICE_FIELD);
@@ -234,51 +277,34 @@ function parseBody(req) {
 		return {};
 	}
 }
-async function dumpRequest(req) {
-	const members = {};
-	for (let o = req; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) for (const key of Object.getOwnPropertyNames(o)) if (!(key in members)) members[key] = typeof req[key];
-	logger.info(`req-Member: ${JSON.stringify(members)}`);
-	for (const [key, type] of Object.entries(members)) {
-		if (type === "function" || key === "constructor") continue;
-		try {
-			logger.info(`req.${key} = ${JSON.stringify(req[key]).slice(0, 4e3)}`);
-		} catch {
-			logger.info(`req.${key} = <nicht serialisierbar>`);
-		}
-	}
-	try {
-		logger.info(`req.text() = ${String(req.text?.()).slice(0, 4e3)}`);
-	} catch {}
-	for (const name of [
-		"variables",
-		"data",
-		"systemBaseUri",
-		"currentUser"
-	]) try {
-		const value = await Promise.resolve(req[name]());
-		logger.info(`req.${name}() = ${JSON.stringify(value)?.slice(0, 4e3)}`);
-	} catch (e) {
-		logger.info(`req.${name}() fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
-	}
-	try {
-		logger.info(`req.authSessionId() vorhanden: ${!!await Promise.resolve(req.authSessionId())}`);
-	} catch {}
-	for (const h of [
-		"x-dv-baseuri",
-		"x-dv-tenant-id",
-		"x-dv-user-id",
-		"x-dv-sign",
-		"x-dv-request-id",
-		"x-dv-profile",
-		"x-dv-batch-id",
-		"x-dv-document-id",
-		"content-type",
-		"user-agent",
-		"accept-language"
-	]) try {
-		const v = req.get(h);
-		if (v) logger.info(`header ${h} = ${v}`);
-	} catch {}
+var TICKS_UNIX_EPOCH = 0x89f7ff5f7b58000;
+var ticksToMs = (ticks) => (ticks - TICKS_UNIX_EPOCH) / 1e4;
+/**
+* Sucht das aktuelle Dokument in den offenen Stapeln des Rechnungslesers
+* (GetBatchTasksNew): Dateiname (OriginalFileName = displayName) und
+* Ersteller des Stapels (BatchCreator = creator) müssen passen. Passen
+* mehrere, gewinnt der jüngste Stapel, der vor ProcessingDateTime angelegt
+* wurde.
+*/
+async function findCurrentBatchDocument(baseUri, apiKey, body) {
+	const fileName = attribute(body, "OriginalFileName").toLowerCase();
+	const creator = attribute(body, "BatchCreator").toLowerCase();
+	if (!fileName) return;
+	const processedAt = Date.parse(attribute(body, "ProcessingDateTime").replace(/(\.\d{3})\d+/, "$1"));
+	const subscriptionId = (await getDocumentReaderFeatures(baseUri, apiKey)).body.features?.find((f) => f.url?.includes(APP))?.url?.split("/").pop();
+	if (!subscriptionId) throw new Error("Subscription-ID des Rechnungslesers nicht gefunden.");
+	const candidates = ((await getBatchTasks(baseUri, apiKey, subscriptionId)).body?.tasksIndex ?? []).map((t) => t.batchTask).filter((task) => !creator || task.creator?.toLowerCase() === creator).filter((task) => isNaN(processedAt) || ticksToMs(task.creationTimeStamp) <= processedAt).flatMap((task) => (task.documentMetaDataList ?? []).filter((doc) => doc.displayName?.trim().toLowerCase() === fileName).map((doc) => ({
+		task,
+		doc
+	}))).sort((a, b) => b.task.creationTimeStamp - a.task.creationTimeStamp);
+	const match = candidates[0];
+	return match && {
+		subscriptionId: match.task.subscriptionId,
+		processSequenceId: match.task.processSequenceId,
+		taskId: match.task.taskId,
+		documentNumber: match.doc.documentNumber,
+		candidates: candidates.length
+	};
 }
 //#endregion
 
