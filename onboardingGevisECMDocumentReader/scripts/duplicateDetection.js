@@ -164,7 +164,7 @@ var DOCUMENT_ID_FIELD = "DocumentUID";
 var DUPLICATE_FLAG_FIELD = "IsDuplicate";
 var DUPLICATE_IDS_FIELD = "DuplicateDocumentIds";
 module.exports = async (req, res) => {
-	dumpRequest(req);
+	await dumpRequest(req);
 	const body = parseBody(req);
 	logger.info(`Eingang: ${JSON.stringify(body).slice(0, 4e3)}`);
 	try {
@@ -234,7 +234,7 @@ function parseBody(req) {
 		return {};
 	}
 }
-function dumpRequest(req) {
+async function dumpRequest(req) {
 	const members = {};
 	for (let o = req; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) for (const key of Object.getOwnPropertyNames(o)) if (!(key in members)) members[key] = typeof req[key];
 	logger.info(`req-Member: ${JSON.stringify(members)}`);
@@ -248,6 +248,36 @@ function dumpRequest(req) {
 	}
 	try {
 		logger.info(`req.text() = ${String(req.text?.()).slice(0, 4e3)}`);
+	} catch {}
+	for (const name of [
+		"variables",
+		"data",
+		"systemBaseUri",
+		"currentUser"
+	]) try {
+		const value = await Promise.resolve(req[name]());
+		logger.info(`req.${name}() = ${JSON.stringify(value)?.slice(0, 4e3)}`);
+	} catch (e) {
+		logger.info(`req.${name}() fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+	}
+	try {
+		logger.info(`req.authSessionId() vorhanden: ${!!await Promise.resolve(req.authSessionId())}`);
+	} catch {}
+	for (const h of [
+		"x-dv-baseuri",
+		"x-dv-tenant-id",
+		"x-dv-user-id",
+		"x-dv-sign",
+		"x-dv-request-id",
+		"x-dv-profile",
+		"x-dv-batch-id",
+		"x-dv-document-id",
+		"content-type",
+		"user-agent",
+		"accept-language"
+	]) try {
+		const v = req.get(h);
+		if (v) logger.info(`header ${h} = ${v}`);
 	} catch {}
 }
 //#endregion
