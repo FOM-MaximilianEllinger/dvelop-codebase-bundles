@@ -228,10 +228,16 @@ module.exports = async (req, res) => {
 		const current = await findCurrentBatchDocument(baseUri, apiKey, body);
 		if (current?.candidates !== 1) logger.info(`Stapel nicht eindeutig (${current?.candidates ?? 0} Treffer) - keine Werte aus der E-Rechnung.`);
 		else {
-			const orderNum = xmlElementText(extractScriptVariable(String((await getPdf(baseUri, apiKey, current.taskId, current.documentNumber)).body ?? ""), "metadataText") ?? "", "PurchaseOrderReference");
+			const metadataText = extractScriptVariable(String((await getPdf(baseUri, apiKey, current.taskId, current.documentNumber)).body ?? ""), "metadataText");
+			const orderNum = xmlElementText(metadataText ?? "", "PurchaseOrderReference");
 			if (orderNum) {
 				logger.info(`${ORDER_FIELD}: "${attribute(body, ORDER_FIELD)}" -> "${orderNum}" (PurchaseOrderReference)`);
 				setAttribute(body, ORDER_FIELD, orderNum);
+			}
+			const vendorDeliveryNum = xmlElementText(metadataText ?? "", "DespatchAdviceReference");
+			if (vendorDeliveryNum) {
+				logger.info(`${VENDOR_FIELD}: "${attribute(body, VENDOR_FIELD)}" -> "${vendorDeliveryNum}" (DespatchAdviceReference)`);
+				setAttribute(body, "VendorDeliveryNum", vendorDeliveryNum);
 			}
 		}
 	} catch (error) {
