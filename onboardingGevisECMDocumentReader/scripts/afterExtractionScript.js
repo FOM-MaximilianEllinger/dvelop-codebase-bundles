@@ -218,10 +218,12 @@ var VENDOR_FIELD = "VENDOR_NUM";
 var INVOICE_FIELD = "InvoiceNumber";
 var DOCUMENT_ID_FIELD = "DocumentUID";
 var ORDER_FIELD = "OrderNum";
+var VENDOR_DELIVERY_FIELD = "VendorDeliveryNum";
 var DUPLICATE_FLAG_FIELD = "IsDuplicate";
 var DUPLICATE_IDS_FIELD = "DuplicateDocumentIds";
 module.exports = async (req, res) => {
 	const body = parseBody(req);
+	logger.info(`Eingang: ${JSON.stringify(body)}`);
 	try {
 		const baseUri = req.get("x-dv-baseuri");
 		const apiKey = req.var("apiKey");
@@ -236,8 +238,8 @@ module.exports = async (req, res) => {
 			}
 			const vendorDeliveryNum = xmlElementText(metadataText ?? "", "DespatchAdviceReference");
 			if (vendorDeliveryNum) {
-				logger.info(`${VENDOR_FIELD}: "${attribute(body, VENDOR_FIELD)}" -> "${vendorDeliveryNum}" (DespatchAdviceReference)`);
-				setAttribute(body, "VendorDeliveryNum", vendorDeliveryNum);
+				logger.info(`${VENDOR_DELIVERY_FIELD}: "${attribute(body, VENDOR_DELIVERY_FIELD)}" -> "${vendorDeliveryNum}" (DespatchAdviceReference)`);
+				setAttribute(body, VENDOR_DELIVERY_FIELD, vendorDeliveryNum);
 			}
 		}
 	} catch (error) {
@@ -258,7 +260,9 @@ module.exports = async (req, res) => {
 	} catch (error) {
 		logger.error(`Dublettenprüfung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
 	}
-	res.status(200).set("Content-Type", "application/json").send(JSON.stringify(body));
+	const response = JSON.stringify(body);
+	logger.info(`Antwort: ${response}`);
+	res.status(200).set("Content-Type", "application/json").send(response);
 };
 async function findDuplicates(baseUri, apiKey, vendorNum, invoiceNumber, currentDocumentId) {
 	const sqlQuery = `
