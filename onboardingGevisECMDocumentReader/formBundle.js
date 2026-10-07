@@ -9546,9 +9546,9 @@ createHTML: (html) => {
 						},
 						{
 							"AttributeID": "VendorDeliveryNum",
-							"Description": null,
+							"Description": "Kreditorlieferungsnummer",
 							"LocalizedDescriptions": {},
-							"AttributeLabel": null,
+							"AttributeLabel": "Kreditorlieferungsnummer",
 							"AttributeIcon": null,
 							"AttributeType": 0,
 							"Required": false,
