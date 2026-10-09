@@ -221,6 +221,7 @@ var INVOICE_FIELD = "InvoiceNumber";
 var DOCUMENT_ID_FIELD = "DocumentUID";
 var ORDER_FIELD = "OrderNum";
 var VENDOR_DELIVERY_FIELD = "VendorDeliveryNum";
+var VENDOR_DELIVERY_DATE_FIELD = "VendorDeliveryDate";
 var DUPLICATE_FLAG_FIELD = "IsDuplicate";
 var DUPLICATE_IDS_FIELD = "DuplicateDocumentIds";
 module.exports = async (req, res) => {
@@ -242,6 +243,11 @@ module.exports = async (req, res) => {
 			if (vendorDeliveryNum) {
 				logger.info(`${VENDOR_DELIVERY_FIELD}: "${attribute(body, VENDOR_DELIVERY_FIELD)}" -> "${vendorDeliveryNum}" (DespatchAdviceReference)`);
 				setAttribute(body, VENDOR_DELIVERY_FIELD, vendorDeliveryNum);
+			}
+			const vendorDeliveryDate = xmlElementText(metadataText ?? "", "DespatchAdviceDate");
+			if (vendorDeliveryDate) {
+				logger.info(`${VENDOR_DELIVERY_DATE_FIELD}: "${attribute(body, VENDOR_DELIVERY_DATE_FIELD)}" -> "${vendorDeliveryDate}" (DespatchAdviceDate)`);
+				setAttribute(body, VENDOR_DELIVERY_DATE_FIELD, vendorDeliveryDate);
 			}
 		}
 	} catch (error) {
