@@ -244,7 +244,7 @@ module.exports = async (req, res) => {
 				logger.info(`${VENDOR_DELIVERY_FIELD}: "${attribute(body, VENDOR_DELIVERY_FIELD)}" -> "${vendorDeliveryNum}" (DespatchAdviceReference)`);
 				setAttribute(body, VENDOR_DELIVERY_FIELD, vendorDeliveryNum);
 			}
-			const vendorDeliveryDate = xmlElementText(metadataText ?? "", "DespatchAdviceDate");
+			const vendorDeliveryDate = germanDate(xmlElementText(metadataText ?? "", "DespatchAdviceDate"));
 			if (vendorDeliveryDate) {
 				logger.info(`${VENDOR_DELIVERY_DATE_FIELD}: "${attribute(body, VENDOR_DELIVERY_DATE_FIELD)}" -> "${vendorDeliveryDate}" (DespatchAdviceDate)`);
 				setAttribute(body, VENDOR_DELIVERY_DATE_FIELD, vendorDeliveryDate);
@@ -312,6 +312,10 @@ function attribute(body, name) {
 }
 function setAttribute(body, name, value) {
 	body[name] = typeof body[name] === "string" ? Array.isArray(value) ? value.join(", ") : String(value) : value;
+}
+function germanDate(value) {
+	const match = /^(\d{4})-?(\d{2})-?(\d{2})/.exec(value);
+	return match ? `${match[3]}.${match[2]}.${match[1]}` : value;
 }
 function parseBody(req) {
 	try {
