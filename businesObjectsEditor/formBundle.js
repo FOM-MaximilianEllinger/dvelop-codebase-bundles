@@ -3857,6 +3857,13 @@ createHTML: (html) => {
 	/** @import { EachItem, EachOutroGroup, EachState, Effect, EffectNodes, MaybeSource, Source, TemplateNode, TransitionManager, Value } from '#client' */
 	/** @import { Batch } from '../../reactivity/batch.js'; */
 	/**
+	* @param {any} _
+	* @param {number} i
+	*/
+	function index(_, i) {
+		return i;
+	}
+	/**
 	* Pause multiple effects simultaneously, and coordinate their
 	* subsequent destruction. Used in each blocks
 	* @param {EachState} state
@@ -4268,7 +4275,7 @@ createHTML: (html) => {
 	* @param {Node} anchor
 	* @param {{ hash: string, code: string }} css
 	*/
-	function append_styles(anchor, css) {
+	function append_styles$1(anchor, css) {
 		effect(() => {
 			anchor = active_effect?.parent?.nodes?.start ?? anchor;
 			var root = anchor.getRootNode();
@@ -4307,6 +4314,90 @@ createHTML: (html) => {
 		}
 		return classname === "" ? null : classname;
 	}
+	/**
+	*
+	* @param {Record<string,any>} styles
+	* @param {boolean} important
+	*/
+	function append_styles(styles, important = false) {
+		var separator = important ? " !important;" : ";";
+		var css = "";
+		for (var key of Object.keys(styles)) {
+			var value = styles[key];
+			if (value != null && value !== "") css += " " + key + ": " + value + separator;
+		}
+		return css;
+	}
+	/**
+	* @param {string} name
+	* @returns {string}
+	*/
+	function to_css_name(name) {
+		if (name[0] !== "-" || name[1] !== "-") return name.toLowerCase();
+		return name;
+	}
+	/**
+	* @param {any} value
+	* @param {Record<string, any> | [Record<string, any>, Record<string, any>]} [styles]
+	* @returns {string | null}
+	*/
+	function to_style(value, styles) {
+		if (styles) {
+			var new_style = "";
+			/** @type {Record<string,any> | undefined} */
+			var normal_styles;
+			/** @type {Record<string,any> | undefined} */
+			var important_styles;
+			if (Array.isArray(styles)) {
+				normal_styles = styles[0];
+				important_styles = styles[1];
+			} else normal_styles = styles;
+			if (value) {
+				value = String(value).replaceAll(/\/\*.*?\*\//g, "").trim();
+				/** @type {boolean | '"' | "'"} */
+				var in_str = false;
+				var in_apo = 0;
+				var in_comment = false;
+				var reserved_names = [];
+				if (normal_styles) reserved_names.push(...Object.keys(normal_styles).map(to_css_name));
+				if (important_styles) reserved_names.push(...Object.keys(important_styles).map(to_css_name));
+				var start_index = 0;
+				var name_index = -1;
+				const len = value.length;
+				for (var i = 0; i < len; i++) {
+					var c = value[i];
+					if (in_comment) {
+						if (c === "/" && value[i - 1] === "*") in_comment = false;
+					} else if (in_str) {
+						if (in_str === c) in_str = false;
+					} else if (c === "/" && value[i + 1] === "*") in_comment = true;
+					else if (c === "\"" || c === "'") in_str = c;
+					else if (c === "(") in_apo++;
+					else if (c === ")") in_apo--;
+					if (!in_comment && in_str === false && in_apo === 0) {
+						if (c === ":" && name_index === -1) name_index = i;
+						else if (c === ";" || i === len - 1) {
+							if (name_index !== -1) {
+								var name = to_css_name(value.substring(start_index, name_index).trim());
+								if (!reserved_names.includes(name)) {
+									if (c !== ";") i++;
+									var property = value.substring(start_index, i).trim();
+									new_style += " " + property + ";";
+								}
+							}
+							start_index = i + 1;
+							name_index = -1;
+						}
+					}
+				}
+			}
+			if (normal_styles) new_style += append_styles(normal_styles);
+			if (important_styles) new_style += append_styles(important_styles, true);
+			new_style = new_style.trim();
+			return new_style === "" ? null : new_style;
+		}
+		return value == null ? null : String(value);
+	}
 	//#endregion
 	//#region node_modules/svelte/src/internal/client/dom/elements/class.js
 	/**
@@ -4333,6 +4424,46 @@ createHTML: (html) => {
 			if (prev_classes == null || is_present !== !!prev_classes[key]) dom.classList.toggle(key, is_present);
 		}
 		return next_classes;
+	}
+	//#endregion
+	//#region node_modules/svelte/src/internal/client/dom/elements/style.js
+	/**
+	* @param {Element & ElementCSSInlineStyle} dom
+	* @param {Record<string, any>} prev
+	* @param {Record<string, any>} next
+	* @param {string} [priority]
+	*/
+	function update_styles(dom, prev = {}, next, priority) {
+		for (var key in next) {
+			var value = next[key];
+			if (prev[key] !== value) {
+				if (next[key] == null) dom.style.removeProperty(key);
+				else dom.style.setProperty(key, value, priority);
+			}
+		}
+	}
+	/**
+	* @param {Element & ElementCSSInlineStyle} dom
+	* @param {string | null} value
+	* @param {Record<string, any> | [Record<string, any>, Record<string, any>]} [prev_styles]
+	* @param {Record<string, any> | [Record<string, any>, Record<string, any>]} [next_styles]
+	*/
+	function set_style(dom, value, prev_styles, next_styles) {
+		var prev = dom[STYLE_CACHE];
+		if (hydrating || prev !== value) {
+			var next_style_attr = to_style(value, next_styles);
+			if (!hydrating || next_style_attr !== dom.getAttribute("style")) {
+				if (next_style_attr == null) dom.removeAttribute("style");
+				else dom.style.cssText = next_style_attr;
+			}
+			/** @type {any} */ dom[STYLE_CACHE] = value;
+		} else if (next_styles) {
+			if (Array.isArray(next_styles)) {
+				update_styles(dom, prev_styles?.[0], next_styles[0]);
+				update_styles(dom, prev_styles?.[1], next_styles[1], "important");
+			} else update_styles(dom, prev_styles, next_styles);
+		}
+		return next_styles;
 	}
 	//#endregion
 	//#region node_modules/svelte/src/internal/client/dom/elements/bindings/select.js
@@ -4827,304 +4958,512 @@ createHTML: (html) => {
 	};
 	var root = /* @__PURE__ */ from_svg(`<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16" class="icon svelte-1jio28y"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"></path></svg>`);
 	var root_1 = /* @__PURE__ */ from_svg(`<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16" class="icon svelte-1jio28y"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"></path><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"></path></svg>`);
-	var root_2 = /* @__PURE__ */ from_html(`<div class="p-3 text-muted small">Keine Modelle gefunden.</div>`);
-	var root_3 = /* @__PURE__ */ from_html(`<div class="px-3 py-1 text-muted small">Lade...</div>`);
-	var root_4 = /* @__PURE__ */ from_html(`<div class="px-3 py-1 text-danger small">Fehler beim Laden</div>`);
-	var root_5 = /* @__PURE__ */ from_html(`<button type="button"> </button>`);
-	var root_6 = /* @__PURE__ */ from_html(`<div class="px-3 py-1 text-muted small">Keine Entitäten</div>`);
-	var root_7 = /* @__PURE__ */ from_html(`<div class="accordion-item border-0 border-bottom"><h2 class="accordion-header"><button type="button"> </button></h2> <div><div class="accordion-body p-0"><!></div></div></div>`);
-	var root_8 = /* @__PURE__ */ from_html(`<p class="text-muted">Bitte Modelle laden und eine Entität auswählen.</p>`);
-	var root_9 = /* @__PURE__ */ from_html(`<div class="text-muted p-2">Lade Einträge...</div>`);
-	var root_10 = /* @__PURE__ */ from_html(`<div class="alert alert-danger m-2"> </div>`);
-	var root_11 = /* @__PURE__ */ from_html(`<input type="search" class="form-control form-control-sm search svelte-1jio28y" placeholder="Alle Spalten durchsuchen..."/>`);
-	var root_12 = /* @__PURE__ */ from_html(`<p class="text-muted">Keine Einträge vorhanden.</p>`);
-	var root_13 = /* @__PURE__ */ from_html(`<th class="text-nowrap"> </th>`);
-	var root_14 = /* @__PURE__ */ from_html(`<span class="text-muted">—</span>`);
-	var root_15 = /* @__PURE__ */ from_html(`<td><!></td>`);
-	var root_16 = /* @__PURE__ */ from_html(`<tr><td><div class="form-check"><input type="checkbox" class="form-check-input"/></div></td><!></tr>`);
-	var root_17 = /* @__PURE__ */ from_html(`<div class="table-responsive"><table class="table table-sm table-bordered table-hover align-middle"><thead class="table-dark"><tr><th class="check svelte-1jio28y"><div class="form-check"><input type="checkbox" class="form-check-input" title="Alle auswählen"/></div></th><!></tr></thead><tbody></tbody></table></div>`);
-	var root_18 = /* @__PURE__ */ from_html(`<div class="d-flex align-items-center justify-content-between mb-1 gap-2"><h5 class="mb-0"> <small class="text-muted fw-normal fs-6"> </small></h5> <!></div> <div class="d-flex align-items-center gap-2 mt-2 mb-3 pb-2 border-bottom"><button type="button" class="btn btn-sm btn-outline-success">+ Hinzufügen</button> <button type="button" class="btn btn-sm btn-outline-primary"><!> Bearbeiten</button> <button type="button" class="btn btn-sm btn-outline-danger"><!> Löschen</button></div> <!>`, 1);
-	var root_19 = /* @__PURE__ */ from_html(`<div class="alert alert-danger mb-3"> </div>`);
-	var root_20 = /* @__PURE__ */ from_html(`<span class="text-muted fw-normal"> </span>`);
-	var root_21 = /* @__PURE__ */ from_html(`<select class="form-select form-select-sm"><option>–</option><option>Ja</option><option>Nein</option></select>`);
-	var root_22 = /* @__PURE__ */ from_html(`<input type="date" class="form-control form-control-sm svelte-1jio28y"/>`);
-	var root_23 = /* @__PURE__ */ from_html(`<input type="text" class="form-control form-control-sm svelte-1jio28y"/>`);
-	var root_24 = /* @__PURE__ */ from_html(`<div class="mb-3"><label class="form-label small fw-semibold svelte-1jio28y"> <!> <!></label></div>`);
-	var root_25 = /* @__PURE__ */ from_html(`<p class="text-muted small">Keine Felder ermittelbar – es sind noch keine Einträge vorhanden.</p>`);
-	var root_26 = /* @__PURE__ */ from_html(`<form></form>`);
-	var root_27 = /* @__PURE__ */ from_html(`<p class="mb-0">Sollen <strong> </strong> </p>`);
-	var root_28 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-primary btn-sm">Speichern</button>`);
-	var root_29 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-danger btn-sm">Löschen</button>`);
-	var root_30 = /* @__PURE__ */ from_html(`<div class="modal fade show d-block" tabindex="-1"><div><div class="modal-content"><div class="modal-header"><h5 class="modal-title"> </h5> <button type="button" class="btn-close" aria-label="Schließen"></button></div> <div class="modal-body"><!> <!></div> <div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm">Abbrechen</button> <!></div></div></div></div> <div class="modal-backdrop fade show"></div>`, 1);
-	var root_31 = /* @__PURE__ */ from_html(`<div class="d-flex flex-column h-100"><div class="d-flex flex-grow-1 overflow-hidden"><div class="sidebar border-end d-flex flex-column overflow-hidden svelte-1jio28y"><div class="p-2 bg-secondary text-white fw-semibold small flex-shrink-0">Modelle</div> <div class="overflow-y-auto flex-grow-1"><div class="accordion accordion-flush"><!> <!></div></div></div> <div class="flex-grow-1 overflow-auto p-3"><!></div></div></div> <!>`, 1);
+	var root_2 = /* @__PURE__ */ from_html(`<li> </li>`);
+	var root_3 = /* @__PURE__ */ from_html(`<ul><!> <!></ul>`);
+	var root_4 = /* @__PURE__ */ from_html(`<div class="mt-2">Fehlgeschlagen:</div> <!>`, 1);
+	var root_5 = /* @__PURE__ */ from_html(`<div><strong> </strong> <!></div>`);
+	var root_6 = /* @__PURE__ */ from_html(`<div class="mb-1 small"> </div> <div class="progress"><div class="progress-bar"></div></div>`, 1);
+	var root_7 = /* @__PURE__ */ from_html(`<div class="alert alert-danger">Die Datei kann so nicht importiert werden: <!></div>`);
+	var root_8 = /* @__PURE__ */ from_html(`<p class="small mb-2"><strong> </strong> </p>`);
+	var root_9 = /* @__PURE__ */ from_html(`<p class="small text-warning-emphasis mb-2"> </p>`);
+	var root_10 = /* @__PURE__ */ from_html(`<th class="text-nowrap"> </th>`);
+	var root_11 = /* @__PURE__ */ from_html(`<td> </td>`);
+	var root_12 = /* @__PURE__ */ from_html(`<tr><td class="text-nowrap"> </td><!></tr>`);
+	var root_13 = /* @__PURE__ */ from_html(`<p class="small text-muted mt-1 mb-0"></p>`);
+	var root_14 = /* @__PURE__ */ from_html(`<div class="table-responsive"><table class="table table-sm table-bordered small mb-0"><thead class="table-light"><tr><th></th><!></tr></thead><tbody></tbody></table></div> <!>`, 1);
+	var root_15 = /* @__PURE__ */ from_html(`<!> <!> <!>`, 1);
+	var root_16 = /* @__PURE__ */ from_html(`<p class="small text-muted mb-2">Erste Zeile = Spaltenüberschriften (Namen der Eigenschaften), Trennzeichen <code>;</code> oder <code>,</code>.
+      Vorhandene Einträge (gleicher Schlüssel) werden aktualisiert, alle anderen neu angelegt. Leere Zellen leeren das Feld,
+      fehlende Spalten bleiben unverändert. <button type="button" class="btn btn-link btn-sm p-0 align-baseline">Aktuelle Einträge als CSV-Vorlage herunterladen</button></p> <input type="file" class="form-control form-control-sm mb-3" accept=".csv,text/csv"/> <!>`, 1);
+	var root_17 = /* @__PURE__ */ from_html(`<div class="p-3 text-muted small">Keine Modelle gefunden.</div>`);
+	var root_18 = /* @__PURE__ */ from_html(`<div class="px-3 py-1 text-muted small">Lade...</div>`);
+	var root_19 = /* @__PURE__ */ from_html(`<div class="px-3 py-1 text-danger small">Fehler beim Laden</div>`);
+	var root_20 = /* @__PURE__ */ from_html(`<button type="button"> </button>`);
+	var root_21 = /* @__PURE__ */ from_html(`<div class="px-3 py-1 text-muted small">Keine Entitäten</div>`);
+	var root_22 = /* @__PURE__ */ from_html(`<div class="accordion-item border-0 border-bottom"><h2 class="accordion-header"><button type="button"> </button></h2> <div><div class="accordion-body p-0"><!></div></div></div>`);
+	var root_23 = /* @__PURE__ */ from_html(`<p class="text-muted">Bitte Modelle laden und eine Entität auswählen.</p>`);
+	var root_24 = /* @__PURE__ */ from_html(`<div class="text-muted p-2">Lade Einträge...</div>`);
+	var root_25 = /* @__PURE__ */ from_html(`<div class="alert alert-danger m-2"> </div>`);
+	var root_26 = /* @__PURE__ */ from_html(`<input type="search" class="form-control form-control-sm search svelte-1jio28y" placeholder="Alle Spalten durchsuchen..."/>`);
+	var root_27 = /* @__PURE__ */ from_html(`<p class="text-muted">Keine Einträge vorhanden.</p>`);
+	var root_28 = /* @__PURE__ */ from_html(`<span class="text-muted">—</span>`);
+	var root_29 = /* @__PURE__ */ from_html(`<td><!></td>`);
+	var root_30 = /* @__PURE__ */ from_html(`<tr><td><div class="form-check"><input type="checkbox" class="form-check-input"/></div></td><!></tr>`);
+	var root_31 = /* @__PURE__ */ from_html(`<div class="table-responsive"><table class="table table-sm table-bordered table-hover align-middle"><thead class="table-dark"><tr><th class="check svelte-1jio28y"><div class="form-check"><input type="checkbox" class="form-check-input" title="Alle auswählen"/></div></th><!></tr></thead><tbody></tbody></table></div>`);
+	var root_32 = /* @__PURE__ */ from_html(`<div class="d-flex align-items-center justify-content-between mb-1 gap-2"><h5 class="mb-0"> <small class="text-muted fw-normal fs-6"> </small></h5> <!></div> <div class="d-flex align-items-center gap-2 mt-2 mb-3 pb-2 border-bottom"><button type="button" class="btn btn-sm btn-outline-success">+ Hinzufügen</button> <button type="button" class="btn btn-sm btn-outline-primary"><!> Bearbeiten</button> <button type="button" class="btn btn-sm btn-outline-danger"><!> Löschen</button> <button type="button" class="btn btn-sm btn-outline-secondary ms-auto">CSV importieren</button></div> <!>`, 1);
+	var root_33 = /* @__PURE__ */ from_html(`<div class="alert alert-danger mb-3"> </div>`);
+	var root_34 = /* @__PURE__ */ from_html(`<span class="text-muted fw-normal"> </span>`);
+	var root_35 = /* @__PURE__ */ from_html(`<select class="form-select form-select-sm"><option>–</option><option>Ja</option><option>Nein</option></select>`);
+	var root_36 = /* @__PURE__ */ from_html(`<input type="date" class="form-control form-control-sm svelte-1jio28y"/>`);
+	var root_37 = /* @__PURE__ */ from_html(`<input type="text" class="form-control form-control-sm svelte-1jio28y"/>`);
+	var root_38 = /* @__PURE__ */ from_html(`<div class="mb-3"><label class="form-label small fw-semibold svelte-1jio28y"> <!> <!></label></div>`);
+	var root_39 = /* @__PURE__ */ from_html(`<p class="text-muted small">Keine Felder ermittelbar – es sind noch keine Einträge vorhanden.</p>`);
+	var root_40 = /* @__PURE__ */ from_html(`<form></form>`);
+	var root_41 = /* @__PURE__ */ from_html(`<p class="mb-0">Sollen <strong> </strong> </p>`);
+	var root_42 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-primary btn-sm"> </button>`);
+	var root_43 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-primary btn-sm">Speichern</button>`);
+	var root_44 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-danger btn-sm">Löschen</button>`);
+	var root_45 = /* @__PURE__ */ from_html(`<div class="modal fade show d-block" tabindex="-1"><div><div class="modal-content"><div class="modal-header"><h5 class="modal-title"> </h5> <button type="button" class="btn-close" aria-label="Schließen"></button></div> <div class="modal-body"><!> <!></div> <div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm"> </button> <!></div></div></div></div> <div class="modal-backdrop fade show"></div>`, 1);
+	var root_46 = /* @__PURE__ */ from_html(`<div class="d-flex flex-column h-100"><div class="d-flex flex-grow-1 overflow-hidden"><div class="sidebar border-end d-flex flex-column overflow-hidden svelte-1jio28y"><div class="p-2 bg-secondary text-white fw-semibold small flex-shrink-0">Modelle</div> <div class="overflow-y-auto flex-grow-1"><div class="accordion accordion-flush"><!> <!></div></div></div> <div class="flex-grow-1 overflow-auto p-3"><!></div></div></div> <!>`, 1);
 	var $$css = {
 		hash: "svelte-1jio28y",
 		code: ".sidebar.svelte-1jio28y {width:20%;min-width:180px;}.model.svelte-1jio28y {font-size:0.82rem;font-weight:600;}.entity.svelte-1jio28y {font-size:0.8rem;}.search.svelte-1jio28y {min-width:220px;max-width:320px;}.check.svelte-1jio28y {width:32px;}.icon.svelte-1jio28y {margin-bottom:2px;}label.form-label.svelte-1jio28y {display:block;}label.form-label.svelte-1jio28y input:where(.svelte-1jio28y) {margin-top:0.5rem;font-weight:normal;}"
 	};
 	function App($$anchor, $$props) {
 		push($$props, true);
-		append_styles($$anchor, $$css);
+		append_styles$1($$anchor, $$css);
+		const messages = ($$anchor, items = noop, css = noop) => {
+			var ul = root_3();
+			var node = child(ul);
+			each(node, 17, () => items().slice(0, MAX_MESSAGES), index, ($$anchor, item) => {
+				var li = root_2();
+				var text = only_child(li, true);
+				template_effect(() => set_text(text, get(item)));
+				append($$anchor, li);
+			});
+			var node_1 = sibling(node, 2);
+			var consequent = ($$anchor) => {
+				var li_1 = root_2();
+				var text_1 = only_child(li_1);
+				template_effect(() => set_text(text_1, `… und ${items().length - MAX_MESSAGES} weitere`));
+				append($$anchor, li_1);
+			};
+			if_block(node_1, ($$render) => {
+				if (items().length > MAX_MESSAGES) $$render(consequent);
+			});
+			reset(ul);
+			template_effect(() => set_class(ul, 1, `mb-0 ps-3 small ${css() ?? ""}`, "svelte-1jio28y"));
+			append($$anchor, ul);
+		};
+		const importBody = ($$anchor, dialog = noop) => {
+			const newCount = /* @__PURE__ */ user_derived(() => dialog().rows.filter((r) => r.existingId === void 0).length);
+			var fragment = comment();
+			var node_2 = first_child(fragment);
+			var consequent_2 = ($$anchor) => {
+				var div = root_5();
+				let classes;
+				var strong = child(div);
+				var text_2 = only_child(strong, true);
+				var text_3 = sibling(strong);
+				var node_3 = sibling(text_3);
+				var consequent_1 = ($$anchor) => {
+					var fragment_1 = root_4();
+					var node_4 = sibling(first_child(fragment_1), 2);
+					messages(node_4, () => dialog().result.errors, () => "");
+					append($$anchor, fragment_1);
+				};
+				if_block(node_3, ($$render) => {
+					if (dialog().result.errors.length > 0) $$render(consequent_1);
+				});
+				reset(div);
+				template_effect(() => {
+					classes = set_class(div, 1, "alert mb-0", null, classes, {
+						"alert-success": dialog().result.errors.length === 0,
+						"alert-warning": dialog().result.errors.length > 0
+					});
+					set_text(text_2, dialog().result.ok);
+					set_text(text_3, ` von ${dialog().rows.length ?? ""} Zeilen importiert. `);
+				});
+				append($$anchor, div);
+			};
+			var consequent_3 = ($$anchor) => {
+				var fragment_2 = root_6();
+				var div_1 = first_child(fragment_2);
+				var text_4 = only_child(div_1);
+				var div_2 = sibling(div_1, 2);
+				var div_3 = child(div_2);
+				let styles;
+				reset(div_2);
+				template_effect(() => {
+					set_text(text_4, `Importiere… ${dialog().done ?? ""} / ${dialog().rows.length ?? ""}`);
+					styles = set_style(div_3, "", styles, { width: `${dialog().done / dialog().rows.length * 100}%` });
+				});
+				append($$anchor, fragment_2);
+			};
+			var alternate_1 = ($$anchor) => {
+				var fragment_3 = root_16();
+				var p = first_child(fragment_3);
+				var button = sibling(child(p), 5);
+				reset(p);
+				var input = sibling(p, 2);
+				var node_5 = sibling(input, 2);
+				var consequent_8 = ($$anchor) => {
+					var fragment_4 = root_15();
+					var node_6 = first_child(fragment_4);
+					var consequent_4 = ($$anchor) => {
+						var div_4 = root_7();
+						var node_7 = sibling(child(div_4));
+						messages(node_7, () => dialog().problems, () => "mt-1");
+						reset(div_4);
+						append($$anchor, div_4);
+					};
+					var alternate = ($$anchor) => {
+						var p_1 = root_8();
+						var strong_1 = child(p_1);
+						var text_5 = only_child(strong_1, true);
+						var text_6 = sibling(strong_1);
+						reset(p_1);
+						template_effect(() => {
+							set_text(text_5, dialog().rows.length);
+							set_text(text_6, ` Zeilen: ${get(newCount) ?? ""} neu, ${dialog().rows.length - get(newCount)} aktualisieren.`);
+						});
+						append($$anchor, p_1);
+					};
+					if_block(node_6, ($$render) => {
+						if (dialog().problems.length > 0) $$render(consequent_4);
+						else $$render(alternate, -1);
+					});
+					var node_8 = sibling(node_6, 2);
+					var consequent_5 = ($$anchor) => {
+						var p_2 = root_9();
+						var text_7 = only_child(p_2);
+						template_effect(($0) => set_text(text_7, `Ignorierte Spalten (keine passende Eigenschaft): ${$0 ?? ""}`), [() => dialog().ignoredColumns.join(", ")]);
+						append($$anchor, p_2);
+					};
+					if_block(node_8, ($$render) => {
+						if (dialog().ignoredColumns.length > 0) $$render(consequent_5);
+					});
+					var node_9 = sibling(node_8, 2);
+					var consequent_7 = ($$anchor) => {
+						var fragment_5 = root_14();
+						var div_5 = first_child(fragment_5);
+						var table = child(div_5);
+						var thead = child(table);
+						var tr = child(thead);
+						each(sibling(child(tr)), 16, () => dialog().columns, (column) => column, ($$anchor, column) => {
+							var th = root_10();
+							var text_8 = only_child(th, true);
+							template_effect(() => set_text(text_8, column));
+							append($$anchor, th);
+						});
+						reset(tr);
+						reset(thead);
+						var tbody = sibling(thead);
+						each(tbody, 21, () => dialog().rows.slice(0, PREVIEW_ROWS), (row) => row.line, ($$anchor, row) => {
+							var tr_1 = root_12();
+							var td = child(tr_1);
+							var text_9 = only_child(td, true);
+							each(sibling(td), 16, () => dialog().columns, (column) => column, ($$anchor, column) => {
+								var td_1 = root_11();
+								var text_10 = only_child(td_1, true);
+								template_effect(() => set_text(text_10, get(row).raw[column]));
+								append($$anchor, td_1);
+							});
+							reset(tr_1);
+							template_effect(() => set_text(text_9, get(row).existingId === void 0 ? "neu" : "ändern"));
+							append($$anchor, tr_1);
+						});
+						reset(tbody);
+						reset(table);
+						reset(div_5);
+						var node_12 = sibling(div_5, 2);
+						var consequent_6 = ($$anchor) => {
+							var p_3 = root_13();
+							p_3.textContent = "Vorschau der ersten 5 Zeilen.";
+							append($$anchor, p_3);
+						};
+						if_block(node_12, ($$render) => {
+							if (dialog().rows.length > PREVIEW_ROWS) $$render(consequent_6);
+						});
+						append($$anchor, fragment_5);
+					};
+					if_block(node_9, ($$render) => {
+						if (dialog().rows.length > 0 && dialog().columns.length > 0) $$render(consequent_7);
+					});
+					append($$anchor, fragment_4);
+				};
+				if_block(node_5, ($$render) => {
+					if (dialog().fileName && !dialog().error) $$render(consequent_8);
+				});
+				delegated("click", button, downloadCsv);
+				delegated("change", input, onImportFile);
+				append($$anchor, fragment_3);
+			};
+			if_block(node_2, ($$render) => {
+				if (dialog().result) $$render(consequent_2);
+				else if (dialog().busy) $$render(consequent_3, 1);
+				else $$render(alternate_1, -1);
+			});
+			append($$anchor, fragment);
+		};
+		const PREVIEW_ROWS = 5;
+		const MAX_MESSAGES = 20;
 		let editor = prop($$props, "editor", 7);
 		const visibleSelectedCount = /* @__PURE__ */ user_derived(() => editor().visibleIndices.filter((i) => editor().selected[i]).length);
 		const allVisibleSelected = /* @__PURE__ */ user_derived(() => editor().visibleIndices.length > 0 && get(visibleSelectedCount) === editor().visibleIndices.length);
 		function onKeydown(event) {
 			if (event.key === "Escape") editor().closeDialog();
 		}
+		function downloadCsv() {
+			const { fileName, content } = editor().exportCsv();
+			const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
+			const link = document.createElement("a");
+			link.href = url;
+			link.download = fileName;
+			link.click();
+			URL.revokeObjectURL(url);
+		}
+		function onImportFile(event) {
+			const file = event.currentTarget.files?.[0];
+			if (file) editor().loadImportFile(file);
+		}
 		function onBackdropClick(event) {
 			if (event.target === event.currentTarget) editor().closeDialog();
 		}
-		var fragment = root_31();
+		var fragment_6 = root_46();
 		event("keydown", $window, onKeydown);
-		var div = first_child(fragment);
-		var div_1 = child(div);
-		var div_2 = child(div_1);
-		var div_3 = sibling(child(div_2), 2);
-		var div_4 = child(div_3);
-		var node = child(div_4);
-		var consequent = ($$anchor) => {
-			append($$anchor, root_2());
+		var div_6 = first_child(fragment_6);
+		var div_7 = child(div_6);
+		var div_8 = child(div_7);
+		var div_9 = sibling(child(div_8), 2);
+		var div_10 = child(div_9);
+		var node_13 = child(div_10);
+		var consequent_9 = ($$anchor) => {
+			append($$anchor, root_17());
 		};
-		if_block(node, ($$render) => {
-			if (editor().modelsLoaded && editor().models.length === 0) $$render(consequent);
+		if_block(node_13, ($$render) => {
+			if (editor().modelsLoaded && editor().models.length === 0) $$render(consequent_9);
 		});
-		each(sibling(node, 2), 17, () => editor().models, (model) => model.id, ($$anchor, model) => {
+		each(sibling(node_13, 2), 17, () => editor().models, (model) => model.id, ($$anchor, model) => {
 			const modelEntities = /* @__PURE__ */ user_derived(() => editor().entities[get(model).id]);
-			var div_6 = root_7();
-			var h2 = child(div_6);
-			var button = child(h2);
-			let classes;
-			var text = only_child(button, true);
-			reset(h2);
-			var div_7 = sibling(h2, 2);
+			var div_12 = root_22();
+			var h2 = child(div_12);
+			var button_1 = child(h2);
 			let classes_1;
-			var div_8 = child(div_7);
-			var node_2 = child(div_8);
-			var consequent_1 = ($$anchor) => {
-				append($$anchor, root_3());
+			var text_11 = only_child(button_1, true);
+			reset(h2);
+			var div_13 = sibling(h2, 2);
+			let classes_2;
+			var div_14 = child(div_13);
+			var node_15 = child(div_14);
+			var consequent_10 = ($$anchor) => {
+				append($$anchor, root_18());
 			};
-			var consequent_2 = ($$anchor) => {
-				append($$anchor, root_4());
+			var consequent_11 = ($$anchor) => {
+				append($$anchor, root_19());
 			};
-			var alternate = ($$anchor) => {
-				var fragment_1 = comment();
-				each(first_child(fragment_1), 17, () => get(modelEntities).entities, (entity) => entity.name, ($$anchor, entity) => {
+			var alternate_2 = ($$anchor) => {
+				var fragment_7 = comment();
+				each(first_child(fragment_7), 17, () => get(modelEntities).entities, (entity) => entity.name, ($$anchor, entity) => {
 					const active = /* @__PURE__ */ user_derived(() => editor().current?.model.id === get(model).id && editor().current?.entity.name === get(entity).name);
-					var button_1 = root_5();
-					let classes_2;
-					var text_1 = only_child(button_1, true);
+					var button_2 = root_20();
+					let classes_3;
+					var text_12 = only_child(button_2, true);
 					template_effect(() => {
-						classes_2 = set_class(button_1, 1, "btn btn-link btn-sm text-start w-100 px-4 py-1 text-decoration-none border-0 rounded-0 entity svelte-1jio28y", null, classes_2, {
+						classes_3 = set_class(button_2, 1, "btn btn-link btn-sm text-start w-100 px-4 py-1 text-decoration-none border-0 rounded-0 entity svelte-1jio28y", null, classes_3, {
 							"bg-primary": get(active),
 							"text-white": get(active),
 							"text-dark": !get(active)
 						});
-						set_text(text_1, get(entity).name);
+						set_text(text_12, get(entity).name);
 					});
-					delegated("click", button_1, () => editor().selectEntity(get(model), get(entity)));
-					append($$anchor, button_1);
+					delegated("click", button_2, () => editor().selectEntity(get(model), get(entity)));
+					append($$anchor, button_2);
 				}, ($$anchor) => {
-					append($$anchor, root_6());
+					append($$anchor, root_21());
 				});
-				append($$anchor, fragment_1);
+				append($$anchor, fragment_7);
 			};
-			if_block(node_2, ($$render) => {
-				if (!get(modelEntities) || get(modelEntities).status === "loading") $$render(consequent_1);
-				else if (get(modelEntities).status === "error") $$render(consequent_2, 1);
-				else $$render(alternate, -1);
-			});
-			reset(div_8);
-			reset(div_7);
-			reset(div_6);
-			template_effect(() => {
-				classes = set_class(button, 1, "accordion-button py-2 px-3 model svelte-1jio28y", null, classes, { collapsed: !editor().open[get(model).id] });
-				set_attribute(button, "aria-expanded", !!editor().open[get(model).id]);
-				set_text(text, get(model).name);
-				classes_1 = set_class(div_7, 1, "accordion-collapse collapse", null, classes_1, { show: editor().open[get(model).id] });
-			});
-			delegated("click", button, () => editor().toggleModel(get(model)));
-			append($$anchor, div_6);
-		});
-		reset(div_4);
-		reset(div_3);
-		reset(div_2);
-		var div_12 = sibling(div_2, 2);
-		var node_4 = child(div_12);
-		var consequent_3 = ($$anchor) => {
-			append($$anchor, root_8());
-		};
-		var consequent_4 = ($$anchor) => {
-			append($$anchor, root_9());
-		};
-		var consequent_5 = ($$anchor) => {
-			var div_14 = root_10();
-			var text_2 = only_child(div_14);
-			template_effect(() => set_text(text_2, `Fehler beim Laden: ${editor().entriesError ?? ""}`));
-			append($$anchor, div_14);
-		};
-		var alternate_3 = ($$anchor) => {
-			var fragment_2 = root_18();
-			var div_15 = first_child(fragment_2);
-			var h5 = child(div_15);
-			var text_3 = child(h5);
-			var text_4 = only_child(sibling(text_3));
-			reset(h5);
-			var node_5 = sibling(h5, 2);
-			var consequent_6 = ($$anchor) => {
-				var input = root_11();
-				remove_input_defaults(input);
-				bind_value(input, () => editor().search, ($$value) => editor().search = $$value);
-				append($$anchor, input);
-			};
-			if_block(node_5, ($$render) => {
-				if (editor().entries.length > 0) $$render(consequent_6);
-			});
-			reset(div_15);
-			var div_16 = sibling(div_15, 2);
-			var button_2 = child(div_16);
-			var button_3 = sibling(button_2, 2);
-			pencil(child(button_3));
-			next();
-			reset(button_3);
-			var button_4 = sibling(button_3, 2);
-			trash(child(button_4));
-			next();
-			reset(button_4);
-			reset(div_16);
-			var node_8 = sibling(div_16, 2);
-			var consequent_7 = ($$anchor) => {
-				append($$anchor, root_12());
-			};
-			var alternate_2 = ($$anchor) => {
-				var div_17 = root_17();
-				var table = child(div_17);
-				var thead = child(table);
-				var tr = child(thead);
-				var th = child(tr);
-				var div_18 = child(th);
-				var input_1 = child(div_18);
-				remove_input_defaults(input_1);
-				reset(div_18);
-				reset(th);
-				each(sibling(th), 16, () => editor().allColumns, (column) => column, ($$anchor, column) => {
-					var th_1 = root_13();
-					var text_5 = only_child(th_1, true);
-					template_effect(() => set_text(text_5, column));
-					append($$anchor, th_1);
-				});
-				reset(tr);
-				reset(thead);
-				var tbody = sibling(thead);
-				each(tbody, 20, () => editor().visibleIndices, (i) => i, ($$anchor, i) => {
-					const entry = /* @__PURE__ */ user_derived(() => editor().entries[i]);
-					var tr_1 = root_16();
-					let classes_3;
-					var td = child(tr_1);
-					var div_19 = child(td);
-					var input_2 = child(div_19);
-					remove_input_defaults(input_2);
-					reset(div_19);
-					reset(td);
-					each(sibling(td), 16, () => editor().allColumns, (column) => column, ($$anchor, column) => {
-						var td_1 = root_15();
-						var node_11 = child(td_1);
-						var consequent_8 = ($$anchor) => {
-							append($$anchor, root_14());
-						};
-						var alternate_1 = ($$anchor) => {
-							var text_6 = text();
-							template_effect(($0) => set_text(text_6, $0), [() => String(get(entry)[column])]);
-							append($$anchor, text_6);
-						};
-						if_block(node_11, ($$render) => {
-							if (get(entry)[column] === null || get(entry)[column] === void 0) $$render(consequent_8);
-							else $$render(alternate_1, -1);
-						});
-						reset(td_1);
-						append($$anchor, td_1);
-					});
-					reset(tr_1);
-					template_effect(() => classes_3 = set_class(tr_1, 1, "", null, classes_3, { "table-active": editor().selected[i] }));
-					bind_checked(input_2, () => editor().selected[i], ($$value) => editor().selected[i] = $$value);
-					append($$anchor, tr_1);
-				});
-				reset(tbody);
-				reset(table);
-				reset(div_17);
-				template_effect(() => {
-					set_checked(input_1, get(allVisibleSelected));
-					input_1.indeterminate = get(visibleSelectedCount) > 0 && !get(allVisibleSelected);
-				});
-				delegated("change", input_1, (event) => editor().setAllVisibleSelected(event.currentTarget.checked));
-				append($$anchor, div_17);
-			};
-			if_block(node_8, ($$render) => {
-				if (editor().entries.length === 0) $$render(consequent_7);
+			if_block(node_15, ($$render) => {
+				if (!get(modelEntities) || get(modelEntities).status === "loading") $$render(consequent_10);
+				else if (get(modelEntities).status === "error") $$render(consequent_11, 1);
 				else $$render(alternate_2, -1);
 			});
+			reset(div_14);
+			reset(div_13);
+			reset(div_12);
 			template_effect(() => {
-				set_text(text_3, `${editor().current.entity.name ?? ""} `);
-				set_text(text_4, `${editor().entries.length ?? ""} Einträge`);
-				button_3.disabled = editor().selectedIndices.length !== 1;
-				button_4.disabled = editor().selectedIndices.length === 0;
+				classes_1 = set_class(button_1, 1, "accordion-button py-2 px-3 model svelte-1jio28y", null, classes_1, { collapsed: !editor().open[get(model).id] });
+				set_attribute(button_1, "aria-expanded", !!editor().open[get(model).id]);
+				set_text(text_11, get(model).name);
+				classes_2 = set_class(div_13, 1, "accordion-collapse collapse", null, classes_2, { show: editor().open[get(model).id] });
 			});
-			delegated("click", button_2, () => editor().openAdd());
-			delegated("click", button_3, () => editor().openEdit());
-			delegated("click", button_4, () => editor().openDelete());
-			append($$anchor, fragment_2);
-		};
-		if_block(node_4, ($$render) => {
-			if (!editor().current) $$render(consequent_3);
-			else if (editor().entriesStatus === "loading") $$render(consequent_4, 1);
-			else if (editor().entriesStatus === "error") $$render(consequent_5, 2);
-			else $$render(alternate_3, -1);
+			delegated("click", button_1, () => editor().toggleModel(get(model)));
+			append($$anchor, div_12);
 		});
-		reset(div_12);
-		reset(div_1);
-		reset(div);
-		var node_12 = sibling(div, 2);
-		var consequent_15 = ($$anchor) => {
-			const dialog = /* @__PURE__ */ user_derived(() => editor().dialog);
-			var fragment_4 = root_30();
-			var div_20 = first_child(fragment_4);
-			var div_21 = child(div_20);
-			let classes_4;
-			var div_22 = child(div_21);
-			var div_23 = child(div_22);
-			var h5_1 = child(div_23);
-			var text_7 = only_child(h5_1, true);
-			var button_5 = sibling(h5_1, 2);
-			reset(div_23);
-			var div_24 = sibling(div_23, 2);
-			var node_13 = child(div_24);
-			var consequent_9 = ($$anchor) => {
-				var div_25 = root_19();
-				var text_8 = only_child(div_25, true);
-				template_effect(() => set_text(text_8, get(dialog).error));
-				append($$anchor, div_25);
+		reset(div_10);
+		reset(div_9);
+		reset(div_8);
+		var div_18 = sibling(div_8, 2);
+		var node_17 = child(div_18);
+		var consequent_12 = ($$anchor) => {
+			append($$anchor, root_23());
+		};
+		var consequent_13 = ($$anchor) => {
+			append($$anchor, root_24());
+		};
+		var consequent_14 = ($$anchor) => {
+			var div_20 = root_25();
+			var text_13 = only_child(div_20);
+			template_effect(() => set_text(text_13, `Fehler beim Laden: ${editor().entriesError ?? ""}`));
+			append($$anchor, div_20);
+		};
+		var alternate_5 = ($$anchor) => {
+			var fragment_8 = root_32();
+			var div_21 = first_child(fragment_8);
+			var h5 = child(div_21);
+			var text_14 = child(h5);
+			var text_15 = only_child(sibling(text_14));
+			reset(h5);
+			var node_18 = sibling(h5, 2);
+			var consequent_15 = ($$anchor) => {
+				var input_1 = root_26();
+				remove_input_defaults(input_1);
+				bind_value(input_1, () => editor().search, ($$value) => editor().search = $$value);
+				append($$anchor, input_1);
 			};
-			if_block(node_13, ($$render) => {
-				if (get(dialog).error) $$render(consequent_9);
+			if_block(node_18, ($$render) => {
+				if (editor().entries.length > 0) $$render(consequent_15);
 			});
-			var node_14 = sibling(node_13, 2);
-			var consequent_13 = ($$anchor) => {
-				var form = root_26();
-				each(form, 21, () => get(dialog).fields, (field) => field.name, ($$anchor, field, $$index_5) => {
-					var div_26 = root_24();
-					var label = child(div_26);
-					var text_9 = child(label);
-					var node_15 = sibling(text_9);
-					var consequent_10 = ($$anchor) => {
-						var span_1 = root_20();
-						var text_10 = only_child(span_1);
-						template_effect(() => set_text(text_10, `(${(get(field).type === "list<string>" ? "Liste, mit ; trennen" : get(field).type) ?? ""})`));
+			reset(div_21);
+			var div_22 = sibling(div_21, 2);
+			var button_3 = child(div_22);
+			var button_4 = sibling(button_3, 2);
+			pencil(child(button_4));
+			next();
+			reset(button_4);
+			var button_5 = sibling(button_4, 2);
+			trash(child(button_5));
+			next();
+			reset(button_5);
+			var button_6 = sibling(button_5, 2);
+			reset(div_22);
+			var node_21 = sibling(div_22, 2);
+			var consequent_16 = ($$anchor) => {
+				append($$anchor, root_27());
+			};
+			var alternate_4 = ($$anchor) => {
+				var div_23 = root_31();
+				var table_1 = child(div_23);
+				var thead_1 = child(table_1);
+				var tr_2 = child(thead_1);
+				var th_1 = child(tr_2);
+				var div_24 = child(th_1);
+				var input_2 = child(div_24);
+				remove_input_defaults(input_2);
+				reset(div_24);
+				reset(th_1);
+				each(sibling(th_1), 16, () => editor().allColumns, (column) => column, ($$anchor, column) => {
+					var th_2 = root_10();
+					var text_16 = only_child(th_2, true);
+					template_effect(() => set_text(text_16, column));
+					append($$anchor, th_2);
+				});
+				reset(tr_2);
+				reset(thead_1);
+				var tbody_1 = sibling(thead_1);
+				each(tbody_1, 20, () => editor().visibleIndices, (i) => i, ($$anchor, i) => {
+					const entry = /* @__PURE__ */ user_derived(() => editor().entries[i]);
+					var tr_3 = root_30();
+					let classes_4;
+					var td_2 = child(tr_3);
+					var div_25 = child(td_2);
+					var input_3 = child(div_25);
+					remove_input_defaults(input_3);
+					reset(div_25);
+					reset(td_2);
+					each(sibling(td_2), 16, () => editor().allColumns, (column) => column, ($$anchor, column) => {
+						var td_3 = root_29();
+						var node_24 = child(td_3);
+						var consequent_17 = ($$anchor) => {
+							append($$anchor, root_28());
+						};
+						var alternate_3 = ($$anchor) => {
+							var text_17 = text();
+							template_effect(($0) => set_text(text_17, $0), [() => String(get(entry)[column])]);
+							append($$anchor, text_17);
+						};
+						if_block(node_24, ($$render) => {
+							if (get(entry)[column] === null || get(entry)[column] === void 0) $$render(consequent_17);
+							else $$render(alternate_3, -1);
+						});
+						reset(td_3);
+						append($$anchor, td_3);
+					});
+					reset(tr_3);
+					template_effect(() => classes_4 = set_class(tr_3, 1, "", null, classes_4, { "table-active": editor().selected[i] }));
+					bind_checked(input_3, () => editor().selected[i], ($$value) => editor().selected[i] = $$value);
+					append($$anchor, tr_3);
+				});
+				reset(tbody_1);
+				reset(table_1);
+				reset(div_23);
+				template_effect(() => {
+					set_checked(input_2, get(allVisibleSelected));
+					input_2.indeterminate = get(visibleSelectedCount) > 0 && !get(allVisibleSelected);
+				});
+				delegated("change", input_2, (event) => editor().setAllVisibleSelected(event.currentTarget.checked));
+				append($$anchor, div_23);
+			};
+			if_block(node_21, ($$render) => {
+				if (editor().entries.length === 0) $$render(consequent_16);
+				else $$render(alternate_4, -1);
+			});
+			template_effect(() => {
+				set_text(text_14, `${editor().current.entity.name ?? ""} `);
+				set_text(text_15, `${editor().entries.length ?? ""} Einträge`);
+				button_4.disabled = editor().selectedIndices.length !== 1;
+				button_5.disabled = editor().selectedIndices.length === 0;
+			});
+			delegated("click", button_3, () => editor().openAdd());
+			delegated("click", button_4, () => editor().openEdit());
+			delegated("click", button_5, () => editor().openDelete());
+			delegated("click", button_6, () => editor().openImport());
+			append($$anchor, fragment_8);
+		};
+		if_block(node_17, ($$render) => {
+			if (!editor().current) $$render(consequent_12);
+			else if (editor().entriesStatus === "loading") $$render(consequent_13, 1);
+			else if (editor().entriesStatus === "error") $$render(consequent_14, 2);
+			else $$render(alternate_5, -1);
+		});
+		reset(div_18);
+		reset(div_7);
+		reset(div_6);
+		var node_25 = sibling(div_6, 2);
+		var consequent_27 = ($$anchor) => {
+			const dialog = /* @__PURE__ */ user_derived(() => editor().dialog);
+			var fragment_10 = root_45();
+			var div_26 = first_child(fragment_10);
+			var div_27 = child(div_26);
+			let classes_5;
+			var div_28 = child(div_27);
+			var div_29 = child(div_28);
+			var h5_1 = child(div_29);
+			var text_18 = only_child(h5_1, true);
+			var button_7 = sibling(h5_1, 2);
+			reset(div_29);
+			var div_30 = sibling(div_29, 2);
+			var node_26 = child(div_30);
+			var consequent_18 = ($$anchor) => {
+				var div_31 = root_33();
+				var text_19 = only_child(div_31, true);
+				template_effect(() => set_text(text_19, get(dialog).error));
+				append($$anchor, div_31);
+			};
+			if_block(node_26, ($$render) => {
+				if (get(dialog).error) $$render(consequent_18);
+			});
+			var node_27 = sibling(node_26, 2);
+			var consequent_22 = ($$anchor) => {
+				var form = root_40();
+				each(form, 21, () => get(dialog).fields, (field) => field.name, ($$anchor, field, $$index_9) => {
+					var div_32 = root_38();
+					var label = child(div_32);
+					var text_20 = child(label);
+					var node_28 = sibling(text_20);
+					var consequent_19 = ($$anchor) => {
+						var span_1 = root_34();
+						var text_21 = only_child(span_1);
+						template_effect(() => set_text(text_21, `(${(get(field).type === "list<string>" ? "Liste, mit ; trennen" : get(field).type) ?? ""})`));
 						append($$anchor, span_1);
 					};
-					if_block(node_15, ($$render) => {
-						if (get(field).type && get(field).type !== "string") $$render(consequent_10);
+					if_block(node_28, ($$render) => {
+						if (get(field).type && get(field).type !== "string") $$render(consequent_19);
 					});
-					var node_16 = sibling(node_15, 2);
-					var consequent_11 = ($$anchor) => {
-						var select = root_21();
+					var node_29 = sibling(node_28, 2);
+					var consequent_20 = ($$anchor) => {
+						var select = root_35();
 						var option = child(select);
 						option.value = option.__value = "";
 						var option_1 = sibling(option);
@@ -5140,18 +5479,8 @@ createHTML: (html) => {
 						bind_select_value(select, () => get(field).value, ($$value) => get(field).value = $$value);
 						append($$anchor, select);
 					};
-					var consequent_12 = ($$anchor) => {
-						var input_3 = root_22();
-						remove_input_defaults(input_3);
-						template_effect(() => {
-							set_attribute(input_3, "name", get(field).name);
-							input_3.disabled = get(field).disabled;
-						});
-						bind_value(input_3, () => get(field).value, ($$value) => get(field).value = $$value);
-						append($$anchor, input_3);
-					};
-					var alternate_4 = ($$anchor) => {
-						var input_4 = root_23();
+					var consequent_21 = ($$anchor) => {
+						var input_4 = root_36();
 						remove_input_defaults(input_4);
 						template_effect(() => {
 							set_attribute(input_4, "name", get(field).name);
@@ -5160,76 +5489,115 @@ createHTML: (html) => {
 						bind_value(input_4, () => get(field).value, ($$value) => get(field).value = $$value);
 						append($$anchor, input_4);
 					};
-					if_block(node_16, ($$render) => {
-						if (get(field).type === "boolean") $$render(consequent_11);
-						else if (get(field).type === "date") $$render(consequent_12, 1);
-						else $$render(alternate_4, -1);
+					var alternate_6 = ($$anchor) => {
+						var input_5 = root_37();
+						remove_input_defaults(input_5);
+						template_effect(() => {
+							set_attribute(input_5, "name", get(field).name);
+							input_5.disabled = get(field).disabled;
+						});
+						bind_value(input_5, () => get(field).value, ($$value) => get(field).value = $$value);
+						append($$anchor, input_5);
+					};
+					if_block(node_29, ($$render) => {
+						if (get(field).type === "boolean") $$render(consequent_20);
+						else if (get(field).type === "date") $$render(consequent_21, 1);
+						else $$render(alternate_6, -1);
 					});
 					reset(label);
-					reset(div_26);
-					template_effect(() => set_text(text_9, `${get(field).name ?? ""} `));
-					append($$anchor, div_26);
+					reset(div_32);
+					template_effect(() => set_text(text_20, `${get(field).name ?? ""} `));
+					append($$anchor, div_32);
 				}, ($$anchor) => {
-					append($$anchor, root_25());
+					append($$anchor, root_39());
 				});
 				reset(form);
 				event("submit", form, (event) => event.preventDefault());
 				append($$anchor, form);
 			};
-			var alternate_5 = ($$anchor) => {
-				var p_3 = root_27();
-				var strong = sibling(child(p_3));
-				var text_11 = only_child(strong, true);
-				var text_12 = sibling(strong);
-				reset(p_3);
+			var consequent_23 = ($$anchor) => {
+				importBody($$anchor, () => get(dialog));
+			};
+			var alternate_7 = ($$anchor) => {
+				var p_7 = root_41();
+				var strong_2 = sibling(child(p_7));
+				var text_22 = only_child(strong_2, true);
+				var text_23 = sibling(strong_2);
+				reset(p_7);
 				template_effect(() => {
-					set_text(text_11, get(dialog).count);
-					set_text(text_12, ` ${get(dialog).count === 1 ? "Eintrag" : "Einträge"} wirklich gelöscht werden?`);
+					set_text(text_22, get(dialog).count);
+					set_text(text_23, ` ${get(dialog).count === 1 ? "Eintrag" : "Einträge"} wirklich gelöscht werden?`);
 				});
-				append($$anchor, p_3);
+				append($$anchor, p_7);
 			};
-			if_block(node_14, ($$render) => {
-				if (get(dialog).kind === "form") $$render(consequent_13);
-				else $$render(alternate_5, -1);
+			if_block(node_27, ($$render) => {
+				if (get(dialog).kind === "form") $$render(consequent_22);
+				else if (get(dialog).kind === "import") $$render(consequent_23, 1);
+				else $$render(alternate_7, -1);
 			});
-			reset(div_24);
-			var div_27 = sibling(div_24, 2);
-			var button_6 = child(div_27);
-			var node_17 = sibling(button_6, 2);
-			var consequent_14 = ($$anchor) => {
-				var button_7 = root_28();
-				template_effect(() => button_7.disabled = get(dialog).busy || get(dialog).fields.length === 0);
-				delegated("click", button_7, () => editor().saveDialog());
-				append($$anchor, button_7);
+			reset(div_30);
+			var div_33 = sibling(div_30, 2);
+			var button_8 = child(div_33);
+			var text_24 = only_child(button_8, true);
+			var node_30 = sibling(button_8, 2);
+			var consequent_25 = ($$anchor) => {
+				var fragment_12 = comment();
+				var node_31 = first_child(fragment_12);
+				var consequent_24 = ($$anchor) => {
+					var button_9 = root_42();
+					var text_25 = only_child(button_9);
+					template_effect(() => {
+						button_9.disabled = get(dialog).busy || get(dialog).rows.length === 0 || get(dialog).problems.length > 0;
+						set_text(text_25, `${get(dialog).rows.length ?? ""} ${get(dialog).rows.length === 1 ? "Zeile" : "Zeilen"} importieren`);
+					});
+					delegated("click", button_9, () => editor().runImport());
+					append($$anchor, button_9);
+				};
+				if_block(node_31, ($$render) => {
+					if (!get(dialog).result) $$render(consequent_24);
+				});
+				append($$anchor, fragment_12);
 			};
-			var alternate_6 = ($$anchor) => {
-				var button_8 = root_29();
-				template_effect(() => button_8.disabled = get(dialog).busy);
-				delegated("click", button_8, () => editor().confirmDelete());
-				append($$anchor, button_8);
+			var consequent_26 = ($$anchor) => {
+				var button_10 = root_43();
+				template_effect(() => button_10.disabled = get(dialog).busy || get(dialog).fields.length === 0);
+				delegated("click", button_10, () => editor().saveDialog());
+				append($$anchor, button_10);
 			};
-			if_block(node_17, ($$render) => {
-				if (get(dialog).kind === "form") $$render(consequent_14);
-				else $$render(alternate_6, -1);
+			var alternate_8 = ($$anchor) => {
+				var button_11 = root_44();
+				template_effect(() => button_11.disabled = get(dialog).busy);
+				delegated("click", button_11, () => editor().confirmDelete());
+				append($$anchor, button_11);
+			};
+			if_block(node_30, ($$render) => {
+				if (get(dialog).kind === "import") $$render(consequent_25);
+				else if (get(dialog).kind === "form") $$render(consequent_26, 1);
+				else $$render(alternate_8, -1);
 			});
+			reset(div_33);
+			reset(div_28);
 			reset(div_27);
-			reset(div_22);
-			reset(div_21);
-			reset(div_20);
+			reset(div_26);
 			next(2);
 			template_effect(() => {
-				classes_4 = set_class(div_21, 1, "modal-dialog", null, classes_4, { "modal-sm": get(dialog).kind === "delete" });
-				set_text(text_7, get(dialog).kind === "form" ? get(dialog).title : "Löschen bestätigen");
+				classes_5 = set_class(div_27, 1, "modal-dialog", null, classes_5, {
+					"modal-sm": get(dialog).kind === "delete",
+					"modal-xl": get(dialog).kind === "import"
+				});
+				set_text(text_18, get(dialog).kind === "form" ? get(dialog).title : get(dialog).kind === "import" ? `CSV-Import: ${editor().current?.entity.name}` : "Löschen bestätigen");
+				button_8.disabled = get(dialog).busy;
+				set_text(text_24, get(dialog).kind === "import" && get(dialog).result ? "Schließen" : "Abbrechen");
 			});
-			delegated("click", div_20, onBackdropClick);
-			delegated("click", button_5, () => editor().closeDialog());
-			delegated("click", button_6, () => editor().closeDialog());
-			append($$anchor, fragment_4);
+			delegated("click", div_26, onBackdropClick);
+			delegated("click", button_7, () => editor().closeDialog());
+			delegated("click", button_8, () => editor().closeDialog());
+			append($$anchor, fragment_10);
 		};
-		if_block(node_12, ($$render) => {
-			if (editor().dialog) $$render(consequent_15);
+		if_block(node_25, ($$render) => {
+			if (editor().dialog) $$render(consequent_27);
 		});
-		append($$anchor, fragment);
+		append($$anchor, fragment_6);
 		pop();
 	}
 	delegate(["click", "change"]);
@@ -5365,6 +5733,81 @@ createHTML: (html) => {
 		return "";
 	}
 	//#endregion
+	//#region src/forms/csv.ts
+	/**
+	* Datei als Text lesen. Excel speichert CSV oft in Windows-1252 - ist die
+	* Datei kein gültiges UTF-8, wird darauf zurückgegriffen.
+	*/
+	async function readCsvFile(file) {
+		const buffer = await file.arrayBuffer();
+		try {
+			return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+		} catch {
+			return new TextDecoder("windows-1252").decode(buffer);
+		}
+	}
+	function detectDelimiter(text) {
+		const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
+		const candidates = [
+			";",
+			",",
+			"	"
+		];
+		const counts = candidates.map((c) => firstLine.split(c).length - 1);
+		return candidates[counts.indexOf(Math.max(...counts))];
+	}
+	/** CSV mit ; als Trennzeichen und BOM erzeugen (öffnet in deutschem Excel direkt korrekt). */
+	function toCsv(header, rows) {
+		const escape = (value) => /[";\r\n]/.test(value) ? `"${value.replace(/"/g, "\"\"")}"` : value;
+		return "﻿" + [header, ...rows].map((row) => row.map(escape).join(";")).join("\r\n") + "\r\n";
+	}
+	function parseCsv(input) {
+		const text = input.replace(/^﻿/, "");
+		const delimiter = detectDelimiter(text);
+		const records = [];
+		let cells = [];
+		let cell = "";
+		let quoted = false;
+		let line = 1;
+		let recordLine = 1;
+		const endRecord = () => {
+			cells.push(cell);
+			if (cells.some((c) => c.trim() !== "")) records.push({
+				line: recordLine,
+				cells
+			});
+			cells = [];
+			cell = "";
+		};
+		for (let i = 0; i < text.length; i++) {
+			const char = text[i];
+			if (quoted) {
+				if (char === "\"" && text[i + 1] === "\"") {
+					cell += "\"";
+					i++;
+				} else if (char === "\"") quoted = false;
+				else {
+					if (char === "\n") line++;
+					cell += char;
+				}
+			} else if (char === "\"" && cell === "") quoted = true;
+			else if (char === delimiter) {
+				cells.push(cell);
+				cell = "";
+			} else if (char === "\r" || char === "\n") {
+				if (char === "\r" && text[i + 1] === "\n") i++;
+				endRecord();
+				recordLine = ++line;
+			} else cell += char;
+		}
+		if (cell !== "" || cells.length > 0) endRecord();
+		const [header, ...rows] = records;
+		return {
+			header: header ? header.cells.map((h) => h.trim()) : [],
+			rows
+		};
+	}
+	//#endregion
 	//#region src/forms/editorState.svelte.ts
 	var INTEGER_TYPES = [
 		"byte",
@@ -5379,6 +5822,20 @@ createHTML: (html) => {
 		"single"
 	];
 	var LIST_SEPARATOR = ";";
+	var TRUE_VALUES = [
+		"true",
+		"ja",
+		"yes",
+		"1",
+		"x"
+	];
+	var FALSE_VALUES = [
+		"false",
+		"nein",
+		"no",
+		"0"
+	];
+	var IMPORT_CONCURRENCY = 5;
 	function toFormValue(value, type) {
 		if (value === null || value === void 0) return "";
 		if (Array.isArray(value)) return value.join(`${LIST_SEPARATOR} `);
@@ -5398,7 +5855,16 @@ createHTML: (html) => {
 			if (Number.isNaN(number)) throw new Error(`„${field.name}“ muss eine Zahl sein.`);
 			return number;
 		}
-		if (field.type === "boolean") return value === "true";
+		if (field.type === "boolean") {
+			const lower = value.toLowerCase();
+			if (TRUE_VALUES.includes(lower)) return true;
+			if (FALSE_VALUES.includes(lower)) return false;
+			throw new Error(`„${field.name}“ muss Ja oder Nein sein.`);
+		}
+		if (field.type === "date") {
+			const german = value.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+			return german ? `${german[3]}-${german[2].padStart(2, "0")}-${german[1].padStart(2, "0")}` : value;
+		}
 		if (field.type === "list<string>") return value.split(LIST_SEPARATOR).map((v) => v.trim()).filter((v) => v !== "");
 		return value;
 	}
@@ -5666,6 +6132,143 @@ createHTML: (html) => {
 				error: "",
 				busy: false
 			};
+		}
+		openImport() {
+			this.dialog = {
+				kind: "import",
+				fileName: "",
+				columns: [],
+				ignoredColumns: [],
+				rows: [],
+				problems: [],
+				done: 0,
+				error: "",
+				busy: false
+			};
+		}
+		/** Alle Spalten und aktuellen Einträge als CSV - dient auch als Import-Vorlage. */
+		exportCsv() {
+			const rows = this.entries.map((entry) => this.allColumns.map((c) => toFormValue(entry[c], this.columnTypes[c] ?? "")));
+			return {
+				fileName: `${this.current?.entity.pluralName ?? "export"}.csv`,
+				content: toCsv(this.allColumns, rows)
+			};
+		}
+		/** CSV-Datei einlesen, Spalten zuordnen und alle Zeilen vorab prüfen. */
+		async loadImportFile(file) {
+			const dialog = this.dialog;
+			if (dialog?.kind !== "import" || !this.current) return;
+			const entity = this.current.entity;
+			const keyName = entity.key?.name;
+			Object.assign(dialog, {
+				fileName: file.name,
+				columns: [],
+				ignoredColumns: [],
+				rows: [],
+				problems: [],
+				done: 0,
+				result: void 0,
+				error: ""
+			});
+			let csv;
+			try {
+				csv = parseCsv(await readCsvFile(file));
+			} catch (error) {
+				dialog.error = `Datei konnte nicht gelesen werden: ${error}`;
+				return;
+			}
+			if (csv.header.length === 0) {
+				dialog.problems = ["Die Datei ist leer."];
+				return;
+			}
+			const byLower = new Map(this.allColumns.map((c) => [c.toLowerCase(), c]));
+			const mapping = csv.header.map((h) => byLower.get(h.toLowerCase()));
+			const columns = mapping.filter((c) => !!c);
+			const problems = [];
+			if (columns.length === 0) problems.push("Keine Spalte passt zu einer Eigenschaft der Entität.");
+			else if (keyName && !columns.includes(keyName)) problems.push(`Die Schlüsselspalte „${keyName}“ fehlt.`);
+			const duplicateColumns = columns.filter((c, i) => columns.indexOf(c) !== i);
+			if (duplicateColumns.length > 0) problems.push(`Spalten mehrfach vorhanden: ${[...new Set(duplicateColumns)].join(", ")}`);
+			const existingKeys = new Set(keyName ? this.entries.map((e) => String(e[keyName] ?? "")) : []);
+			const seenKeys = /* @__PURE__ */ new Map();
+			const rows = [];
+			for (const { line, cells } of csv.rows) {
+				const raw = {};
+				mapping.forEach((column, i) => {
+					if (column) raw[column] = cells[i] ?? "";
+				});
+				if (cells.length > csv.header.length) problems.push(`Zeile ${line}: mehr Werte als Spalten in der Kopfzeile.`);
+				const data = {};
+				try {
+					for (const column of columns) data[column] = toApiValue({
+						name: column,
+						type: this.columnTypes[column] ?? "",
+						value: raw[column],
+						disabled: false
+					});
+				} catch (error) {
+					problems.push(`Zeile ${line}: ${error instanceof Error ? error.message : error}`);
+				}
+				const row = {
+					line,
+					raw,
+					data
+				};
+				if (keyName && keyName in raw) {
+					const key = raw[keyName].trim();
+					if (key === "") problems.push(`Zeile ${line}: „${keyName}“ ist leer.`);
+					else if (seenKeys.has(key)) problems.push(`Zeile ${line}: „${keyName}“ ${key} kommt schon in Zeile ${seenKeys.get(key)} vor.`);
+					seenKeys.set(key, line);
+					if (existingKeys.has(key)) row.existingId = extractEntityId({ [keyName]: key }, keyName, entity.key?.type);
+				}
+				rows.push(row);
+			}
+			if (rows.length === 0) problems.push("Die Datei enthält keine Datenzeilen.");
+			Object.assign(dialog, {
+				columns,
+				ignoredColumns: csv.header.filter((_, i) => !mapping[i]),
+				rows,
+				problems
+			});
+		}
+		/** Geprüfte Zeilen anlegen bzw. aktualisieren; Fehler einzelner Zeilen brechen nicht ab. */
+		async runImport() {
+			const dialog = this.dialog;
+			if (dialog?.kind !== "import" || !this.current || dialog.problems.length > 0 || dialog.rows.length === 0) return;
+			const { model, entity } = this.current;
+			const keyName = entity.key?.name;
+			dialog.busy = true;
+			dialog.done = 0;
+			const errors = [];
+			let ok = 0;
+			const importRow = async (row) => {
+				try {
+					if (row.existingId !== void 0) {
+						const { [keyName]: _key, ...data } = row.data;
+						await updateEntityEntry(model.name, entity.pluralName, row.existingId, data);
+					} else await createEntityEntry(model.name, entity.pluralName, row.data);
+					ok++;
+				} catch (error) {
+					errors.push({
+						line: row.line,
+						message: error instanceof Error ? error.message : String(error)
+					});
+				} finally {
+					dialog.done++;
+				}
+			};
+			let next = 0;
+			const worker = async () => {
+				while (next < dialog.rows.length) await importRow(dialog.rows[next++]);
+			};
+			await Promise.all(Array.from({ length: IMPORT_CONCURRENCY }, worker));
+			errors.sort((a, b) => a.line - b.line);
+			dialog.result = {
+				ok,
+				errors: errors.map((e) => `Zeile ${e.line}: ${e.message}`)
+			};
+			dialog.busy = false;
+			await this.reloadEntries();
 		}
 		closeDialog() {
 			if (!this.dialog?.busy) this.dialog = void 0;
