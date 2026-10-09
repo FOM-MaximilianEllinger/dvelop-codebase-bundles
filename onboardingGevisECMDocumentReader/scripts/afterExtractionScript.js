@@ -222,6 +222,12 @@ var DOCUMENT_ID_FIELD = "DocumentUID";
 var ORDER_FIELD = "OrderNum";
 var VENDOR_DELIVERY_FIELD = "VendorDeliveryNum";
 var VENDOR_DELIVERY_DATE_FIELD = "VendorDeliveryDate";
+var SKONTO_COUNT = 2;
+var SKONTO_KEYS = {
+	TAGE: "Tage",
+	PROZENT: "Prozent",
+	BASISBETRAG: "Basisbetrag"
+};
 var DUPLICATE_FLAG_FIELD = "IsDuplicate";
 var DUPLICATE_IDS_FIELD = "DuplicateDocumentIds";
 module.exports = async (req, res) => {
@@ -249,6 +255,15 @@ module.exports = async (req, res) => {
 				logger.info(`${VENDOR_DELIVERY_DATE_FIELD}: "${attribute(body, VENDOR_DELIVERY_DATE_FIELD)}" -> "${vendorDeliveryDate}" (DespatchAdviceDate)`);
 				setAttribute(body, VENDOR_DELIVERY_DATE_FIELD, vendorDeliveryDate);
 			}
+			parseSkonto(xmlElementText(metadataText ?? "", "SpecifiedTradePaymentTerms")).slice(0, SKONTO_COUNT).forEach((entry, index) => {
+				for (const [key, suffix] of Object.entries(SKONTO_KEYS)) {
+					const value = entry[key];
+					if (!value) continue;
+					const field = `Skonto${index + 1}_${suffix}`;
+					logger.info(`${field}: "${attribute(body, field)}" -> "${value}" (SpecifiedTradePaymentTerms)`);
+					setAttribute(body, field, value);
+				}
+			});
 		}
 	} catch (error) {
 		logger.error(`Werte aus der E-Rechnung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
@@ -312,6 +327,12 @@ function attribute(body, name) {
 }
 function setAttribute(body, name, value) {
 	body[name] = typeof body[name] === "string" ? Array.isArray(value) ? value.join(", ") : String(value) : value;
+}
+function parseSkonto(text) {
+	return text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.toUpperCase().startsWith("#SKONTO#")).map((line) => Object.fromEntries(line.split("#").filter((part) => part.includes("=")).map((part) => {
+		const [key, ...rest] = part.split("=");
+		return [key.trim().toUpperCase(), rest.join("=").trim()];
+	})));
 }
 function germanDate(value) {
 	const match = /^(\d{4})-?(\d{2})-?(\d{2})/.exec(value);
