@@ -27562,7 +27562,9 @@ while (prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan] &
 		try {
 			response = await fetch(url, options);
 		} catch (err) {
-			throw new Error(`Network error during fetch: ${err.message}`);
+			const cause = err?.cause;
+			const causeText = cause ? ` (cause: ${cause.code ?? ""} ${cause.message ?? cause})` : "";
+			throw new Error(`Network error during fetch: ${err.message}${causeText}`);
 		}
 		const contentType = response.headers.get("content-type") || "";
 		const parseBody = async () => {

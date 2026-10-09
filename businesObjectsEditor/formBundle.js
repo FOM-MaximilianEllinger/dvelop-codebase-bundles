@@ -89,6 +89,12 @@
 		console.warn(`https://svelte.dev/e/hydration_mismatch`);
 	}
 	/**
+	* The `value` property of a `<select multiple>` element should be an array, but it received a non-array value. The selection will be kept as is.
+	*/
+	function select_multiple_invalid_value() {
+		console.warn(`https://svelte.dev/e/select_multiple_invalid_value`);
+	}
+	/**
 	* A `<svelte:boundary>` `reset` function only resets the boundary the first time it is called
 	*/
 	function svelte_boundary_reset_noop() {
@@ -1798,6 +1804,22 @@
 				state_prototype_fixed();
 			}
 		});
+	}
+	/**
+	* @param {any} value
+	*/
+	function get_proxied_value(value) {
+		try {
+			if (value !== null && typeof value === "object" && STATE_SYMBOL in value) return value[STATE_SYMBOL];
+		} catch {}
+		return value;
+	}
+	/**
+	* @param {any} a
+	* @param {any} b
+	*/
+	function is(a, b) {
+		return Object.is(get_proxied_value(a), get_proxied_value(b));
 	}
 	//#endregion
 	//#region node_modules/svelte/src/internal/client/dom/operations.js
@@ -4313,6 +4335,146 @@ createHTML: (html) => {
 		return next_classes;
 	}
 	//#endregion
+	//#region node_modules/svelte/src/internal/client/dom/elements/bindings/select.js
+	/**
+	* Sets the `selected` attribute on an option so form reset can restore it.
+	* @param {HTMLOptionElement} option
+	* @param {boolean} selected
+	*/
+	function set_selected(option, selected) {
+		if (selected) {
+			if (!option.hasAttribute("selected")) option.setAttribute("selected", "");
+		} else option.removeAttribute("selected");
+	}
+	/**
+	* Marks the options matching `__defaultValue` as selected. Without `preserve`
+	* a newly matching option gets selected, as an inserted `<option selected>` would.
+	* @param {HTMLSelectElement} select
+	* @param {boolean} preserve
+	*/
+	function apply_default_select_value(select, preserve) {
+		var value = select.__defaultValue;
+		var multiple = select.multiple;
+		var values = multiple ? value ?? [] : null;
+		if (multiple && !is_array(values)) return;
+		var index = select.selectedIndex;
+		var selected = preserve && multiple ? new Set(select.selectedOptions) : null;
+		for (var option of select.options) {
+			var option_value = get_option_value(option);
+			set_selected(option, multiple ? values.includes(option_value) : is(option_value, value));
+		}
+		if (!preserve) return;
+		if (selected !== null) for (option of select.options) {
+			var was_selected = selected.has(option);
+			if (option.selected !== was_selected) option.selected = was_selected;
+		}
+		else if (select.selectedIndex !== index) select.selectedIndex = index;
+	}
+	/**
+	* Selects the correct option(s) (depending on whether this is a multiple select)
+	* @template V
+	* @param {HTMLSelectElement} select
+	* @param {V} value
+	* @param {boolean} mounting
+	*/
+	function select_option(select, value, mounting = false) {
+		if (select.multiple) {
+			if (value == void 0) return;
+			if (!is_array(value)) return select_multiple_invalid_value();
+			for (var option of select.options) option.selected = value.includes(get_option_value(option));
+			return;
+		}
+		for (option of select.options) if (is(get_option_value(option), value)) {
+			option.selected = true;
+			return;
+		}
+		if (!mounting || value !== void 0) select.selectedIndex = -1;
+	}
+	/**
+	* Sets up a mutation observer to sync the current selection
+	* and default to the dom when the options change, for example
+	* when they are inside an `#each` block. Called once per `<select>`,
+	* by the compiled output or by `attribute_effect` for spreads.
+	* @param {HTMLSelectElement} select
+	*/
+	function init_select(select) {
+		var observer = new MutationObserver((entries) => {
+			if (entries.every(is_selectedcontent_mutation)) return;
+			if ("__defaultValue" in select) apply_default_select_value(select, false);
+			if ("__value" in select) select_option(select, select.__value);
+		});
+		observer.observe(select, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+			attributeFilter: ["value"]
+		});
+		teardown(() => {
+			observer.disconnect();
+		});
+	}
+	/**
+	* @param {HTMLSelectElement} select
+	* @param {() => unknown} get
+	* @param {(value: unknown) => void} set
+	* @returns {void}
+	*/
+	function bind_select_value(select, get, set = get) {
+		var batches = /* @__PURE__ */ new WeakSet();
+		var mounting = true;
+		listen_to_event_and_reset_event(select, "change", (is_reset) => {
+			var query = is_reset ? "[selected]" : ":checked";
+			/** @type {unknown} */
+			var value;
+			if (select.multiple) value = [].map.call(select.querySelectorAll(query), get_option_value);
+			else {
+				/** @type {HTMLOptionElement | null} */
+				var selected_option = select.querySelector(query) ?? select.querySelector("option:not([disabled])");
+				value = selected_option && get_option_value(selected_option);
+			}
+			set(value);
+			select.__value = value;
+			if (current_batch !== null) batches.add(current_batch);
+		});
+		effect(() => {
+			var value = get();
+			if (select === document.activeElement) {
+				var batch = async_mode_flag ? previous_batch : current_batch;
+				if (batches.has(batch)) return;
+			}
+			select_option(select, value, mounting);
+			if (mounting && value === void 0) {
+				/** @type {HTMLOptionElement | null} */
+				var selected_option = select.querySelector(":checked");
+				if (selected_option !== null) {
+					value = get_option_value(selected_option);
+					set(value);
+				}
+			}
+			select.__value = value;
+			mounting = false;
+		});
+	}
+	/** @param {HTMLOptionElement} option */
+	function get_option_value(option) {
+		if ("__value" in option) return option.__value;
+		else return option.value;
+	}
+	/**
+	* Returns `true` if the mutation stems from the browser mirroring the selected
+	* option's content into `<selectedcontent>`, or from us replacing the
+	* `<selectedcontent>` element with a clone of itself
+	* @param {MutationRecord} entry
+	*/
+	function is_selectedcontent_mutation(entry) {
+		if (entry.target.closest("selectedcontent") !== null) return true;
+		if (entry.type === "childList") {
+			var nodes = [...entry.addedNodes, ...entry.removedNodes];
+			return nodes.length > 0 && nodes.every((node) => node.nodeName === "SELECTEDCONTENT");
+		}
+		return false;
+	}
+	//#endregion
 	//#region node_modules/svelte/src/internal/client/dom/elements/attributes.js
 	/** @import { Blocker, Effect } from '#client' */
 	var IS_CUSTOM_ELEMENT = Symbol("is custom element");
@@ -4683,14 +4845,18 @@ createHTML: (html) => {
 	var root_17 = /* @__PURE__ */ from_html(`<div class="table-responsive"><table class="table table-sm table-bordered table-hover align-middle"><thead class="table-dark"><tr><th class="check svelte-1jio28y"><div class="form-check"><input type="checkbox" class="form-check-input" title="Alle auswählen"/></div></th><!></tr></thead><tbody></tbody></table></div>`);
 	var root_18 = /* @__PURE__ */ from_html(`<div class="d-flex align-items-center justify-content-between mb-1 gap-2"><h5 class="mb-0"> <small class="text-muted fw-normal fs-6"> </small></h5> <!></div> <div class="d-flex align-items-center gap-2 mt-2 mb-3 pb-2 border-bottom"><button type="button" class="btn btn-sm btn-outline-success">+ Hinzufügen</button> <button type="button" class="btn btn-sm btn-outline-primary"><!> Bearbeiten</button> <button type="button" class="btn btn-sm btn-outline-danger"><!> Löschen</button></div> <!>`, 1);
 	var root_19 = /* @__PURE__ */ from_html(`<div class="alert alert-danger mb-3"> </div>`);
-	var root_20 = /* @__PURE__ */ from_html(`<div class="mb-3"><label class="form-label small fw-semibold svelte-1jio28y"> <input type="text" class="form-control form-control-sm svelte-1jio28y"/></label></div>`);
-	var root_21 = /* @__PURE__ */ from_html(`<p class="text-muted small">Keine Felder ermittelbar – es sind noch keine Einträge vorhanden.</p>`);
-	var root_22 = /* @__PURE__ */ from_html(`<form></form>`);
-	var root_23 = /* @__PURE__ */ from_html(`<p class="mb-0">Sollen <strong> </strong> </p>`);
-	var root_24 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-primary btn-sm">Speichern</button>`);
-	var root_25 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-danger btn-sm">Löschen</button>`);
-	var root_26 = /* @__PURE__ */ from_html(`<div class="modal fade show d-block" tabindex="-1"><div><div class="modal-content"><div class="modal-header"><h5 class="modal-title"> </h5> <button type="button" class="btn-close" aria-label="Schließen"></button></div> <div class="modal-body"><!> <!></div> <div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm">Abbrechen</button> <!></div></div></div></div> <div class="modal-backdrop fade show"></div>`, 1);
-	var root_27 = /* @__PURE__ */ from_html(`<div class="d-flex flex-column h-100"><div class="d-flex flex-grow-1 overflow-hidden"><div class="sidebar border-end d-flex flex-column overflow-hidden svelte-1jio28y"><div class="p-2 bg-secondary text-white fw-semibold small flex-shrink-0">Modelle</div> <div class="overflow-y-auto flex-grow-1"><div class="accordion accordion-flush"><!> <!></div></div></div> <div class="flex-grow-1 overflow-auto p-3"><!></div></div></div> <!>`, 1);
+	var root_20 = /* @__PURE__ */ from_html(`<span class="text-muted fw-normal"> </span>`);
+	var root_21 = /* @__PURE__ */ from_html(`<select class="form-select form-select-sm"><option>–</option><option>Ja</option><option>Nein</option></select>`);
+	var root_22 = /* @__PURE__ */ from_html(`<input type="date" class="form-control form-control-sm svelte-1jio28y"/>`);
+	var root_23 = /* @__PURE__ */ from_html(`<input type="text" class="form-control form-control-sm svelte-1jio28y"/>`);
+	var root_24 = /* @__PURE__ */ from_html(`<div class="mb-3"><label class="form-label small fw-semibold svelte-1jio28y"> <!> <!></label></div>`);
+	var root_25 = /* @__PURE__ */ from_html(`<p class="text-muted small">Keine Felder ermittelbar – es sind noch keine Einträge vorhanden.</p>`);
+	var root_26 = /* @__PURE__ */ from_html(`<form></form>`);
+	var root_27 = /* @__PURE__ */ from_html(`<p class="mb-0">Sollen <strong> </strong> </p>`);
+	var root_28 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-primary btn-sm">Speichern</button>`);
+	var root_29 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-danger btn-sm">Löschen</button>`);
+	var root_30 = /* @__PURE__ */ from_html(`<div class="modal fade show d-block" tabindex="-1"><div><div class="modal-content"><div class="modal-header"><h5 class="modal-title"> </h5> <button type="button" class="btn-close" aria-label="Schließen"></button></div> <div class="modal-body"><!> <!></div> <div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm">Abbrechen</button> <!></div></div></div></div> <div class="modal-backdrop fade show"></div>`, 1);
+	var root_31 = /* @__PURE__ */ from_html(`<div class="d-flex flex-column h-100"><div class="d-flex flex-grow-1 overflow-hidden"><div class="sidebar border-end d-flex flex-column overflow-hidden svelte-1jio28y"><div class="p-2 bg-secondary text-white fw-semibold small flex-shrink-0">Modelle</div> <div class="overflow-y-auto flex-grow-1"><div class="accordion accordion-flush"><!> <!></div></div></div> <div class="flex-grow-1 overflow-auto p-3"><!></div></div></div> <!>`, 1);
 	var $$css = {
 		hash: "svelte-1jio28y",
 		code: ".sidebar.svelte-1jio28y {width:20%;min-width:180px;}.model.svelte-1jio28y {font-size:0.82rem;font-weight:600;}.entity.svelte-1jio28y {font-size:0.8rem;}.search.svelte-1jio28y {min-width:220px;max-width:320px;}.check.svelte-1jio28y {width:32px;}.icon.svelte-1jio28y {margin-bottom:2px;}label.form-label.svelte-1jio28y {display:block;}label.form-label.svelte-1jio28y input:where(.svelte-1jio28y) {margin-top:0.5rem;font-weight:normal;}"
@@ -4707,7 +4873,7 @@ createHTML: (html) => {
 		function onBackdropClick(event) {
 			if (event.target === event.currentTarget) editor().closeDialog();
 		}
-		var fragment = root_27();
+		var fragment = root_31();
 		event("keydown", $window, onKeydown);
 		var div = first_child(fragment);
 		var div_1 = child(div);
@@ -4916,9 +5082,9 @@ createHTML: (html) => {
 		reset(div_1);
 		reset(div);
 		var node_12 = sibling(div, 2);
-		var consequent_12 = ($$anchor) => {
+		var consequent_15 = ($$anchor) => {
 			const dialog = /* @__PURE__ */ user_derived(() => editor().dialog);
-			var fragment_4 = root_26();
+			var fragment_4 = root_30();
 			var div_20 = first_child(fragment_4);
 			var div_21 = child(div_20);
 			let classes_4;
@@ -4940,65 +5106,111 @@ createHTML: (html) => {
 				if (get(dialog).error) $$render(consequent_9);
 			});
 			var node_14 = sibling(node_13, 2);
-			var consequent_10 = ($$anchor) => {
-				var form = root_22();
+			var consequent_13 = ($$anchor) => {
+				var form = root_26();
 				each(form, 21, () => get(dialog).fields, (field) => field.name, ($$anchor, field, $$index_5) => {
-					var div_26 = root_20();
+					var div_26 = root_24();
 					var label = child(div_26);
 					var text_9 = child(label);
-					var input_3 = sibling(text_9);
-					remove_input_defaults(input_3);
+					var node_15 = sibling(text_9);
+					var consequent_10 = ($$anchor) => {
+						var span_1 = root_20();
+						var text_10 = only_child(span_1);
+						template_effect(() => set_text(text_10, `(${(get(field).type === "list<string>" ? "Liste, mit ; trennen" : get(field).type) ?? ""})`));
+						append($$anchor, span_1);
+					};
+					if_block(node_15, ($$render) => {
+						if (get(field).type && get(field).type !== "string") $$render(consequent_10);
+					});
+					var node_16 = sibling(node_15, 2);
+					var consequent_11 = ($$anchor) => {
+						var select = root_21();
+						var option = child(select);
+						option.value = option.__value = "";
+						var option_1 = sibling(option);
+						option_1.value = option_1.__value = "true";
+						var option_2 = sibling(option_1);
+						option_2.value = option_2.__value = "false";
+						reset(select);
+						init_select(select);
+						template_effect(() => {
+							set_attribute(select, "name", get(field).name);
+							select.disabled = get(field).disabled;
+						});
+						bind_select_value(select, () => get(field).value, ($$value) => get(field).value = $$value);
+						append($$anchor, select);
+					};
+					var consequent_12 = ($$anchor) => {
+						var input_3 = root_22();
+						remove_input_defaults(input_3);
+						template_effect(() => {
+							set_attribute(input_3, "name", get(field).name);
+							input_3.disabled = get(field).disabled;
+						});
+						bind_value(input_3, () => get(field).value, ($$value) => get(field).value = $$value);
+						append($$anchor, input_3);
+					};
+					var alternate_4 = ($$anchor) => {
+						var input_4 = root_23();
+						remove_input_defaults(input_4);
+						template_effect(() => {
+							set_attribute(input_4, "name", get(field).name);
+							input_4.disabled = get(field).disabled;
+						});
+						bind_value(input_4, () => get(field).value, ($$value) => get(field).value = $$value);
+						append($$anchor, input_4);
+					};
+					if_block(node_16, ($$render) => {
+						if (get(field).type === "boolean") $$render(consequent_11);
+						else if (get(field).type === "date") $$render(consequent_12, 1);
+						else $$render(alternate_4, -1);
+					});
 					reset(label);
 					reset(div_26);
-					template_effect(() => {
-						set_text(text_9, `${get(field).name ?? ""} `);
-						set_attribute(input_3, "name", get(field).name);
-						input_3.disabled = get(field).disabled;
-					});
-					bind_value(input_3, () => get(field).value, ($$value) => get(field).value = $$value);
+					template_effect(() => set_text(text_9, `${get(field).name ?? ""} `));
 					append($$anchor, div_26);
 				}, ($$anchor) => {
-					append($$anchor, root_21());
+					append($$anchor, root_25());
 				});
 				reset(form);
 				event("submit", form, (event) => event.preventDefault());
 				append($$anchor, form);
 			};
-			var alternate_4 = ($$anchor) => {
-				var p_3 = root_23();
+			var alternate_5 = ($$anchor) => {
+				var p_3 = root_27();
 				var strong = sibling(child(p_3));
-				var text_10 = only_child(strong, true);
-				var text_11 = sibling(strong);
+				var text_11 = only_child(strong, true);
+				var text_12 = sibling(strong);
 				reset(p_3);
 				template_effect(() => {
-					set_text(text_10, get(dialog).count);
-					set_text(text_11, ` ${get(dialog).count === 1 ? "Eintrag" : "Einträge"} wirklich gelöscht werden?`);
+					set_text(text_11, get(dialog).count);
+					set_text(text_12, ` ${get(dialog).count === 1 ? "Eintrag" : "Einträge"} wirklich gelöscht werden?`);
 				});
 				append($$anchor, p_3);
 			};
 			if_block(node_14, ($$render) => {
-				if (get(dialog).kind === "form") $$render(consequent_10);
-				else $$render(alternate_4, -1);
+				if (get(dialog).kind === "form") $$render(consequent_13);
+				else $$render(alternate_5, -1);
 			});
 			reset(div_24);
 			var div_27 = sibling(div_24, 2);
 			var button_6 = child(div_27);
-			var node_15 = sibling(button_6, 2);
-			var consequent_11 = ($$anchor) => {
-				var button_7 = root_24();
+			var node_17 = sibling(button_6, 2);
+			var consequent_14 = ($$anchor) => {
+				var button_7 = root_28();
 				template_effect(() => button_7.disabled = get(dialog).busy || get(dialog).fields.length === 0);
 				delegated("click", button_7, () => editor().saveDialog());
 				append($$anchor, button_7);
 			};
-			var alternate_5 = ($$anchor) => {
-				var button_8 = root_25();
+			var alternate_6 = ($$anchor) => {
+				var button_8 = root_29();
 				template_effect(() => button_8.disabled = get(dialog).busy);
 				delegated("click", button_8, () => editor().confirmDelete());
 				append($$anchor, button_8);
 			};
-			if_block(node_15, ($$render) => {
-				if (get(dialog).kind === "form") $$render(consequent_11);
-				else $$render(alternate_5, -1);
+			if_block(node_17, ($$render) => {
+				if (get(dialog).kind === "form") $$render(consequent_14);
+				else $$render(alternate_6, -1);
 			});
 			reset(div_27);
 			reset(div_22);
@@ -5015,7 +5227,7 @@ createHTML: (html) => {
 			append($$anchor, fragment_4);
 		};
 		if_block(node_12, ($$render) => {
-			if (editor().dialog) $$render(consequent_12);
+			if (editor().dialog) $$render(consequent_15);
 		});
 		append($$anchor, fragment);
 		pop();
@@ -5047,7 +5259,9 @@ createHTML: (html) => {
 		try {
 			response = await fetch(url, options);
 		} catch (err) {
-			throw new Error(`Network error during fetch: ${err.message}`);
+			const cause = err?.cause;
+			const causeText = cause ? ` (cause: ${cause.code ?? ""} ${cause.message ?? cause})` : "";
+			throw new Error(`Network error during fetch: ${err.message}${causeText}`);
 		}
 		const contentType = response.headers.get("content-type") || "";
 		const parseBody = async () => {
@@ -5152,6 +5366,47 @@ createHTML: (html) => {
 	}
 	//#endregion
 	//#region src/forms/editorState.svelte.ts
+	var INTEGER_TYPES = [
+		"byte",
+		"sByte",
+		"int16",
+		"int32",
+		"int64"
+	];
+	var DECIMAL_TYPES = [
+		"decimal",
+		"double",
+		"single"
+	];
+	var LIST_SEPARATOR = ";";
+	function toFormValue(value, type) {
+		if (value === null || value === void 0) return "";
+		if (Array.isArray(value)) return value.join(`${LIST_SEPARATOR} `);
+		if (type === "date") return String(value).slice(0, 10);
+		return String(value);
+	}
+	function toApiValue(field) {
+		const value = field.value.trim();
+		if (field.type === "string" || field.type === "") return field.value;
+		if (value === "") return null;
+		if (INTEGER_TYPES.includes(field.type)) {
+			if (!/^[+-]?\d+$/.test(value)) throw new Error(`„${field.name}“ muss eine ganze Zahl sein.`);
+			return Number(value);
+		}
+		if (DECIMAL_TYPES.includes(field.type)) {
+			const number = Number(value.replace(",", "."));
+			if (Number.isNaN(number)) throw new Error(`„${field.name}“ muss eine Zahl sein.`);
+			return number;
+		}
+		if (field.type === "boolean") return value === "true";
+		if (field.type === "list<string>") return value.split(LIST_SEPARATOR).map((v) => v.trim()).filter((v) => v !== "");
+		return value;
+	}
+	/**
+	* Zustand und Logik des Business Objects Editors: Modelle (links, als
+	* Akkordeon), Einträge der gewählten Entität (rechts) mit Suche, Auswahl
+	* und Dialogen zum Anlegen, Bearbeiten und Löschen.
+	*/
 	var BusinessObjectsEditor = class {
 		#models;
 		get models() {
@@ -5237,6 +5492,13 @@ createHTML: (html) => {
 		set allColumns(value) {
 			set(this.#allColumns, value);
 		}
+		#columnTypes;
+		get columnTypes() {
+			return get(this.#columnTypes);
+		}
+		set columnTypes(value) {
+			set(this.#columnTypes, value);
+		}
 		#editColumns;
 		get editColumns() {
 			return get(this.#editColumns);
@@ -5277,7 +5539,21 @@ createHTML: (html) => {
 			this.#search = /* @__PURE__ */ state("");
 			this.#selected = /* @__PURE__ */ state(proxy({}));
 			this.#dialog = /* @__PURE__ */ state();
-			this.#allColumns = /* @__PURE__ */ user_derived(() => this.entries.length > 0 ? Object.keys(this.entries[0]).filter((k) => !k.startsWith("@")) : []);
+			this.#allColumns = /* @__PURE__ */ user_derived(() => {
+				const entity = this.current?.entity;
+				const columns = /* @__PURE__ */ new Set();
+				if (entity?.key?.name) columns.add(entity.key.name);
+				for (const property of entity?.properties ?? []) columns.add(property.name);
+				for (const entry of this.entries) for (const k of Object.keys(entry)) if (!k.startsWith("@")) columns.add(k);
+				return [...columns];
+			});
+			this.#columnTypes = /* @__PURE__ */ user_derived(() => {
+				const entity = this.current?.entity;
+				const types = {};
+				if (entity?.key) types[entity.key.name] = entity.key.type;
+				for (const property of entity?.properties ?? []) types[property.name] = property.type;
+				return types;
+			});
 			this.#editColumns = /* @__PURE__ */ user_derived(() => this.allColumns.filter((k) => k.toLowerCase() !== "id" && k !== this.current?.entity.key?.name));
 			this.#searchTexts = /* @__PURE__ */ user_derived(() => this.entries.map((entry) => this.allColumns.map((col) => entry[col] === null || entry[col] === void 0 ? "" : String(entry[col]).toLowerCase()).join("\0")));
 			this.#visibleIndices = /* @__PURE__ */ user_derived(() => {
@@ -5350,6 +5626,7 @@ createHTML: (html) => {
 				title: `${entity.name} hinzufügen`,
 				fields: columns.map((name) => ({
 					name,
+					type: this.columnTypes[name] ?? "",
 					value: "",
 					disabled: false
 				})),
@@ -5368,11 +5645,15 @@ createHTML: (html) => {
 			this.dialog = {
 				kind: "form",
 				title: `${entity.name} bearbeiten`,
-				fields: columns.map((name) => ({
-					name,
-					value: String(entry[name] ?? ""),
-					disabled: name === keyName
-				})),
+				fields: columns.map((name) => {
+					const type = this.columnTypes[name] ?? "";
+					return {
+						name,
+						type,
+						value: toFormValue(entry[name], type),
+						disabled: name === keyName
+					};
+				}),
 				save: (data) => updateEntityEntry(model.name, entity.pluralName, id, data),
 				error: "",
 				busy: false
@@ -5395,7 +5676,7 @@ createHTML: (html) => {
 			dialog.error = "";
 			dialog.busy = true;
 			try {
-				const data = Object.fromEntries(dialog.fields.filter((f) => !f.disabled).map((f) => [f.name, f.value]));
+				const data = Object.fromEntries(dialog.fields.filter((f) => !f.disabled).map((f) => [f.name, toApiValue(f)]));
 				await dialog.save(data);
 				this.dialog = void 0;
 				await this.reloadEntries();
