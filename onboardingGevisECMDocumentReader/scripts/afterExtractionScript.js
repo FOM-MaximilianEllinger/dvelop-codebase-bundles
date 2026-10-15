@@ -194,6 +194,333 @@ async function getDocumentReaderFeatures(baseUri, token) {
 	});
 }
 //#endregion
+//#region ../../helper/businessObjects/getAllEntriesFromEntity.ts
+/**
+* Retrieves all entries from a specified entity in a paginated API and merges them into a single response.
+*
+* @template T - The type of the response body, extending `GetAllEntriesFromEntity`.
+* 
+* @param {string} baseUri - The base URI of the API.
+* @param {string | null} token - The authorization token for the API. Can be `null` if no token is required.
+* @param {string} modelName - The name of the model to query.
+* @param {string} entityPluralName - The plural name of the entity to retrieve entries from.
+* @param {string} [endPointMoreEntries=""] - Optional endpoint to retrieve additional entries. Defaults to an empty string.
+* 
+* @returns {Promise<ApiResponse<T>>} A promise that resolves to an `ApiResponse` containing all entries from the entity.
+* 
+* @throws {Error} If the HTTP request fails or the response is invalid.
+* 
+* @remarks
+* This function handles pagination by following the `@odata.nextLink` property in the response until all entries are retrieved.
+* The final response contains all entries merged into the `value` property of the response body.
+*/
+async function getAllEntriesFromEntity(baseUri, token, modelName, entityPluralName, endPointMoreEntries = "") {
+	const url = endPointMoreEntries || `${baseUri}/businessobjects/custom/${modelName}/${entityPluralName}`;
+	const options = {
+		method: "GET",
+		headers: {
+			"Authorization": `Bearer ${token}`,
+			"Accept": "application/hal+json"
+		}
+	};
+	const response = await performHttpRequest(url, options);
+	let allValues = response.body.value ?? [];
+	let nextLink = response.body["@odata.nextLink"];
+	while (nextLink) {
+		const nextResponse = await performHttpRequest(nextLink, options);
+		const nextValues = nextResponse.body.value ?? [];
+		allValues = [...allValues, ...nextValues];
+		nextLink = nextResponse.body["@odata.nextLink"];
+	}
+	return {
+		...response,
+		body: {
+			...response.body,
+			value: allValues
+		}
+	};
+}
+//#endregion
+//#region ../../helper/classcon-documentreader/autoRouting.ts
+/**
+* Dunkelverarbeitung des Rechnungslesers: Regeln je Lieferant (und optional
+* Mandant), wann ein Dokument das Attribut "AutoRoutingFlag" = true bekommt -
+* die Weiterleitungsregel "Dunkelverarbeitung" leitet es dann ohne Prüfung an
+* den Export weiter.
+*
+* Gespeichert in Business Objects (Modell AUTO_ROUTING_MODEL). Gepflegt im
+* Werkzeug "Rechnungsleser Dunkelverarbeitung"
+* (projects/Toolbox_InvoiceReaderAutoRouting), ausgewertet im Skript
+* "Rechnungsleser: AfterExtraction" (evaluateAutoRouting). Beide nutzen diese
+* Datei - Änderungen am Bedingungskatalog wirken damit auf Formular UND
+* Auswertung.
+*/
+var AUTO_ROUTING_ATTRIBUTE = "AutoRoutingFlag";
+var AUTO_ROUTING_MODEL = {
+	name: "invoiceReaderAutoRouting",
+	description: "Rechnungsleser: Regeln für die Dunkelverarbeitung (AutoRoutingFlag)",
+	rules: {
+		name: "autoRoutingRule",
+		pluralName: "autoRoutingRules",
+		description: "Regel je Lieferant (und optional Mandant): wann ein Dokument ohne Prüfung exportiert wird.",
+		key: {
+			name: "id",
+			type: "string",
+			description: "Id der Regel (GUID)"
+		},
+		properties: [
+			{
+				name: "vendorNum",
+				type: "string",
+				required: true,
+				indexed: true
+			},
+			{
+				name: "vendorName",
+				type: "string",
+				required: false,
+				indexed: false
+			},
+			{
+				name: "companyNum",
+				type: "string",
+				required: false,
+				indexed: true
+			},
+			{
+				name: "active",
+				type: "boolean",
+				required: false,
+				indexed: false
+			},
+			{
+				name: "conditions",
+				type: "string",
+				required: false,
+				indexed: false
+			},
+			{
+				name: "validFrom",
+				type: "string",
+				required: false,
+				indexed: false
+			},
+			{
+				name: "validTo",
+				type: "string",
+				required: false,
+				indexed: false
+			},
+			{
+				name: "comment",
+				type: "string",
+				required: false,
+				indexed: false
+			}
+		]
+	},
+	settings: {
+		name: "autoRoutingSetting",
+		pluralName: "autoRoutingSettings",
+		description: "Globale Einstellungen der Dunkelverarbeitung (ein Eintrag mit id \"global\").",
+		key: {
+			name: "id",
+			type: "string",
+			description: "Immer \"global\""
+		},
+		properties: [{
+			name: "enabled",
+			type: "boolean",
+			required: false,
+			indexed: false
+		}, {
+			name: "defaultActive",
+			type: "boolean",
+			required: false,
+			indexed: false
+		}]
+	}
+};
+var AUTO_ROUTING_SETTINGS_ID = "global";
+var DEFAULT_AUTO_ROUTING_SETTINGS = {
+	enabled: true,
+	defaultActive: false
+};
+var OPERATOR_LABELS = {
+	lte: "≤",
+	gte: "≥",
+	between: "zwischen",
+	eq: "ist",
+	neq: "ist nicht",
+	is: "ist"
+};
+/**
+* Verfügbare Bedingungen. Neue Bedingung: Eintrag hier ergänzen und in
+* conditionValue (unten) den Wert aus dem Dokument liefern.
+*/
+var CONDITION_FIELDS = [
+	{
+		id: "grossAmount",
+		label: "Bruttobetrag",
+		type: "number",
+		operators: [
+			"lte",
+			"gte",
+			"between"
+		]
+	},
+	{
+		id: "documentType",
+		label: "Dokumenttyp",
+		type: "select",
+		operators: ["eq", "neq"],
+		options: [
+			{
+				value: "Invoice",
+				label: "Rechnung"
+			},
+			{
+				value: "CreditAdvice",
+				label: "Gutschrift"
+			},
+			{
+				value: "CorrectionOfInvoice",
+				label: "Rechnungskorrektur"
+			}
+		]
+	},
+	{
+		id: "orderNumPresent",
+		label: "Bestellnummer vorhanden",
+		type: "boolean",
+		operators: ["is"]
+	},
+	{
+		id: "eInvoice",
+		label: "E-Rechnung",
+		type: "boolean",
+		operators: ["is"]
+	}
+];
+function conditionField(id) {
+	return CONDITION_FIELDS.find((field) => field.id === id);
+}
+/** Bedingungen aus dem JSON-Text der Regel; ungültiger Inhalt = keine. */
+function parseConditions(text) {
+	if (!text?.trim()) return [];
+	try {
+		const list = JSON.parse(text);
+		return Array.isArray(list) ? list.filter((c) => c && typeof c.field === "string" && typeof c.op === "string").map((c) => ({
+			field: c.field,
+			op: c.op,
+			value: String(c.value ?? ""),
+			...c.value2 !== void 0 && c.value2 !== "" ? { value2: String(c.value2) } : {}
+		})) : [];
+	} catch {
+		return [];
+	}
+}
+/** Kurztext einer Bedingung, z.B. "Bruttobetrag ≤ 250,00". */
+function describeCondition(condition) {
+	const field = conditionField(condition.field);
+	if (!field) return `Unbekannte Bedingung „${condition.field}“`;
+	if (field.type === "boolean") return `${field.label}: ${condition.value === "true" ? "ja" : "nein"}`;
+	const show = (value) => field.type === "select" ? field.options?.find((o) => o.value === value)?.label ?? value ?? "" : formatAmount(parseAmount(value ?? ""));
+	return condition.op === "between" ? `${field.label} zwischen ${show(condition.value)} und ${show(condition.value2)}` : `${field.label} ${OPERATOR_LABELS[condition.op] ?? condition.op} ${show(condition.value)}`;
+}
+/**
+* Betrag aus dem Rechnungsleser bzw. der Eingabe: "1.234,56", "1234.56",
+* "1 234,56 EUR". Das letzte Komma/der letzte Punkt mit 1-2 Nachkommastellen
+* gilt als Dezimaltrenner. NaN = kein Betrag.
+*/
+function parseAmount(text) {
+	const cleaned = text.replace(/[^\d,.\-]/g, "");
+	if (!/\d/.test(cleaned)) return NaN;
+	const match = /^(.*)[.,](\d{1,2})$/.exec(cleaned);
+	const normalized = match ? `${match[1].replace(/[.,]/g, "")}.${match[2]}` : cleaned.replace(/[.,]/g, "");
+	return Number(normalized);
+}
+function formatAmount(value) {
+	return Number.isFinite(value) ? value.toLocaleString("de-DE", {
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 2
+	}) : "?";
+}
+function conditionValue(field, doc) {
+	switch (field) {
+		case "grossAmount": {
+			const amount = parseAmount(doc.attribute("GrossAmount"));
+			return Number.isFinite(amount) ? amount : void 0;
+		}
+		case "documentType": return doc.attribute("DocumentType") || void 0;
+		case "orderNumPresent": return !!(doc.attribute("OrderNum") || doc.attribute("OrderNumMulti"));
+		case "eInvoice": return doc.isEInvoice;
+		default: return;
+	}
+}
+function conditionMet(condition, doc) {
+	const actual = conditionValue(condition.field, doc);
+	if (actual === void 0) return false;
+	switch (condition.op) {
+		case "lte": return typeof actual === "number" && actual <= parseAmount(condition.value);
+		case "gte": return typeof actual === "number" && actual >= parseAmount(condition.value);
+		case "between": return typeof actual === "number" && actual >= parseAmount(condition.value) && actual <= parseAmount(condition.value2 ?? "");
+		case "eq": return String(actual).toLowerCase() === condition.value.toLowerCase();
+		case "neq": return String(actual).toLowerCase() !== condition.value.toLowerCase();
+		case "is": return actual === (condition.value === "true");
+		default: return false;
+	}
+}
+function sameKey(a, b) {
+	return (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
+}
+function isRuleValidOn(rule, day) {
+	return (!rule.validFrom || rule.validFrom <= day) && (!rule.validTo || day <= rule.validTo);
+}
+/**
+* Passende Regel: gleicher Lieferant, Mandant gleich oder leer (= alle),
+* heute gültig. Eine Regel für genau diesen Mandanten geht vor "alle".
+*/
+function findAutoRoutingRule(rules, vendorNum, companyNum, day) {
+	const candidates = rules.filter((rule) => sameKey(rule.vendorNum, vendorNum) && (!rule.companyNum?.trim() || sameKey(rule.companyNum, companyNum)) && isRuleValidOn(rule, day));
+	return candidates.find((rule) => rule.companyNum?.trim()) ?? candidates[0];
+}
+/** Ermittelt das AutoRoutingFlag eines Dokuments samt Begründung fürs Log. */
+function evaluateAutoRouting(rules, settings, doc) {
+	if (!settings.enabled) return {
+		flag: false,
+		reason: "Dunkelverarbeitung global ausgeschaltet."
+	};
+	if (!doc.vendorNum) return {
+		flag: false,
+		reason: "Keine Lieferantennummer."
+	};
+	const rule = findAutoRoutingRule(rules, doc.vendorNum, doc.companyNum, doc.today);
+	if (!rule) return {
+		flag: settings.defaultActive,
+		reason: `Keine Regel für Lieferant ${doc.vendorNum} - Standard: ${settings.defaultActive ? "an" : "aus"}.`
+	};
+	if (!rule.active) return {
+		flag: false,
+		reason: `Regel ${rule.id} ist ausgeschaltet.`
+	};
+	const failed = parseConditions(rule.conditions).filter((condition) => !conditionMet(condition, doc));
+	return failed.length === 0 ? {
+		flag: true,
+		reason: `Regel ${rule.id}: alle Bedingungen erfüllt.`
+	} : {
+		flag: false,
+		reason: `Regel ${rule.id}: nicht erfüllt - ${failed.map(describeCondition).join("; ")}.`
+	};
+}
+/** Globale Einstellungen aus dem Business-Objects-Eintrag (fehlend = Standard). */
+function toAutoRoutingSettings(entry) {
+	return {
+		enabled: typeof entry?.enabled === "boolean" ? entry.enabled : DEFAULT_AUTO_ROUTING_SETTINGS.enabled,
+		defaultActive: typeof entry?.defaultActive === "boolean" ? entry.defaultActive : DEFAULT_AUTO_ROUTING_SETTINGS.defaultActive
+	};
+}
+//#endregion
 //#region src/scripts/afterExtractionScript.ts
 /**
 * "Rechnungsleser: AfterExtraction": wird vom Rechnungsleser nach der
@@ -209,6 +536,12 @@ async function getDocumentReaderFeatures(baseUri, token) {
 * Bei einer Dublette werden die Attribute IsDuplicate (true) und
 * DuplicateDocumentIds (Ids der früheren Dokumente) gesetzt - im Typ des
 * Attributs im Rechnungsleser (Text-Attribut: "true" bzw. kommagetrennte Ids).
+*
+* Dunkelverarbeitung: setzt AutoRoutingFlag nach den Regeln aus Business
+* Objects (Werkzeug "Rechnungsleser Dunkelverarbeitung", Auswertung in
+* helper/classcon-documentreader/autoRouting.ts). Fehlt das Modell oder
+* schlägt das Laden fehl, bleibt AutoRoutingFlag unverändert (Wert aus den
+* Stammdaten).
 *
 * customerVariables (vom Onboarding-Formular nur beim Neuanlegen gesetzt):
 * apiKey (verschlüsselt). Die Mandanten-Adresse kommt aus dem Header
@@ -228,11 +561,13 @@ var SKONTO_KEYS = {
 	PROZENT: "Prozent",
 	BASISBETRAG: "Basisbetrag"
 };
+var COMPANY_FIELD = "DEBITOR_NUM";
 var DUPLICATE_FLAG_FIELD = "IsDuplicate";
 var DUPLICATE_IDS_FIELD = "DuplicateDocumentIds";
 module.exports = async (req, res) => {
 	const body = parseBody(req);
 	logger.info(`Eingang: ${JSON.stringify(body)}`);
+	let isEInvoice;
 	try {
 		const baseUri = req.get("x-dv-baseuri");
 		const apiKey = req.var("apiKey");
@@ -240,6 +575,7 @@ module.exports = async (req, res) => {
 		if (current?.candidates !== 1) logger.info(`Stapel nicht eindeutig (${current?.candidates ?? 0} Treffer) - keine Werte aus der E-Rechnung.`);
 		else {
 			const metadataText = extractScriptVariable(String((await getPdf(baseUri, apiKey, current.taskId, current.documentNumber)).body ?? ""), "metadataText");
+			isEInvoice = !!metadataText?.trim();
 			const orderNum = xmlElementText(metadataText ?? "", "PurchaseOrderReference");
 			if (orderNum) {
 				logger.info(`${ORDER_FIELD}: "${attribute(body, ORDER_FIELD)}" -> "${orderNum}" (PurchaseOrderReference)`);
@@ -283,10 +619,43 @@ module.exports = async (req, res) => {
 	} catch (error) {
 		logger.error(`Dublettenprüfung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
 	}
+	try {
+		await applyAutoRouting(req.get("x-dv-baseuri"), req.var("apiKey"), body, isEInvoice);
+	} catch (error) {
+		logger.error(`Dunkelverarbeitung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+	}
 	const response = JSON.stringify(body);
 	logger.info(`Antwort: ${response}`);
 	res.status(200).set("Content-Type", "application/json").send(response);
 };
+/**
+* Setzt AutoRoutingFlag nach den Regeln aus Business Objects. Ohne Modell
+* (Dunkelverarbeitung nicht eingerichtet) bleibt das Attribut unverändert.
+*/
+async function applyAutoRouting(baseUri, apiKey, body, isEInvoice) {
+	const load = async (pluralName) => {
+		try {
+			return (await getAllEntriesFromEntity(baseUri, apiKey, AUTO_ROUTING_MODEL.name, pluralName)).body.value ?? [];
+		} catch (error) {
+			if (String(error).includes("status: 404")) return void 0;
+			throw error;
+		}
+	};
+	const [rules, settingsEntries] = await Promise.all([load(AUTO_ROUTING_MODEL.rules.pluralName), load(AUTO_ROUTING_MODEL.settings.pluralName)]);
+	if (!rules) {
+		logger.info(`Dunkelverarbeitung: Business-Objects-Modell "${AUTO_ROUTING_MODEL.name}" fehlt - ${AUTO_ROUTING_ATTRIBUTE} bleibt "${attribute(body, AUTO_ROUTING_ATTRIBUTE)}".`);
+		return;
+	}
+	const result = evaluateAutoRouting(rules, toAutoRoutingSettings(settingsEntries?.find((entry) => entry.id === AUTO_ROUTING_SETTINGS_ID)), {
+		vendorNum: attribute(body, VENDOR_FIELD),
+		companyNum: attribute(body, COMPANY_FIELD),
+		attribute: (name) => attribute(body, name),
+		isEInvoice,
+		today: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)
+	});
+	logger.info(`${AUTO_ROUTING_ATTRIBUTE}: "${attribute(body, AUTO_ROUTING_ATTRIBUTE)}" -> ${result.flag} (${result.reason})`);
+	setAttribute(body, AUTO_ROUTING_ATTRIBUTE, result.flag);
+}
 async function findDuplicates(baseUri, apiKey, vendorNum, invoiceNumber, currentDocumentId) {
 	const sqlQuery = `
 SELECT

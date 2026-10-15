@@ -4938,6 +4938,14 @@ createHTML: (html) => {
 		},
 		{
 			type: "form",
+			id: "invoiceReaderAutoRouting",
+			name: "Rechnungsleser Dunkelverarbeitung",
+			description: "Pflegt die Regeln der Dunkelverarbeitung des Rechnungslesers (AutoRoutingFlag) je Lieferant und Mandant - mit Bedingungen wie Bruttobetrag, Dokumenttyp, Bestellnummer oder E-Rechnung. Gespeichert in Business Objects, ausgewertet vom Skript „Rechnungsleser: AfterExtraction“.",
+			formId: "bfcaa441-da67-54c7-8c0d-efca1332bf46",
+			bundlePath: "invoiceReaderAutoRouting/formBundle.js"
+		},
+		{
+			type: "form",
 			id: "invoiceReaderCleanup",
 			name: "Bereinigung Rechnungsleser",
 			description: "Listet die Stapel des Rechnungslesers mit Filter nach Name und Datum und löscht bzw. klassifiziert markierte Stapel erneut.",

@@ -10752,6 +10752,19 @@ createHTML: (html) => {
 						"SignificantCharacters": "[0-9]",
 						"DefaultValue": "",
 						"CreateFulltextIndex": false
+					},
+					{
+						"ColumnName": "VENDOR_PAYMENT_TERMS",
+						"Description": null,
+						"ColumnType": 1,
+						"MaxLength": 1024,
+						"CreateIndex": false,
+						"TryIdentifyPattern": false,
+						"SingleValueEntityName": null,
+						"SemanticType": 0,
+						"SignificantCharacters": null,
+						"DefaultValue": "",
+						"CreateFulltextIndex": false
 					}
 				]
 			},
@@ -11315,6 +11328,64 @@ createHTML: (html) => {
 						"ColumnType": 0,
 						"MaxLength": 100,
 						"CreateIndex": true,
+						"TryIdentifyPattern": false,
+						"SingleValueEntityName": null,
+						"SemanticType": 0,
+						"SignificantCharacters": null,
+						"DefaultValue": "",
+						"CreateFulltextIndex": false
+					}
+				]
+			},
+			{
+				"TableName": "CC_PAYMENT_TERMS",
+				"Description": null,
+				"Columns": [
+					{
+						"ColumnName": "CODE",
+						"Description": null,
+						"ColumnType": 1,
+						"MaxLength": 1024,
+						"CreateIndex": false,
+						"TryIdentifyPattern": false,
+						"SingleValueEntityName": null,
+						"SemanticType": 0,
+						"SignificantCharacters": null,
+						"DefaultValue": "",
+						"CreateFulltextIndex": false
+					},
+					{
+						"ColumnName": "DUE_DATE",
+						"Description": null,
+						"ColumnType": 1,
+						"MaxLength": 1024,
+						"CreateIndex": false,
+						"TryIdentifyPattern": false,
+						"SingleValueEntityName": null,
+						"SemanticType": 0,
+						"SignificantCharacters": null,
+						"DefaultValue": "",
+						"CreateFulltextIndex": false
+					},
+					{
+						"ColumnName": "DISCOUNT_DAYS",
+						"Description": null,
+						"ColumnType": 1,
+						"MaxLength": 1024,
+						"CreateIndex": false,
+						"TryIdentifyPattern": false,
+						"SingleValueEntityName": null,
+						"SemanticType": 0,
+						"SignificantCharacters": null,
+						"DefaultValue": "",
+						"CreateFulltextIndex": false
+					},
+					{
+						"ColumnName": "DISCOUNT_PERCENT",
+						"Description": null,
+						"ColumnType": 1,
+						"MaxLength": 1024,
+						"CreateIndex": false,
 						"TryIdentifyPattern": false,
 						"SingleValueEntityName": null,
 						"SemanticType": 0,
@@ -12171,7 +12242,7 @@ createHTML: (html) => {
 	var preExport_default = "//#region ../../helper/utils/logger.ts\nvar LogLevel = /* @__PURE__ */ function(LogLevel) {\n	LogLevel[LogLevel[\"DEBUG\"] = 0] = \"DEBUG\";\n	LogLevel[LogLevel[\"INFO\"] = 1] = \"INFO\";\n	LogLevel[LogLevel[\"WARN\"] = 2] = \"WARN\";\n	LogLevel[LogLevel[\"ERROR\"] = 3] = \"ERROR\";\n	return LogLevel;\n}({});\nvar Logger = class {\n	level;\n	showTimestamp;\n	constructor(options = {}) {\n		this.level = options.level ?? LogLevel.INFO;\n		this.showTimestamp = options.showTimestamp ?? true;\n	}\n	formatMessage(level, message) {\n		const paddedLevel = level.toUpperCase().padEnd(5, \" \");\n		return `${this.showTimestamp ? `[${(/* @__PURE__ */ new Date()).toISOString()}] ` : \"\"}${paddedLevel}: ${message}`;\n	}\n	debug(message, ...args) {\n		if (this.level <= LogLevel.DEBUG) console.debug(this.formatMessage(\"debug\", message), ...args);\n	}\n	info(message, ...args) {\n		if (this.level <= LogLevel.INFO) console.info(this.formatMessage(\"info\", message), ...args);\n	}\n	warn(message, ...args) {\n		if (this.level <= LogLevel.WARN) console.warn(this.formatMessage(\"warn\", message), ...args);\n	}\n	error(message, ...args) {\n		if (this.level <= LogLevel.ERROR) console.error(this.formatMessage(\"error\", message), ...args);\n	}\n	setLevel(newLevel) {\n		this.level = newLevel;\n	}\n};\nvar loggerInstance;\nfunction initLogger(level = LogLevel.INFO, showTimestamp = true) {\n	if (!loggerInstance) loggerInstance = new Logger({\n		level,\n		showTimestamp\n	});\n	return loggerInstance;\n}\n//#endregion\n//#region src/scripts/preExport.ts\n/**\n* \"Rechnungsleser: PreExport\": wird vom Rechnungsleser vor dem Export\n* aufgerufen (Extension Point \"IR_Business_BeforeExportHook\", Typ\n* ScriptingApp, Profil \"PreExportScript\" - hinterlegt vom Onboarding-Formular).\n* Bekommt die Attribute des Dokuments als JSON und liefert sie verändert\n* zurück:\n*  - DocumentType wird zum ERP-Code: CreditAdvice -> \"3\", alles andere\n*    (Invoice, CorrectionOfInvoice, unbekannt) -> \"2\".\n*    Alle übrigen Attribute bleiben unverändert.\n*\n* Wird der Hook erneut mit einem bereits umgesetzten Dokument aufgerufen\n* (DocumentType ist dann schon \"2\"/\"3\"), greift der Standardfall - der Code\n* bleibt \"2\" bzw. wird aus \"3\" zu \"2\"; daher \"3\" ausdrücklich beibehalten.\n*/\nvar logger = initLogger(LogLevel.INFO);\nvar DOCUMENT_TYPE_FIELD = \"DocumentType\";\nvar MAPPING = {\n	Invoice: \"2\",\n	CreditAdvice: \"3\",\n	CorrectionOfInvoice: \"2\"\n};\nvar KNOWN_CODES = /* @__PURE__ */ new Set([\"2\", \"3\"]);\nmodule.exports = async (req, res) => {\n	try {\n		const body = parseBody(req);\n		const documentType = String(body[DOCUMENT_TYPE_FIELD] ?? \"\");\n		const mapped = MAPPING[documentType];\n		if (mapped) body[DOCUMENT_TYPE_FIELD] = mapped;\n		else if (!KNOWN_CODES.has(documentType)) body[DOCUMENT_TYPE_FIELD] = \"2\";\n		logger.info(`DocumentType \"${documentType}\" -> \"${body[DOCUMENT_TYPE_FIELD]}\".`);\n		res.status(200).set(\"Content-Type\", \"application/json\").send(JSON.stringify(body));\n	} catch (error) {\n		const message = error instanceof Error ? error.message : String(error);\n		logger.error(`Fehler: ${message}`);\n		res.status(500).set(\"Content-Type\", \"application/json\").send(JSON.stringify({ error: message }));\n	}\n};\nfunction parseBody(req) {\n	try {\n		const body = req.json?.();\n		return body && typeof body === \"object\" ? body : {};\n	} catch {\n		return {};\n	}\n}\n//#endregion\n\n//# sourceMappingURL=preExport.js.map";
 	//#endregion
 	//#region dist/scripts/afterExtractionScript.js?raw
-	var afterExtractionScript_default = "//#region ../../helper/utils/logger.ts\nvar LogLevel = /* @__PURE__ */ function(LogLevel) {\n	LogLevel[LogLevel[\"DEBUG\"] = 0] = \"DEBUG\";\n	LogLevel[LogLevel[\"INFO\"] = 1] = \"INFO\";\n	LogLevel[LogLevel[\"WARN\"] = 2] = \"WARN\";\n	LogLevel[LogLevel[\"ERROR\"] = 3] = \"ERROR\";\n	return LogLevel;\n}({});\nvar Logger = class {\n	level;\n	showTimestamp;\n	constructor(options = {}) {\n		this.level = options.level ?? LogLevel.INFO;\n		this.showTimestamp = options.showTimestamp ?? true;\n	}\n	formatMessage(level, message) {\n		const paddedLevel = level.toUpperCase().padEnd(5, \" \");\n		return `${this.showTimestamp ? `[${(/* @__PURE__ */ new Date()).toISOString()}] ` : \"\"}${paddedLevel}: ${message}`;\n	}\n	debug(message, ...args) {\n		if (this.level <= LogLevel.DEBUG) console.debug(this.formatMessage(\"debug\", message), ...args);\n	}\n	info(message, ...args) {\n		if (this.level <= LogLevel.INFO) console.info(this.formatMessage(\"info\", message), ...args);\n	}\n	warn(message, ...args) {\n		if (this.level <= LogLevel.WARN) console.warn(this.formatMessage(\"warn\", message), ...args);\n	}\n	error(message, ...args) {\n		if (this.level <= LogLevel.ERROR) console.error(this.formatMessage(\"error\", message), ...args);\n	}\n	setLevel(newLevel) {\n		this.level = newLevel;\n	}\n};\nvar loggerInstance;\nfunction initLogger(level = LogLevel.INFO, showTimestamp = true) {\n	if (!loggerInstance) loggerInstance = new Logger({\n		level,\n		showTimestamp\n	});\n	return loggerInstance;\n}\nfunction getLogger() {\n	if (!loggerInstance) loggerInstance = new Logger({\n		level: LogLevel.DEBUG,\n		showTimestamp: true\n	});\n	return loggerInstance;\n}\n//#endregion\n//#region ../../helper/performHttpRequest/performHttpRequest.ts\n/**\n* Performs an HTTP request and returns a structured response.\n*\n* @template T - The expected type of the response body.\n* @param {string} url - The URL to which the request is sent.\n* @param {RequestInit} options - The options for the HTTP request, such as method, headers, and body.\n* @returns {Promise<ApiResponse<T>>} A promise that resolves to an `ApiResponse` object containing the response details.\n* @throws {Error} Throws an error if the HTTP response status is not OK (status code outside the range 200-299).\n*\n* The function attempts to parse the response body based on the `Content-Type` header:\n* - If the `Content-Type` includes \"application/json\", it parses the body as JSON.\n* - Otherwise, it parses the body as plain text.\n*\n* If the response is not OK, the function throws an error with the status code and error message.\n*/\nvar logger$1 = getLogger();\nasync function performHttpRequest(url, options) {\n	let body = {};\n	let errorMessage = \"\";\n	let response;\n	logger$1.debug(`[Request] ${options.method} ${url} | Headers: ${JSON.stringify(options.headers)} | Body: ${!(options.body instanceof Uint8Array) && options.body !== void 0 ? options.body : \"[Binary body omitted]\"}`);\n	try {\n		response = await fetch(url, options);\n	} catch (err) {\n		const cause = err?.cause;\n		const causeText = cause ? ` (cause: ${cause.code ?? \"\"} ${cause.message ?? cause})` : \"\";\n		throw new Error(`Network error during fetch: ${err.message}${causeText}`);\n	}\n	const contentType = response.headers.get(\"content-type\") || \"\";\n	const parseBody = async () => {\n		try {\n			if (contentType.includes(\"application/json\") || contentType.includes(\"application/hal+json\")) return await response.json();\n			else if (contentType.includes(\"application/octet-stream\") || contentType.includes(\"application/pdf\")) {\n				const arrayBuffer = await response.arrayBuffer();\n				return new Uint8Array(arrayBuffer);\n			} else return await response.text();\n		} catch (e) {\n			return;\n		}\n	};\n	if (response.ok) {\n		const result = await parseBody();\n		if (result !== void 0) body = result;\n	} else {\n		const errorBody = await parseBody();\n		errorMessage = typeof errorBody === \"string\" ? errorBody : JSON.stringify(errorBody);\n		throw new Error(`HTTP error! status: ${response.status}, message: ${errorMessage}`);\n	}\n	return {\n		status: response.status,\n		statusText: response.statusText,\n		body,\n		bodyUsed: response.bodyUsed,\n		headers: response.headers,\n		ok: response.ok,\n		redirected: response.redirected,\n		type: response.type,\n		url: response.url\n	};\n}\n//#endregion\n//#region ../../helper/webindexlayouter/executeSqlQuery.ts\n/**\n* Führt eine SQL-Abfrage auf der Datenbank einer App aus - wie der\n* Webindex-Designer (z.B. für eigene Dublettenprüfungen):\n* POST /webindexlayouter/api/v1/apps/<app>/sqlResult\n* mit { connectionString: null, sqlQuery }.\n* connectionString null = Standard-Datenbank der App (z.B. die Protokoll-\n* Tabellen CCLogDocuments/CCLogAttributes des Rechnungslesers).\n*\n* @param token - API-Key; leer = Browser-Session.\n* @param app - App-Name, z.B. \"classcon-documentreader\".\n*/\nasync function executeSqlQuery(baseUri, token, app, sqlQuery, connectionString = null) {\n	return await performHttpRequest(`${baseUri}/webindexlayouter/api/v1/apps/${encodeURIComponent(app)}/sqlResult`, {\n		method: \"POST\",\n		headers: {\n			...token ? { Authorization: `Bearer ${token}` } : {},\n			Accept: \"application/json\",\n			\"Content-Type\": \"application/json\"\n		},\n		body: JSON.stringify({\n			connectionString,\n			sqlQuery\n		})\n	});\n}\n//#endregion\n//#region ../../helper/classcon-documentreader/getBatchTasks.ts\n/**\n* Liefert die offenen Stapel des Rechnungslesers\n* (GET /classcon-documentreader/DocumentProcessing/GetBatchTasksNew?id=<subscriptionId>).\n*\n* @param token - API-Key; leer = Browser-Session.\n*/\nasync function getBatchTasks(baseUri, token, subscriptionId) {\n	return await performHttpRequest(`${baseUri}/classcon-documentreader/DocumentProcessing/GetBatchTasksNew?id=${encodeURIComponent(subscriptionId)}`, {\n		method: \"GET\",\n		headers: {\n			...token ? { Authorization: `Bearer ${token}` } : {},\n			Accept: \"application/json\"\n		}\n	});\n}\n//#endregion\n//#region ../../helper/classcon-documentreader/getPdf.ts\n/**\n* Liefert die Dokumentansicht eines Dokuments im Rechnungsleser als HTML\n* (GET /classcon-documentreader/DocumentProcessing/GetPdf?taskID=<taskId>&documentID=<documentNumber>).\n*\n* @param documentId - Nummer des Dokuments im Stapel, z.B. \"00000\".\n* @param token - API-Key; leer = Browser-Session.\n*/\nasync function getPdf(baseUri, token, taskId, documentId) {\n	return await performHttpRequest(`${baseUri}/classcon-documentreader/DocumentProcessing/GetPdf?taskID=${encodeURIComponent(taskId)}&documentID=${encodeURIComponent(documentId)}`, {\n		method: \"GET\",\n		headers: {\n			...token ? { Authorization: `Bearer ${token}` } : {},\n			Accept: \"text/html\"\n		}\n	});\n}\n//#endregion\n//#region ../../helper/classcon-documentreader/getFeatures.ts\n/**\n* Liefert die Features (Kacheln) des Rechnungslesers - analog zu\n* classconorderconfirmations/getFeatures. Die URL eines Features endet auf\n* die Subscription-ID.\n*\n* @param baseUri - The base URI of the API.\n* @param token - Optional bearer token; ohne Token wird die Browser-Session genutzt.\n*/\nasync function getDocumentReaderFeatures(baseUri, token) {\n	return await performHttpRequest(`${baseUri}/classcon-documentreader/getFeatures`, {\n		method: \"GET\",\n		headers: {\n			...token ? { \"Authorization\": `Bearer ${token}` } : {},\n			\"Accept\": \"application/json\",\n			\"Content-Type\": \"application/json\",\n			\"Accept-Language\": \"de-DE\"\n		}\n	});\n}\n//#endregion\n//#region src/scripts/afterExtractionScript.ts\n/**\n* \"Rechnungsleser: AfterExtraction\": wird vom Rechnungsleser nach der\n* Extraktion aufgerufen (Extension Point \"IR_Business_PostExtractionScript\",\n* Typ ScriptingApp, Profil \"PostExtractionScript\" - hinterlegt vom\n* Onboarding-Formular). Bekommt die Attribute des Dokuments als JSON und\n* liefert sie zurück.\n*\n* Sucht im Protokoll des Rechnungslesers (CCLogDocuments/CCLogAttributes, per\n* SQL über den Webindex-Designer) nach Dokumenten mit derselben\n* Lieferantennummer (VENDOR_NUM) UND derselben Rechnungsnummer\n* (InvoiceNumber). Das aktuelle Dokument selbst (DocumentUID) zählt nicht.\n* Bei einer Dublette werden die Attribute IsDuplicate (true) und\n* DuplicateDocumentIds (Ids der früheren Dokumente) gesetzt - im Typ des\n* Attributs im Rechnungsleser (Text-Attribut: \"true\" bzw. kommagetrennte Ids).\n*\n* customerVariables (vom Onboarding-Formular nur beim Neuanlegen gesetzt):\n* apiKey (verschlüsselt). Die Mandanten-Adresse kommt aus dem Header\n* \"x-dv-baseuri\".\n*/\nvar logger = initLogger(LogLevel.INFO);\nvar APP = \"classcon-documentreader\";\nvar VENDOR_FIELD = \"VENDOR_NUM\";\nvar INVOICE_FIELD = \"InvoiceNumber\";\nvar DOCUMENT_ID_FIELD = \"DocumentUID\";\nvar ORDER_FIELD = \"OrderNum\";\nvar VENDOR_DELIVERY_FIELD = \"VendorDeliveryNum\";\nvar VENDOR_DELIVERY_DATE_FIELD = \"VendorDeliveryDate\";\nvar SKONTO_COUNT = 2;\nvar SKONTO_KEYS = {\n	TAGE: \"Tage\",\n	PROZENT: \"Prozent\",\n	BASISBETRAG: \"Basisbetrag\"\n};\nvar DUPLICATE_FLAG_FIELD = \"IsDuplicate\";\nvar DUPLICATE_IDS_FIELD = \"DuplicateDocumentIds\";\nmodule.exports = async (req, res) => {\n	const body = parseBody(req);\n	logger.info(`Eingang: ${JSON.stringify(body)}`);\n	try {\n		const baseUri = req.get(\"x-dv-baseuri\");\n		const apiKey = req.var(\"apiKey\");\n		const current = await findCurrentBatchDocument(baseUri, apiKey, body);\n		if (current?.candidates !== 1) logger.info(`Stapel nicht eindeutig (${current?.candidates ?? 0} Treffer) - keine Werte aus der E-Rechnung.`);\n		else {\n			const metadataText = extractScriptVariable(String((await getPdf(baseUri, apiKey, current.taskId, current.documentNumber)).body ?? \"\"), \"metadataText\");\n			const orderNum = xmlElementText(metadataText ?? \"\", \"PurchaseOrderReference\");\n			if (orderNum) {\n				logger.info(`${ORDER_FIELD}: \"${attribute(body, ORDER_FIELD)}\" -> \"${orderNum}\" (PurchaseOrderReference)`);\n				setAttribute(body, ORDER_FIELD, orderNum);\n			}\n			const vendorDeliveryNum = xmlElementText(metadataText ?? \"\", \"DespatchAdviceReference\");\n			if (vendorDeliveryNum) {\n				logger.info(`${VENDOR_DELIVERY_FIELD}: \"${attribute(body, VENDOR_DELIVERY_FIELD)}\" -> \"${vendorDeliveryNum}\" (DespatchAdviceReference)`);\n				setAttribute(body, VENDOR_DELIVERY_FIELD, vendorDeliveryNum);\n			}\n			const vendorDeliveryDate = germanDate(xmlElementText(metadataText ?? \"\", \"DespatchAdviceDate\"));\n			if (vendorDeliveryDate) {\n				logger.info(`${VENDOR_DELIVERY_DATE_FIELD}: \"${attribute(body, VENDOR_DELIVERY_DATE_FIELD)}\" -> \"${vendorDeliveryDate}\" (DespatchAdviceDate)`);\n				setAttribute(body, VENDOR_DELIVERY_DATE_FIELD, vendorDeliveryDate);\n			}\n			parseSkonto(xmlElementText(metadataText ?? \"\", \"SpecifiedTradePaymentTerms\")).slice(0, SKONTO_COUNT).forEach((entry, index) => {\n				for (const [key, suffix] of Object.entries(SKONTO_KEYS)) {\n					const value = entry[key];\n					if (!value) continue;\n					const field = `Skonto${index + 1}_${suffix}`;\n					logger.info(`${field}: \"${attribute(body, field)}\" -> \"${value}\" (SpecifiedTradePaymentTerms)`);\n					setAttribute(body, field, value);\n				}\n			});\n		}\n	} catch (error) {\n		logger.error(`Werte aus der E-Rechnung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);\n	}\n	try {\n		const vendorNum = attribute(body, VENDOR_FIELD);\n		const invoiceNumber = attribute(body, INVOICE_FIELD);\n		if (!vendorNum || !invoiceNumber) logger.info(`Keine Prüfung: ${VENDOR_FIELD} \"${vendorNum}\" / ${INVOICE_FIELD} \"${invoiceNumber}\" unvollständig.`);\n		else {\n			const duplicates = await findDuplicates(req.get(\"x-dv-baseuri\"), req.var(\"apiKey\"), vendorNum, invoiceNumber, attribute(body, DOCUMENT_ID_FIELD));\n			logger.info(`Lieferant \"${vendorNum}\", Rechnung \"${invoiceNumber}\": ${duplicates.length} Dublette(n) ${JSON.stringify(duplicates)}`);\n			if (duplicates.length > 0) {\n				setAttribute(body, DUPLICATE_FLAG_FIELD, true);\n				setAttribute(body, DUPLICATE_IDS_FIELD, duplicates.map((d) => d.documentId));\n			}\n		}\n	} catch (error) {\n		logger.error(`Dublettenprüfung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);\n	}\n	const response = JSON.stringify(body);\n	logger.info(`Antwort: ${response}`);\n	res.status(200).set(\"Content-Type\", \"application/json\").send(response);\n};\nasync function findDuplicates(baseUri, apiKey, vendorNum, invoiceNumber, currentDocumentId) {\n	const sqlQuery = `\nSELECT\n  doc.DocumentId,\n  aV.Attribute_After AS VendorNum,\n  aI.Attribute_After AS InvoiceNumber\nFROM\n  CCLogDocuments AS doc\n  JOIN CCLogAttributes AS aV ON aV.DocumentID = doc.DocumentID\n    AND aV.Attribute_Name = '${VENDOR_FIELD}'\n    AND aV.Attribute_After = ${sqlString(vendorNum)}\n  JOIN CCLogAttributes AS aI ON aI.DocumentID = doc.DocumentID\n    AND aI.Attribute_Name = '${INVOICE_FIELD}'\n    AND aI.Attribute_After = ${sqlString(invoiceNumber)}${currentDocumentId ? `\nWHERE\n  doc.DocumentID <> ${sqlString(currentDocumentId)}` : \"\"}`;\n	logger.debug(`SQL Query: ${sqlQuery}`);\n	const result = (await executeSqlQuery(baseUri, apiKey, APP, sqlQuery)).body;\n	const headers = (result?.headers ?? []).map((h) => h.toLowerCase());\n	const column = (cells, name) => cells[headers.indexOf(name.toLowerCase())] ?? \"\";\n	return (result?.rows ?? []).map((row) => ({\n		documentId: column(row.cells ?? [], \"DocumentId\"),\n		vendorNum: column(row.cells ?? [], \"VendorNum\"),\n		invoiceNumber: column(row.cells ?? [], \"InvoiceNumber\")\n	}));\n}\nfunction sqlString(value) {\n	return `N'${value.replace(/'/g, \"''\")}'`;\n}\nfunction attribute(body, name) {\n	const key = name.toLowerCase();\n	for (const [field, value] of Object.entries(body)) if (field.toLowerCase() === key && value !== null && typeof value !== \"object\") return String(value).trim();\n	for (const value of Object.values(body)) {\n		if (!Array.isArray(value)) continue;\n		for (const entry of value) if (String(entry?.Name ?? entry?.AttributeName ?? entry?.Id ?? entry?.name ?? \"\").toLowerCase() === key) return String(entry?.Value ?? entry?.value ?? \"\").trim();\n	}\n	return \"\";\n}\nfunction setAttribute(body, name, value) {\n	body[name] = typeof body[name] === \"string\" ? Array.isArray(value) ? value.join(\", \") : String(value) : value;\n}\nfunction parseSkonto(text) {\n	return text.split(/\\r?\\n/).map((line) => line.trim()).filter((line) => line.toUpperCase().startsWith(\"#SKONTO#\")).map((line) => Object.fromEntries(line.split(\"#\").filter((part) => part.includes(\"=\")).map((part) => {\n		const [key, ...rest] = part.split(\"=\");\n		return [key.trim().toUpperCase(), rest.join(\"=\").trim()];\n	})));\n}\nfunction germanDate(value) {\n	const match = /^(\\d{4})-?(\\d{2})-?(\\d{2})/.exec(value);\n	return match ? `${match[3]}.${match[2]}.${match[1]}` : value;\n}\nfunction parseBody(req) {\n	try {\n		const body = req.json?.();\n		return body && typeof body === \"object\" ? body : {};\n	} catch {\n		return {};\n	}\n}\n/**\n* Sucht das aktuelle Dokument in den Stapeln des Rechnungslesers\n* (GetBatchTasksNew, Listen tasksInProgress und tasksIndex): Dateiname\n* (OriginalFileName = displayName) und Ersteller des Stapels\n* (BatchCreator = creator) müssen passen. Passen mehrere, gewinnen Stapel in\n* Verarbeitung vor offenen, danach der jüngste Stapel.\n*/\nasync function findCurrentBatchDocument(baseUri, apiKey, body) {\n	const fileName = attribute(body, \"OriginalFileName\").toLowerCase();\n	const creator = attribute(body, \"BatchCreator\").toLowerCase();\n	if (!fileName || !creator) {\n		logger.info(`Keine Stapelsuche: OriginalFileName \"${fileName}\" / BatchCreator \"${creator}\" unvollständig.`);\n		return;\n	}\n	const subscriptionId = (await getDocumentReaderFeatures(baseUri, apiKey)).body.features?.find((f) => f.url?.includes(APP))?.url?.split(\"/\").pop();\n	if (!subscriptionId) throw new Error(\"Subscription-ID des Rechnungslesers nicht gefunden.\");\n	const result = (await getBatchTasks(baseUri, apiKey, subscriptionId)).body;\n	const candidates = [[\"tasksInProgress\", result?.tasksInProgress], [\"tasksIndex\", result?.tasksIndex]].flatMap(([list, entries]) => (entries ?? []).map((entry) => ({\n		list,\n		entry\n	}))).filter(({ entry }) => entry.batchTask?.creator?.toLowerCase() === creator).flatMap(({ list, entry }) => documentsOf(entry).filter((doc) => doc.displayName?.trim().toLowerCase() === fileName).map((doc) => ({\n		list,\n		task: entry.batchTask,\n		doc\n	}))).sort((a, b) => listRank(a.list) - listRank(b.list) || (b.task.creationTimeStamp ?? 0) - (a.task.creationTimeStamp ?? 0));\n	const match = candidates[0];\n	return match && {\n		list: match.list,\n		subscriptionId: match.task.subscriptionId ?? subscriptionId,\n		processSequenceId: match.task.processSequenceId ?? \"\",\n		taskId: match.task.taskId ?? \"\",\n		documentNumber: match.doc.documentNumber ?? \"\",\n		candidates: candidates.length\n	};\n}\nvar listRank = (list) => list === \"tasksInProgress\" ? 0 : 1;\nfunction documentsOf(entry) {\n	return entry.batchTask?.documentMetaDataList ?? entry.documentModels ?? [];\n}\n/**\n* Liest den Wert einer Variablen aus dem <script> einer HTML-Seite\n* (`var name = \"…\";`, `name: '…'` o.ä.): Zeichenketten in Anführungszeichen\n* werden entschlüsselt, sonst kommt der Rohtext bis zum Zeilenende bzw. \";\"\n* zurück.\n*/\nfunction extractScriptVariable(html, name) {\n	const quoted = new RegExp(String.raw`\\b${name}\\s*[:=]\\s*([\"'` + \"`\" + String.raw`])((?:\\\\[\\s\\S]|(?!\\1)[^\\\\])*)\\1`).exec(html);\n	if (quoted) {\n		const [, quote, raw] = quoted;\n		try {\n			const json = quote === \"\\\"\" ? raw : raw.replace(/\\\\(['`])/g, \"$1\").replace(/\"/g, \"\\\\\\\"\");\n			return JSON.parse(`\"${json}\"`);\n		} catch {\n			return raw;\n		}\n	}\n	return new RegExp(String.raw`\\b${name}\\s*[:=]\\s*([^;\\r\\n]*)`).exec(html)?.[1]?.trim();\n}\n/**\n* Text des ersten XML-Elements mit diesem lokalen Namen - mit beliebigem\n* Namespace-Präfix (<xr:Name>, <ram:Name>, <Name>) und Attributen. Entities\n* (&amp; …) werden aufgelöst; leer = nicht vorhanden.\n*/\nfunction xmlElementText(xml, localName) {\n	const text = xml.includes(\"\\\\u003c\") ? xml.replace(/\\\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16))) : xml;\n	return (new RegExp(String.raw`<(?:[\\w.-]+:)?${localName}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:[\\w.-]+:)?${localName}\\s*>`).exec(text)?.[1] ?? \"\").replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, \"$1\").replace(/&lt;/g, \"<\").replace(/&gt;/g, \">\").replace(/&quot;/g, \"\\\"\").replace(/&apos;/g, \"'\").replace(/&#(\\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&amp;/g, \"&\").trim();\n}\n//#endregion\n\n//# sourceMappingURL=afterExtractionScript.js.map";
+	var afterExtractionScript_default = "//#region ../../helper/utils/logger.ts\nvar LogLevel = /* @__PURE__ */ function(LogLevel) {\n	LogLevel[LogLevel[\"DEBUG\"] = 0] = \"DEBUG\";\n	LogLevel[LogLevel[\"INFO\"] = 1] = \"INFO\";\n	LogLevel[LogLevel[\"WARN\"] = 2] = \"WARN\";\n	LogLevel[LogLevel[\"ERROR\"] = 3] = \"ERROR\";\n	return LogLevel;\n}({});\nvar Logger = class {\n	level;\n	showTimestamp;\n	constructor(options = {}) {\n		this.level = options.level ?? LogLevel.INFO;\n		this.showTimestamp = options.showTimestamp ?? true;\n	}\n	formatMessage(level, message) {\n		const paddedLevel = level.toUpperCase().padEnd(5, \" \");\n		return `${this.showTimestamp ? `[${(/* @__PURE__ */ new Date()).toISOString()}] ` : \"\"}${paddedLevel}: ${message}`;\n	}\n	debug(message, ...args) {\n		if (this.level <= LogLevel.DEBUG) console.debug(this.formatMessage(\"debug\", message), ...args);\n	}\n	info(message, ...args) {\n		if (this.level <= LogLevel.INFO) console.info(this.formatMessage(\"info\", message), ...args);\n	}\n	warn(message, ...args) {\n		if (this.level <= LogLevel.WARN) console.warn(this.formatMessage(\"warn\", message), ...args);\n	}\n	error(message, ...args) {\n		if (this.level <= LogLevel.ERROR) console.error(this.formatMessage(\"error\", message), ...args);\n	}\n	setLevel(newLevel) {\n		this.level = newLevel;\n	}\n};\nvar loggerInstance;\nfunction initLogger(level = LogLevel.INFO, showTimestamp = true) {\n	if (!loggerInstance) loggerInstance = new Logger({\n		level,\n		showTimestamp\n	});\n	return loggerInstance;\n}\nfunction getLogger() {\n	if (!loggerInstance) loggerInstance = new Logger({\n		level: LogLevel.DEBUG,\n		showTimestamp: true\n	});\n	return loggerInstance;\n}\n//#endregion\n//#region ../../helper/performHttpRequest/performHttpRequest.ts\n/**\n* Performs an HTTP request and returns a structured response.\n*\n* @template T - The expected type of the response body.\n* @param {string} url - The URL to which the request is sent.\n* @param {RequestInit} options - The options for the HTTP request, such as method, headers, and body.\n* @returns {Promise<ApiResponse<T>>} A promise that resolves to an `ApiResponse` object containing the response details.\n* @throws {Error} Throws an error if the HTTP response status is not OK (status code outside the range 200-299).\n*\n* The function attempts to parse the response body based on the `Content-Type` header:\n* - If the `Content-Type` includes \"application/json\", it parses the body as JSON.\n* - Otherwise, it parses the body as plain text.\n*\n* If the response is not OK, the function throws an error with the status code and error message.\n*/\nvar logger$1 = getLogger();\nasync function performHttpRequest(url, options) {\n	let body = {};\n	let errorMessage = \"\";\n	let response;\n	logger$1.debug(`[Request] ${options.method} ${url} | Headers: ${JSON.stringify(options.headers)} | Body: ${!(options.body instanceof Uint8Array) && options.body !== void 0 ? options.body : \"[Binary body omitted]\"}`);\n	try {\n		response = await fetch(url, options);\n	} catch (err) {\n		const cause = err?.cause;\n		const causeText = cause ? ` (cause: ${cause.code ?? \"\"} ${cause.message ?? cause})` : \"\";\n		throw new Error(`Network error during fetch: ${err.message}${causeText}`);\n	}\n	const contentType = response.headers.get(\"content-type\") || \"\";\n	const parseBody = async () => {\n		try {\n			if (contentType.includes(\"application/json\") || contentType.includes(\"application/hal+json\")) return await response.json();\n			else if (contentType.includes(\"application/octet-stream\") || contentType.includes(\"application/pdf\")) {\n				const arrayBuffer = await response.arrayBuffer();\n				return new Uint8Array(arrayBuffer);\n			} else return await response.text();\n		} catch (e) {\n			return;\n		}\n	};\n	if (response.ok) {\n		const result = await parseBody();\n		if (result !== void 0) body = result;\n	} else {\n		const errorBody = await parseBody();\n		errorMessage = typeof errorBody === \"string\" ? errorBody : JSON.stringify(errorBody);\n		throw new Error(`HTTP error! status: ${response.status}, message: ${errorMessage}`);\n	}\n	return {\n		status: response.status,\n		statusText: response.statusText,\n		body,\n		bodyUsed: response.bodyUsed,\n		headers: response.headers,\n		ok: response.ok,\n		redirected: response.redirected,\n		type: response.type,\n		url: response.url\n	};\n}\n//#endregion\n//#region ../../helper/webindexlayouter/executeSqlQuery.ts\n/**\n* Führt eine SQL-Abfrage auf der Datenbank einer App aus - wie der\n* Webindex-Designer (z.B. für eigene Dublettenprüfungen):\n* POST /webindexlayouter/api/v1/apps/<app>/sqlResult\n* mit { connectionString: null, sqlQuery }.\n* connectionString null = Standard-Datenbank der App (z.B. die Protokoll-\n* Tabellen CCLogDocuments/CCLogAttributes des Rechnungslesers).\n*\n* @param token - API-Key; leer = Browser-Session.\n* @param app - App-Name, z.B. \"classcon-documentreader\".\n*/\nasync function executeSqlQuery(baseUri, token, app, sqlQuery, connectionString = null) {\n	return await performHttpRequest(`${baseUri}/webindexlayouter/api/v1/apps/${encodeURIComponent(app)}/sqlResult`, {\n		method: \"POST\",\n		headers: {\n			...token ? { Authorization: `Bearer ${token}` } : {},\n			Accept: \"application/json\",\n			\"Content-Type\": \"application/json\"\n		},\n		body: JSON.stringify({\n			connectionString,\n			sqlQuery\n		})\n	});\n}\n//#endregion\n//#region ../../helper/classcon-documentreader/getBatchTasks.ts\n/**\n* Liefert die offenen Stapel des Rechnungslesers\n* (GET /classcon-documentreader/DocumentProcessing/GetBatchTasksNew?id=<subscriptionId>).\n*\n* @param token - API-Key; leer = Browser-Session.\n*/\nasync function getBatchTasks(baseUri, token, subscriptionId) {\n	return await performHttpRequest(`${baseUri}/classcon-documentreader/DocumentProcessing/GetBatchTasksNew?id=${encodeURIComponent(subscriptionId)}`, {\n		method: \"GET\",\n		headers: {\n			...token ? { Authorization: `Bearer ${token}` } : {},\n			Accept: \"application/json\"\n		}\n	});\n}\n//#endregion\n//#region ../../helper/classcon-documentreader/getPdf.ts\n/**\n* Liefert die Dokumentansicht eines Dokuments im Rechnungsleser als HTML\n* (GET /classcon-documentreader/DocumentProcessing/GetPdf?taskID=<taskId>&documentID=<documentNumber>).\n*\n* @param documentId - Nummer des Dokuments im Stapel, z.B. \"00000\".\n* @param token - API-Key; leer = Browser-Session.\n*/\nasync function getPdf(baseUri, token, taskId, documentId) {\n	return await performHttpRequest(`${baseUri}/classcon-documentreader/DocumentProcessing/GetPdf?taskID=${encodeURIComponent(taskId)}&documentID=${encodeURIComponent(documentId)}`, {\n		method: \"GET\",\n		headers: {\n			...token ? { Authorization: `Bearer ${token}` } : {},\n			Accept: \"text/html\"\n		}\n	});\n}\n//#endregion\n//#region ../../helper/classcon-documentreader/getFeatures.ts\n/**\n* Liefert die Features (Kacheln) des Rechnungslesers - analog zu\n* classconorderconfirmations/getFeatures. Die URL eines Features endet auf\n* die Subscription-ID.\n*\n* @param baseUri - The base URI of the API.\n* @param token - Optional bearer token; ohne Token wird die Browser-Session genutzt.\n*/\nasync function getDocumentReaderFeatures(baseUri, token) {\n	return await performHttpRequest(`${baseUri}/classcon-documentreader/getFeatures`, {\n		method: \"GET\",\n		headers: {\n			...token ? { \"Authorization\": `Bearer ${token}` } : {},\n			\"Accept\": \"application/json\",\n			\"Content-Type\": \"application/json\",\n			\"Accept-Language\": \"de-DE\"\n		}\n	});\n}\n//#endregion\n//#region ../../helper/businessObjects/getAllEntriesFromEntity.ts\n/**\n* Retrieves all entries from a specified entity in a paginated API and merges them into a single response.\n*\n* @template T - The type of the response body, extending `GetAllEntriesFromEntity`.\n* \n* @param {string} baseUri - The base URI of the API.\n* @param {string | null} token - The authorization token for the API. Can be `null` if no token is required.\n* @param {string} modelName - The name of the model to query.\n* @param {string} entityPluralName - The plural name of the entity to retrieve entries from.\n* @param {string} [endPointMoreEntries=\"\"] - Optional endpoint to retrieve additional entries. Defaults to an empty string.\n* \n* @returns {Promise<ApiResponse<T>>} A promise that resolves to an `ApiResponse` containing all entries from the entity.\n* \n* @throws {Error} If the HTTP request fails or the response is invalid.\n* \n* @remarks\n* This function handles pagination by following the `@odata.nextLink` property in the response until all entries are retrieved.\n* The final response contains all entries merged into the `value` property of the response body.\n*/\nasync function getAllEntriesFromEntity(baseUri, token, modelName, entityPluralName, endPointMoreEntries = \"\") {\n	const url = endPointMoreEntries || `${baseUri}/businessobjects/custom/${modelName}/${entityPluralName}`;\n	const options = {\n		method: \"GET\",\n		headers: {\n			\"Authorization\": `Bearer ${token}`,\n			\"Accept\": \"application/hal+json\"\n		}\n	};\n	const response = await performHttpRequest(url, options);\n	let allValues = response.body.value ?? [];\n	let nextLink = response.body[\"@odata.nextLink\"];\n	while (nextLink) {\n		const nextResponse = await performHttpRequest(nextLink, options);\n		const nextValues = nextResponse.body.value ?? [];\n		allValues = [...allValues, ...nextValues];\n		nextLink = nextResponse.body[\"@odata.nextLink\"];\n	}\n	return {\n		...response,\n		body: {\n			...response.body,\n			value: allValues\n		}\n	};\n}\n//#endregion\n//#region ../../helper/classcon-documentreader/autoRouting.ts\n/**\n* Dunkelverarbeitung des Rechnungslesers: Regeln je Lieferant (und optional\n* Mandant), wann ein Dokument das Attribut \"AutoRoutingFlag\" = true bekommt -\n* die Weiterleitungsregel \"Dunkelverarbeitung\" leitet es dann ohne Prüfung an\n* den Export weiter.\n*\n* Gespeichert in Business Objects (Modell AUTO_ROUTING_MODEL). Gepflegt im\n* Werkzeug \"Rechnungsleser Dunkelverarbeitung\"\n* (projects/Toolbox_InvoiceReaderAutoRouting), ausgewertet im Skript\n* \"Rechnungsleser: AfterExtraction\" (evaluateAutoRouting). Beide nutzen diese\n* Datei - Änderungen am Bedingungskatalog wirken damit auf Formular UND\n* Auswertung.\n*/\nvar AUTO_ROUTING_ATTRIBUTE = \"AutoRoutingFlag\";\nvar AUTO_ROUTING_MODEL = {\n	name: \"invoiceReaderAutoRouting\",\n	description: \"Rechnungsleser: Regeln für die Dunkelverarbeitung (AutoRoutingFlag)\",\n	rules: {\n		name: \"autoRoutingRule\",\n		pluralName: \"autoRoutingRules\",\n		description: \"Regel je Lieferant (und optional Mandant): wann ein Dokument ohne Prüfung exportiert wird.\",\n		key: {\n			name: \"id\",\n			type: \"string\",\n			description: \"Id der Regel (GUID)\"\n		},\n		properties: [\n			{\n				name: \"vendorNum\",\n				type: \"string\",\n				required: true,\n				indexed: true\n			},\n			{\n				name: \"vendorName\",\n				type: \"string\",\n				required: false,\n				indexed: false\n			},\n			{\n				name: \"companyNum\",\n				type: \"string\",\n				required: false,\n				indexed: true\n			},\n			{\n				name: \"active\",\n				type: \"boolean\",\n				required: false,\n				indexed: false\n			},\n			{\n				name: \"conditions\",\n				type: \"string\",\n				required: false,\n				indexed: false\n			},\n			{\n				name: \"validFrom\",\n				type: \"string\",\n				required: false,\n				indexed: false\n			},\n			{\n				name: \"validTo\",\n				type: \"string\",\n				required: false,\n				indexed: false\n			},\n			{\n				name: \"comment\",\n				type: \"string\",\n				required: false,\n				indexed: false\n			}\n		]\n	},\n	settings: {\n		name: \"autoRoutingSetting\",\n		pluralName: \"autoRoutingSettings\",\n		description: \"Globale Einstellungen der Dunkelverarbeitung (ein Eintrag mit id \\\"global\\\").\",\n		key: {\n			name: \"id\",\n			type: \"string\",\n			description: \"Immer \\\"global\\\"\"\n		},\n		properties: [{\n			name: \"enabled\",\n			type: \"boolean\",\n			required: false,\n			indexed: false\n		}, {\n			name: \"defaultActive\",\n			type: \"boolean\",\n			required: false,\n			indexed: false\n		}]\n	}\n};\nvar AUTO_ROUTING_SETTINGS_ID = \"global\";\nvar DEFAULT_AUTO_ROUTING_SETTINGS = {\n	enabled: true,\n	defaultActive: false\n};\nvar OPERATOR_LABELS = {\n	lte: \"≤\",\n	gte: \"≥\",\n	between: \"zwischen\",\n	eq: \"ist\",\n	neq: \"ist nicht\",\n	is: \"ist\"\n};\n/**\n* Verfügbare Bedingungen. Neue Bedingung: Eintrag hier ergänzen und in\n* conditionValue (unten) den Wert aus dem Dokument liefern.\n*/\nvar CONDITION_FIELDS = [\n	{\n		id: \"grossAmount\",\n		label: \"Bruttobetrag\",\n		type: \"number\",\n		operators: [\n			\"lte\",\n			\"gte\",\n			\"between\"\n		]\n	},\n	{\n		id: \"documentType\",\n		label: \"Dokumenttyp\",\n		type: \"select\",\n		operators: [\"eq\", \"neq\"],\n		options: [\n			{\n				value: \"Invoice\",\n				label: \"Rechnung\"\n			},\n			{\n				value: \"CreditAdvice\",\n				label: \"Gutschrift\"\n			},\n			{\n				value: \"CorrectionOfInvoice\",\n				label: \"Rechnungskorrektur\"\n			}\n		]\n	},\n	{\n		id: \"orderNumPresent\",\n		label: \"Bestellnummer vorhanden\",\n		type: \"boolean\",\n		operators: [\"is\"]\n	},\n	{\n		id: \"eInvoice\",\n		label: \"E-Rechnung\",\n		type: \"boolean\",\n		operators: [\"is\"]\n	}\n];\nfunction conditionField(id) {\n	return CONDITION_FIELDS.find((field) => field.id === id);\n}\n/** Bedingungen aus dem JSON-Text der Regel; ungültiger Inhalt = keine. */\nfunction parseConditions(text) {\n	if (!text?.trim()) return [];\n	try {\n		const list = JSON.parse(text);\n		return Array.isArray(list) ? list.filter((c) => c && typeof c.field === \"string\" && typeof c.op === \"string\").map((c) => ({\n			field: c.field,\n			op: c.op,\n			value: String(c.value ?? \"\"),\n			...c.value2 !== void 0 && c.value2 !== \"\" ? { value2: String(c.value2) } : {}\n		})) : [];\n	} catch {\n		return [];\n	}\n}\n/** Kurztext einer Bedingung, z.B. \"Bruttobetrag ≤ 250,00\". */\nfunction describeCondition(condition) {\n	const field = conditionField(condition.field);\n	if (!field) return `Unbekannte Bedingung „${condition.field}“`;\n	if (field.type === \"boolean\") return `${field.label}: ${condition.value === \"true\" ? \"ja\" : \"nein\"}`;\n	const show = (value) => field.type === \"select\" ? field.options?.find((o) => o.value === value)?.label ?? value ?? \"\" : formatAmount(parseAmount(value ?? \"\"));\n	return condition.op === \"between\" ? `${field.label} zwischen ${show(condition.value)} und ${show(condition.value2)}` : `${field.label} ${OPERATOR_LABELS[condition.op] ?? condition.op} ${show(condition.value)}`;\n}\n/**\n* Betrag aus dem Rechnungsleser bzw. der Eingabe: \"1.234,56\", \"1234.56\",\n* \"1 234,56 EUR\". Das letzte Komma/der letzte Punkt mit 1-2 Nachkommastellen\n* gilt als Dezimaltrenner. NaN = kein Betrag.\n*/\nfunction parseAmount(text) {\n	const cleaned = text.replace(/[^\\d,.\\-]/g, \"\");\n	if (!/\\d/.test(cleaned)) return NaN;\n	const match = /^(.*)[.,](\\d{1,2})$/.exec(cleaned);\n	const normalized = match ? `${match[1].replace(/[.,]/g, \"\")}.${match[2]}` : cleaned.replace(/[.,]/g, \"\");\n	return Number(normalized);\n}\nfunction formatAmount(value) {\n	return Number.isFinite(value) ? value.toLocaleString(\"de-DE\", {\n		minimumFractionDigits: 2,\n		maximumFractionDigits: 2\n	}) : \"?\";\n}\nfunction conditionValue(field, doc) {\n	switch (field) {\n		case \"grossAmount\": {\n			const amount = parseAmount(doc.attribute(\"GrossAmount\"));\n			return Number.isFinite(amount) ? amount : void 0;\n		}\n		case \"documentType\": return doc.attribute(\"DocumentType\") || void 0;\n		case \"orderNumPresent\": return !!(doc.attribute(\"OrderNum\") || doc.attribute(\"OrderNumMulti\"));\n		case \"eInvoice\": return doc.isEInvoice;\n		default: return;\n	}\n}\nfunction conditionMet(condition, doc) {\n	const actual = conditionValue(condition.field, doc);\n	if (actual === void 0) return false;\n	switch (condition.op) {\n		case \"lte\": return typeof actual === \"number\" && actual <= parseAmount(condition.value);\n		case \"gte\": return typeof actual === \"number\" && actual >= parseAmount(condition.value);\n		case \"between\": return typeof actual === \"number\" && actual >= parseAmount(condition.value) && actual <= parseAmount(condition.value2 ?? \"\");\n		case \"eq\": return String(actual).toLowerCase() === condition.value.toLowerCase();\n		case \"neq\": return String(actual).toLowerCase() !== condition.value.toLowerCase();\n		case \"is\": return actual === (condition.value === \"true\");\n		default: return false;\n	}\n}\nfunction sameKey(a, b) {\n	return (a ?? \"\").trim().toLowerCase() === (b ?? \"\").trim().toLowerCase();\n}\nfunction isRuleValidOn(rule, day) {\n	return (!rule.validFrom || rule.validFrom <= day) && (!rule.validTo || day <= rule.validTo);\n}\n/**\n* Passende Regel: gleicher Lieferant, Mandant gleich oder leer (= alle),\n* heute gültig. Eine Regel für genau diesen Mandanten geht vor \"alle\".\n*/\nfunction findAutoRoutingRule(rules, vendorNum, companyNum, day) {\n	const candidates = rules.filter((rule) => sameKey(rule.vendorNum, vendorNum) && (!rule.companyNum?.trim() || sameKey(rule.companyNum, companyNum)) && isRuleValidOn(rule, day));\n	return candidates.find((rule) => rule.companyNum?.trim()) ?? candidates[0];\n}\n/** Ermittelt das AutoRoutingFlag eines Dokuments samt Begründung fürs Log. */\nfunction evaluateAutoRouting(rules, settings, doc) {\n	if (!settings.enabled) return {\n		flag: false,\n		reason: \"Dunkelverarbeitung global ausgeschaltet.\"\n	};\n	if (!doc.vendorNum) return {\n		flag: false,\n		reason: \"Keine Lieferantennummer.\"\n	};\n	const rule = findAutoRoutingRule(rules, doc.vendorNum, doc.companyNum, doc.today);\n	if (!rule) return {\n		flag: settings.defaultActive,\n		reason: `Keine Regel für Lieferant ${doc.vendorNum} - Standard: ${settings.defaultActive ? \"an\" : \"aus\"}.`\n	};\n	if (!rule.active) return {\n		flag: false,\n		reason: `Regel ${rule.id} ist ausgeschaltet.`\n	};\n	const failed = parseConditions(rule.conditions).filter((condition) => !conditionMet(condition, doc));\n	return failed.length === 0 ? {\n		flag: true,\n		reason: `Regel ${rule.id}: alle Bedingungen erfüllt.`\n	} : {\n		flag: false,\n		reason: `Regel ${rule.id}: nicht erfüllt - ${failed.map(describeCondition).join(\"; \")}.`\n	};\n}\n/** Globale Einstellungen aus dem Business-Objects-Eintrag (fehlend = Standard). */\nfunction toAutoRoutingSettings(entry) {\n	return {\n		enabled: typeof entry?.enabled === \"boolean\" ? entry.enabled : DEFAULT_AUTO_ROUTING_SETTINGS.enabled,\n		defaultActive: typeof entry?.defaultActive === \"boolean\" ? entry.defaultActive : DEFAULT_AUTO_ROUTING_SETTINGS.defaultActive\n	};\n}\n//#endregion\n//#region src/scripts/afterExtractionScript.ts\n/**\n* \"Rechnungsleser: AfterExtraction\": wird vom Rechnungsleser nach der\n* Extraktion aufgerufen (Extension Point \"IR_Business_PostExtractionScript\",\n* Typ ScriptingApp, Profil \"PostExtractionScript\" - hinterlegt vom\n* Onboarding-Formular). Bekommt die Attribute des Dokuments als JSON und\n* liefert sie zurück.\n*\n* Sucht im Protokoll des Rechnungslesers (CCLogDocuments/CCLogAttributes, per\n* SQL über den Webindex-Designer) nach Dokumenten mit derselben\n* Lieferantennummer (VENDOR_NUM) UND derselben Rechnungsnummer\n* (InvoiceNumber). Das aktuelle Dokument selbst (DocumentUID) zählt nicht.\n* Bei einer Dublette werden die Attribute IsDuplicate (true) und\n* DuplicateDocumentIds (Ids der früheren Dokumente) gesetzt - im Typ des\n* Attributs im Rechnungsleser (Text-Attribut: \"true\" bzw. kommagetrennte Ids).\n*\n* Dunkelverarbeitung: setzt AutoRoutingFlag nach den Regeln aus Business\n* Objects (Werkzeug \"Rechnungsleser Dunkelverarbeitung\", Auswertung in\n* helper/classcon-documentreader/autoRouting.ts). Fehlt das Modell oder\n* schlägt das Laden fehl, bleibt AutoRoutingFlag unverändert (Wert aus den\n* Stammdaten).\n*\n* customerVariables (vom Onboarding-Formular nur beim Neuanlegen gesetzt):\n* apiKey (verschlüsselt). Die Mandanten-Adresse kommt aus dem Header\n* \"x-dv-baseuri\".\n*/\nvar logger = initLogger(LogLevel.INFO);\nvar APP = \"classcon-documentreader\";\nvar VENDOR_FIELD = \"VENDOR_NUM\";\nvar INVOICE_FIELD = \"InvoiceNumber\";\nvar DOCUMENT_ID_FIELD = \"DocumentUID\";\nvar ORDER_FIELD = \"OrderNum\";\nvar VENDOR_DELIVERY_FIELD = \"VendorDeliveryNum\";\nvar VENDOR_DELIVERY_DATE_FIELD = \"VendorDeliveryDate\";\nvar SKONTO_COUNT = 2;\nvar SKONTO_KEYS = {\n	TAGE: \"Tage\",\n	PROZENT: \"Prozent\",\n	BASISBETRAG: \"Basisbetrag\"\n};\nvar COMPANY_FIELD = \"DEBITOR_NUM\";\nvar DUPLICATE_FLAG_FIELD = \"IsDuplicate\";\nvar DUPLICATE_IDS_FIELD = \"DuplicateDocumentIds\";\nmodule.exports = async (req, res) => {\n	const body = parseBody(req);\n	logger.info(`Eingang: ${JSON.stringify(body)}`);\n	let isEInvoice;\n	try {\n		const baseUri = req.get(\"x-dv-baseuri\");\n		const apiKey = req.var(\"apiKey\");\n		const current = await findCurrentBatchDocument(baseUri, apiKey, body);\n		if (current?.candidates !== 1) logger.info(`Stapel nicht eindeutig (${current?.candidates ?? 0} Treffer) - keine Werte aus der E-Rechnung.`);\n		else {\n			const metadataText = extractScriptVariable(String((await getPdf(baseUri, apiKey, current.taskId, current.documentNumber)).body ?? \"\"), \"metadataText\");\n			isEInvoice = !!metadataText?.trim();\n			const orderNum = xmlElementText(metadataText ?? \"\", \"PurchaseOrderReference\");\n			if (orderNum) {\n				logger.info(`${ORDER_FIELD}: \"${attribute(body, ORDER_FIELD)}\" -> \"${orderNum}\" (PurchaseOrderReference)`);\n				setAttribute(body, ORDER_FIELD, orderNum);\n			}\n			const vendorDeliveryNum = xmlElementText(metadataText ?? \"\", \"DespatchAdviceReference\");\n			if (vendorDeliveryNum) {\n				logger.info(`${VENDOR_DELIVERY_FIELD}: \"${attribute(body, VENDOR_DELIVERY_FIELD)}\" -> \"${vendorDeliveryNum}\" (DespatchAdviceReference)`);\n				setAttribute(body, VENDOR_DELIVERY_FIELD, vendorDeliveryNum);\n			}\n			const vendorDeliveryDate = germanDate(xmlElementText(metadataText ?? \"\", \"DespatchAdviceDate\"));\n			if (vendorDeliveryDate) {\n				logger.info(`${VENDOR_DELIVERY_DATE_FIELD}: \"${attribute(body, VENDOR_DELIVERY_DATE_FIELD)}\" -> \"${vendorDeliveryDate}\" (DespatchAdviceDate)`);\n				setAttribute(body, VENDOR_DELIVERY_DATE_FIELD, vendorDeliveryDate);\n			}\n			parseSkonto(xmlElementText(metadataText ?? \"\", \"SpecifiedTradePaymentTerms\")).slice(0, SKONTO_COUNT).forEach((entry, index) => {\n				for (const [key, suffix] of Object.entries(SKONTO_KEYS)) {\n					const value = entry[key];\n					if (!value) continue;\n					const field = `Skonto${index + 1}_${suffix}`;\n					logger.info(`${field}: \"${attribute(body, field)}\" -> \"${value}\" (SpecifiedTradePaymentTerms)`);\n					setAttribute(body, field, value);\n				}\n			});\n		}\n	} catch (error) {\n		logger.error(`Werte aus der E-Rechnung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);\n	}\n	try {\n		const vendorNum = attribute(body, VENDOR_FIELD);\n		const invoiceNumber = attribute(body, INVOICE_FIELD);\n		if (!vendorNum || !invoiceNumber) logger.info(`Keine Prüfung: ${VENDOR_FIELD} \"${vendorNum}\" / ${INVOICE_FIELD} \"${invoiceNumber}\" unvollständig.`);\n		else {\n			const duplicates = await findDuplicates(req.get(\"x-dv-baseuri\"), req.var(\"apiKey\"), vendorNum, invoiceNumber, attribute(body, DOCUMENT_ID_FIELD));\n			logger.info(`Lieferant \"${vendorNum}\", Rechnung \"${invoiceNumber}\": ${duplicates.length} Dublette(n) ${JSON.stringify(duplicates)}`);\n			if (duplicates.length > 0) {\n				setAttribute(body, DUPLICATE_FLAG_FIELD, true);\n				setAttribute(body, DUPLICATE_IDS_FIELD, duplicates.map((d) => d.documentId));\n			}\n		}\n	} catch (error) {\n		logger.error(`Dublettenprüfung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);\n	}\n	try {\n		await applyAutoRouting(req.get(\"x-dv-baseuri\"), req.var(\"apiKey\"), body, isEInvoice);\n	} catch (error) {\n		logger.error(`Dunkelverarbeitung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);\n	}\n	const response = JSON.stringify(body);\n	logger.info(`Antwort: ${response}`);\n	res.status(200).set(\"Content-Type\", \"application/json\").send(response);\n};\n/**\n* Setzt AutoRoutingFlag nach den Regeln aus Business Objects. Ohne Modell\n* (Dunkelverarbeitung nicht eingerichtet) bleibt das Attribut unverändert.\n*/\nasync function applyAutoRouting(baseUri, apiKey, body, isEInvoice) {\n	const load = async (pluralName) => {\n		try {\n			return (await getAllEntriesFromEntity(baseUri, apiKey, AUTO_ROUTING_MODEL.name, pluralName)).body.value ?? [];\n		} catch (error) {\n			if (String(error).includes(\"status: 404\")) return void 0;\n			throw error;\n		}\n	};\n	const [rules, settingsEntries] = await Promise.all([load(AUTO_ROUTING_MODEL.rules.pluralName), load(AUTO_ROUTING_MODEL.settings.pluralName)]);\n	if (!rules) {\n		logger.info(`Dunkelverarbeitung: Business-Objects-Modell \"${AUTO_ROUTING_MODEL.name}\" fehlt - ${AUTO_ROUTING_ATTRIBUTE} bleibt \"${attribute(body, AUTO_ROUTING_ATTRIBUTE)}\".`);\n		return;\n	}\n	const result = evaluateAutoRouting(rules, toAutoRoutingSettings(settingsEntries?.find((entry) => entry.id === AUTO_ROUTING_SETTINGS_ID)), {\n		vendorNum: attribute(body, VENDOR_FIELD),\n		companyNum: attribute(body, COMPANY_FIELD),\n		attribute: (name) => attribute(body, name),\n		isEInvoice,\n		today: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)\n	});\n	logger.info(`${AUTO_ROUTING_ATTRIBUTE}: \"${attribute(body, AUTO_ROUTING_ATTRIBUTE)}\" -> ${result.flag} (${result.reason})`);\n	setAttribute(body, AUTO_ROUTING_ATTRIBUTE, result.flag);\n}\nasync function findDuplicates(baseUri, apiKey, vendorNum, invoiceNumber, currentDocumentId) {\n	const sqlQuery = `\nSELECT\n  doc.DocumentId,\n  aV.Attribute_After AS VendorNum,\n  aI.Attribute_After AS InvoiceNumber\nFROM\n  CCLogDocuments AS doc\n  JOIN CCLogAttributes AS aV ON aV.DocumentID = doc.DocumentID\n    AND aV.Attribute_Name = '${VENDOR_FIELD}'\n    AND aV.Attribute_After = ${sqlString(vendorNum)}\n  JOIN CCLogAttributes AS aI ON aI.DocumentID = doc.DocumentID\n    AND aI.Attribute_Name = '${INVOICE_FIELD}'\n    AND aI.Attribute_After = ${sqlString(invoiceNumber)}${currentDocumentId ? `\nWHERE\n  doc.DocumentID <> ${sqlString(currentDocumentId)}` : \"\"}`;\n	logger.debug(`SQL Query: ${sqlQuery}`);\n	const result = (await executeSqlQuery(baseUri, apiKey, APP, sqlQuery)).body;\n	const headers = (result?.headers ?? []).map((h) => h.toLowerCase());\n	const column = (cells, name) => cells[headers.indexOf(name.toLowerCase())] ?? \"\";\n	return (result?.rows ?? []).map((row) => ({\n		documentId: column(row.cells ?? [], \"DocumentId\"),\n		vendorNum: column(row.cells ?? [], \"VendorNum\"),\n		invoiceNumber: column(row.cells ?? [], \"InvoiceNumber\")\n	}));\n}\nfunction sqlString(value) {\n	return `N'${value.replace(/'/g, \"''\")}'`;\n}\nfunction attribute(body, name) {\n	const key = name.toLowerCase();\n	for (const [field, value] of Object.entries(body)) if (field.toLowerCase() === key && value !== null && typeof value !== \"object\") return String(value).trim();\n	for (const value of Object.values(body)) {\n		if (!Array.isArray(value)) continue;\n		for (const entry of value) if (String(entry?.Name ?? entry?.AttributeName ?? entry?.Id ?? entry?.name ?? \"\").toLowerCase() === key) return String(entry?.Value ?? entry?.value ?? \"\").trim();\n	}\n	return \"\";\n}\nfunction setAttribute(body, name, value) {\n	body[name] = typeof body[name] === \"string\" ? Array.isArray(value) ? value.join(\", \") : String(value) : value;\n}\nfunction parseSkonto(text) {\n	return text.split(/\\r?\\n/).map((line) => line.trim()).filter((line) => line.toUpperCase().startsWith(\"#SKONTO#\")).map((line) => Object.fromEntries(line.split(\"#\").filter((part) => part.includes(\"=\")).map((part) => {\n		const [key, ...rest] = part.split(\"=\");\n		return [key.trim().toUpperCase(), rest.join(\"=\").trim()];\n	})));\n}\nfunction germanDate(value) {\n	const match = /^(\\d{4})-?(\\d{2})-?(\\d{2})/.exec(value);\n	return match ? `${match[3]}.${match[2]}.${match[1]}` : value;\n}\nfunction parseBody(req) {\n	try {\n		const body = req.json?.();\n		return body && typeof body === \"object\" ? body : {};\n	} catch {\n		return {};\n	}\n}\n/**\n* Sucht das aktuelle Dokument in den Stapeln des Rechnungslesers\n* (GetBatchTasksNew, Listen tasksInProgress und tasksIndex): Dateiname\n* (OriginalFileName = displayName) und Ersteller des Stapels\n* (BatchCreator = creator) müssen passen. Passen mehrere, gewinnen Stapel in\n* Verarbeitung vor offenen, danach der jüngste Stapel.\n*/\nasync function findCurrentBatchDocument(baseUri, apiKey, body) {\n	const fileName = attribute(body, \"OriginalFileName\").toLowerCase();\n	const creator = attribute(body, \"BatchCreator\").toLowerCase();\n	if (!fileName || !creator) {\n		logger.info(`Keine Stapelsuche: OriginalFileName \"${fileName}\" / BatchCreator \"${creator}\" unvollständig.`);\n		return;\n	}\n	const subscriptionId = (await getDocumentReaderFeatures(baseUri, apiKey)).body.features?.find((f) => f.url?.includes(APP))?.url?.split(\"/\").pop();\n	if (!subscriptionId) throw new Error(\"Subscription-ID des Rechnungslesers nicht gefunden.\");\n	const result = (await getBatchTasks(baseUri, apiKey, subscriptionId)).body;\n	const candidates = [[\"tasksInProgress\", result?.tasksInProgress], [\"tasksIndex\", result?.tasksIndex]].flatMap(([list, entries]) => (entries ?? []).map((entry) => ({\n		list,\n		entry\n	}))).filter(({ entry }) => entry.batchTask?.creator?.toLowerCase() === creator).flatMap(({ list, entry }) => documentsOf(entry).filter((doc) => doc.displayName?.trim().toLowerCase() === fileName).map((doc) => ({\n		list,\n		task: entry.batchTask,\n		doc\n	}))).sort((a, b) => listRank(a.list) - listRank(b.list) || (b.task.creationTimeStamp ?? 0) - (a.task.creationTimeStamp ?? 0));\n	const match = candidates[0];\n	return match && {\n		list: match.list,\n		subscriptionId: match.task.subscriptionId ?? subscriptionId,\n		processSequenceId: match.task.processSequenceId ?? \"\",\n		taskId: match.task.taskId ?? \"\",\n		documentNumber: match.doc.documentNumber ?? \"\",\n		candidates: candidates.length\n	};\n}\nvar listRank = (list) => list === \"tasksInProgress\" ? 0 : 1;\nfunction documentsOf(entry) {\n	return entry.batchTask?.documentMetaDataList ?? entry.documentModels ?? [];\n}\n/**\n* Liest den Wert einer Variablen aus dem <script> einer HTML-Seite\n* (`var name = \"…\";`, `name: '…'` o.ä.): Zeichenketten in Anführungszeichen\n* werden entschlüsselt, sonst kommt der Rohtext bis zum Zeilenende bzw. \";\"\n* zurück.\n*/\nfunction extractScriptVariable(html, name) {\n	const quoted = new RegExp(String.raw`\\b${name}\\s*[:=]\\s*([\"'` + \"`\" + String.raw`])((?:\\\\[\\s\\S]|(?!\\1)[^\\\\])*)\\1`).exec(html);\n	if (quoted) {\n		const [, quote, raw] = quoted;\n		try {\n			const json = quote === \"\\\"\" ? raw : raw.replace(/\\\\(['`])/g, \"$1\").replace(/\"/g, \"\\\\\\\"\");\n			return JSON.parse(`\"${json}\"`);\n		} catch {\n			return raw;\n		}\n	}\n	return new RegExp(String.raw`\\b${name}\\s*[:=]\\s*([^;\\r\\n]*)`).exec(html)?.[1]?.trim();\n}\n/**\n* Text des ersten XML-Elements mit diesem lokalen Namen - mit beliebigem\n* Namespace-Präfix (<xr:Name>, <ram:Name>, <Name>) und Attributen. Entities\n* (&amp; …) werden aufgelöst; leer = nicht vorhanden.\n*/\nfunction xmlElementText(xml, localName) {\n	const text = xml.includes(\"\\\\u003c\") ? xml.replace(/\\\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16))) : xml;\n	return (new RegExp(String.raw`<(?:[\\w.-]+:)?${localName}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:[\\w.-]+:)?${localName}\\s*>`).exec(text)?.[1] ?? \"\").replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, \"$1\").replace(/&lt;/g, \"<\").replace(/&gt;/g, \">\").replace(/&quot;/g, \"\\\"\").replace(/&apos;/g, \"'\").replace(/&#(\\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&amp;/g, \"&\").trim();\n}\n//#endregion\n\n//# sourceMappingURL=afterExtractionScript.js.map";
 	//#endregion
 	//#region dist/scripts/dokumenttypAnpassen.js?raw
 	var dokumenttypAnpassen_default = "//#region ../../helper/utils/logger.ts\nvar LogLevel = /* @__PURE__ */ function(LogLevel) {\n	LogLevel[LogLevel[\"DEBUG\"] = 0] = \"DEBUG\";\n	LogLevel[LogLevel[\"INFO\"] = 1] = \"INFO\";\n	LogLevel[LogLevel[\"WARN\"] = 2] = \"WARN\";\n	LogLevel[LogLevel[\"ERROR\"] = 3] = \"ERROR\";\n	return LogLevel;\n}({});\nvar Logger = class {\n	level;\n	showTimestamp;\n	constructor(options = {}) {\n		this.level = options.level ?? LogLevel.INFO;\n		this.showTimestamp = options.showTimestamp ?? true;\n	}\n	formatMessage(level, message) {\n		const paddedLevel = level.toUpperCase().padEnd(5, \" \");\n		return `${this.showTimestamp ? `[${(/* @__PURE__ */ new Date()).toISOString()}] ` : \"\"}${paddedLevel}: ${message}`;\n	}\n	debug(message, ...args) {\n		if (this.level <= LogLevel.DEBUG) console.debug(this.formatMessage(\"debug\", message), ...args);\n	}\n	info(message, ...args) {\n		if (this.level <= LogLevel.INFO) console.info(this.formatMessage(\"info\", message), ...args);\n	}\n	warn(message, ...args) {\n		if (this.level <= LogLevel.WARN) console.warn(this.formatMessage(\"warn\", message), ...args);\n	}\n	error(message, ...args) {\n		if (this.level <= LogLevel.ERROR) console.error(this.formatMessage(\"error\", message), ...args);\n	}\n	setLevel(newLevel) {\n		this.level = newLevel;\n	}\n};\nvar loggerInstance;\nfunction initLogger(level = LogLevel.INFO, showTimestamp = true) {\n	if (!loggerInstance) loggerInstance = new Logger({\n		level,\n		showTimestamp\n	});\n	return loggerInstance;\n}\nfunction getLogger() {\n	if (!loggerInstance) loggerInstance = new Logger({\n		level: LogLevel.DEBUG,\n		showTimestamp: true\n	});\n	return loggerInstance;\n}\n//#endregion\n//#region ../../helper/performHttpRequest/performHttpRequest.ts\n/**\n* Performs an HTTP request and returns a structured response.\n*\n* @template T - The expected type of the response body.\n* @param {string} url - The URL to which the request is sent.\n* @param {RequestInit} options - The options for the HTTP request, such as method, headers, and body.\n* @returns {Promise<ApiResponse<T>>} A promise that resolves to an `ApiResponse` object containing the response details.\n* @throws {Error} Throws an error if the HTTP response status is not OK (status code outside the range 200-299).\n*\n* The function attempts to parse the response body based on the `Content-Type` header:\n* - If the `Content-Type` includes \"application/json\", it parses the body as JSON.\n* - Otherwise, it parses the body as plain text.\n*\n* If the response is not OK, the function throws an error with the status code and error message.\n*/\nvar logger$1 = getLogger();\nasync function performHttpRequest(url, options) {\n	let body = {};\n	let errorMessage = \"\";\n	let response;\n	logger$1.debug(`[Request] ${options.method} ${url} | Headers: ${JSON.stringify(options.headers)} | Body: ${!(options.body instanceof Uint8Array) && options.body !== void 0 ? options.body : \"[Binary body omitted]\"}`);\n	try {\n		response = await fetch(url, options);\n	} catch (err) {\n		const cause = err?.cause;\n		const causeText = cause ? ` (cause: ${cause.code ?? \"\"} ${cause.message ?? cause})` : \"\";\n		throw new Error(`Network error during fetch: ${err.message}${causeText}`);\n	}\n	const contentType = response.headers.get(\"content-type\") || \"\";\n	const parseBody = async () => {\n		try {\n			if (contentType.includes(\"application/json\") || contentType.includes(\"application/hal+json\")) return await response.json();\n			else if (contentType.includes(\"application/octet-stream\") || contentType.includes(\"application/pdf\")) {\n				const arrayBuffer = await response.arrayBuffer();\n				return new Uint8Array(arrayBuffer);\n			} else return await response.text();\n		} catch (e) {\n			return;\n		}\n	};\n	if (response.ok) {\n		const result = await parseBody();\n		if (result !== void 0) body = result;\n	} else {\n		const errorBody = await parseBody();\n		errorMessage = typeof errorBody === \"string\" ? errorBody : JSON.stringify(errorBody);\n		throw new Error(`HTTP error! status: ${response.status}, message: ${errorMessage}`);\n	}\n	return {\n		status: response.status,\n		statusText: response.statusText,\n		body,\n		bodyUsed: response.bodyUsed,\n		headers: response.headers,\n		ok: response.ok,\n		redirected: response.redirected,\n		type: response.type,\n		url: response.url\n	};\n}\n//#endregion\n//#region ../../helper/dms/getRepositories.ts\nasync function getRepositories(baseUri, token) {\n	return await performHttpRequest(`${baseUri}/dms/r`, {\n		method: \"GET\",\n		headers: {\n			\"Authorization\": `Bearer ${token}`,\n			\"Accept\": \"application/json\",\n			\"Content-Type\": \"application/json\"\n		}\n	});\n}\n//#endregion\n//#region ../../helper/dms/getSpecificDocument.ts\n/**\n* Retrieves a specific document from the DMS (Document Management System) using the provided parameters.\n*\n* @param baseUri - The base URI of the DMS API.\n* @param token - The authorization token to access the DMS API.\n* @param repositoryId - The ID of the repository where the document is stored.\n* @param documentId - The ID of the specific document to retrieve.\n* @returns A promise that resolves to an `ApiResponse` containing the `GetSpecificDocument` data.\n*\n* @throws Will throw an error if the HTTP request fails or the response is invalid.\n*/\nasync function getSpecificDocument(baseUri, token, repositoryId, documentId) {\n	return await performHttpRequest(`${baseUri}/dms/r/${repositoryId}/o2/${documentId}`, {\n		method: \"GET\",\n		headers: {\n			\"Authorization\": `Bearer ${token}`,\n			\"Accept\": \"application/json\",\n			\"Content-Type\": \"application/json\"\n		}\n	});\n}\n//#endregion\n//#region ../../helper/dms/getSpecificDocumentWithDefaultSource.ts\n/**\n* Retrieves a specific document from the DMS (Document Management System) using the default source.\n*\n* @param baseUri - The base URI of the DMS API.\n* @param token - The authorization token to access the DMS API.\n* @param repositoryId - The ID of the repository where the document is stored.\n* @param documentId - The ID of the document to retrieve.\n* @returns A promise that resolves to an `ApiResponse` containing the document details.\n*\n* @template GetSpecificDocumentWithDefaultSource - The expected response type for the document details.\n*/\nasync function getSpecificDocumentWithDefaultSource(baseUri, token, repositoryId, documentId) {\n	return await performHttpRequest(`${baseUri}/dms/r/${repositoryId}/o2m/${documentId}?sourceid=/dms/r/${repositoryId}/source`, {\n		method: \"GET\",\n		headers: {\n			\"Authorization\": `Bearer ${token}`,\n			\"Accept\": \"application/json\",\n			\"Content-Type\": \"application/json\"\n		}\n	});\n}\n//#endregion\n//#region ../../helper/dms/getDocumentPropertyValue.ts\n/**\n* Liest den Wert einer DMS-Eigenschaft über ihre GUID (wie im Quell-Mapping\n* bzw. in updateDocument verwendet). /dms/r/<repo>/o2/<id> liefert die\n* Eigenschaften nur mit ihrer internen Nummer (z.B. \"91\") - deshalb zuerst\n* über die Standardquelle (/o2m/<id>?sourceid=…), deren Eigenschaften nach\n* GUID benannt sind; /o2 dient als Rückfall und für die Kategorie.\n*/\nasync function getDocumentPropertyValue(baseUri, token, repositoryId, documentId, propertyGuid) {\n	const debug = [];\n	let value = \"\";\n	try {\n		const withSource = (await getSpecificDocumentWithDefaultSource(baseUri, token, repositoryId, documentId)).body;\n		value = findValue(withSource, propertyGuid);\n		debug.push(`o2m: ${describe(withSource)}`);\n	} catch (error) {\n		debug.push(`o2m fehlgeschlagen: ${error}`);\n	}\n	const document = (await getSpecificDocument(baseUri, token, repositoryId, documentId)).body;\n	if (!value) {\n		value = findValue(document, propertyGuid);\n		debug.push(`o2: ${describe(document)}`);\n	}\n	return {\n		value,\n		category: document.category,\n		debug: debug.join(\" | \")\n	};\n}\nfunction findValue(source, guid) {\n	const key = guid.toLowerCase();\n	const matches = (p) => [\n		p?.key,\n		p?.id,\n		p?.uuid\n	].some((k) => typeof k === \"string\" && k.toLowerCase() === key);\n	const lists = [\n		source?.sourceProperties,\n		source?.objectProperties,\n		source?.multivalueProperties\n	];\n	for (const list of lists) {\n		const property = Array.isArray(list) ? list.find(matches) : void 0;\n		if (!property) continue;\n		const raw = property.value ?? property.displayValue ?? (Array.isArray(property.values) ? property.values[0]?.value ?? property.values[0] : property.values && typeof property.values === \"object\" ? Object.values(property.values)[0] : void 0);\n		const text = raw === void 0 || raw === null ? \"\" : String(raw).trim();\n		if (text) return text;\n	}\n	return \"\";\n}\nfunction describe(source) {\n	const lists = [\n		\"sourceProperties\",\n		\"objectProperties\",\n		\"multivalueProperties\"\n	].filter((name) => Array.isArray(source?.[name])).map((name) => `${name}[${source[name].length}] ${source[name].slice(0, 40).map((p) => `${p.name ?? \"\"}(${p.key ?? p.uuid ?? p.id})=${JSON.stringify(p.value ?? p.values ?? \"\")}`).join(\", \")}`);\n	return lists.length ? lists.join(\"; \") : `Felder: ${Object.keys(source ?? {}).join(\", \")}`;\n}\n//#endregion\n//#region ../../helper/dms/updateDocument.ts\nasync function updateDocument(baseUri, token, repositoryId, documentId, sourceCategory, sourceProperties) {\n	const url = `${baseUri}/dms/r/${repositoryId}/o2m/${documentId}`;\n	const headers = {\n		Authorization: `Bearer ${token}`,\n		Accept: \"application/json\",\n		\"Content-Type\": \"application/json\"\n	};\n	const body = {\n		sourceCategory,\n		sourceId: `/dms/r/${repositoryId}/source`,\n		sourceProperties\n	};\n	return await performHttpRequest(url, {\n		method: \"PUT\",\n		headers,\n		body: JSON.stringify(body)\n	});\n}\n//#endregion\n//#region src/scripts/dokumenttypAnpassen.ts\n/**\n* \"Rechnungsleser: Dokumenttyp anpassen\": der Rechnungsleser übergibt den\n* Dokumenttyp als ERP-Code (siehe src/scripts/preExport.ts: Rechnung 2,\n* Gutschrift 3) - im DMS-Feld fieldDocumentTypeGUID landet daher \"2\" bzw.\n* \"3\". Dieses Skript setzt beim Dokument mit der übergebenen DocId den\n* lesbaren Wert: \"2\" -> \"Rechnung\", \"3\" -> \"Gutschrift\". Andere Werte bleiben\n* unverändert, die Kategorie ebenfalls.\n*\n* Wird vom Onboarding-Formular (src/forms/form.ts) als Process-Studio-Aktion\n* mit dem Eingabeparameter \"docId\" angelegt; der Code wird beim Build als Text\n* ins Formular-Bundle übernommen (\"?raw\"-Import in src/forms/form.ts). Aus\n* Kompatibilität wird auch der Body eines DMS-Webhooks ({ doc: { id } })\n* verstanden.\n*\n* customerVariables (werden vom Formular nur beim Neuanlegen gesetzt):\n* apiKey, fieldDocumentTypeGUID.\n*/\nvar logger = initLogger(LogLevel.INFO);\n/** Name des Eingabeparameters der Aktion. */\nvar DOC_ID_INPUT = \"docId\";\n/** ERP-Code -> Dokumenttyp im DMS. */\nvar DOCUMENT_TYPES = {\n	\"2\": \"Rechnung\",\n	\"3\": \"Gutschrift\"\n};\nmodule.exports = async (req, res) => {\n	try {\n		const body = parseBody(req);\n		const documentId = body?.[DOC_ID_INPUT] ?? body?.DocId ?? body?.doc?.id;\n		if (!documentId) {\n			respond(res, 400, {\n				success: false,\n				message: `Eingabeparameter \"${DOC_ID_INPUT}\" fehlt.`\n			});\n			return;\n		}\n		const baseUri = req.get(\"x-dv-baseuri\");\n		const apiKey = req.var(\"apiKey\");\n		const fieldDocumentType = req.var(\"fieldDocumentTypeGUID\");\n		const repositoryId = (await getRepositories(baseUri, apiKey)).body.repositories[0]?.id;\n		if (!repositoryId) throw new Error(\"Kein DMS-Repository gefunden.\");\n		const document = await getDocumentPropertyValue(baseUri, apiKey, repositoryId, documentId, fieldDocumentType);\n		const current = document.value;\n		const target = DOCUMENT_TYPES[current];\n		if (!target) {\n			const message = `Dokument ${documentId}: Dokumenttyp \"${current}\" - keine Anpassung nötig.`;\n			logger.info(current ? message : `${message} Gelesen: ${document.debug.slice(0, 4e3)}`);\n			respond(res, 200, {\n				success: true,\n				changed: false,\n				documentType: current,\n				message\n			});\n			return;\n		}\n		if (!document.category) throw new Error(`Kategorie von Dokument ${documentId} konnte nicht ermittelt werden.`);\n		await updateDocument(baseUri, apiKey, repositoryId, documentId, document.category, { properties: [{\n			key: fieldDocumentType,\n			values: [target]\n		}] });\n		const message = `Dokument ${documentId}: Dokumenttyp \"${current}\" -> \"${target}\".`;\n		logger.info(message);\n		respond(res, 200, {\n			success: true,\n			changed: true,\n			documentType: target,\n			message\n		});\n	} catch (error) {\n		const message = error instanceof Error ? error.message : String(error);\n		logger.error(`Fehler: ${message}`);\n		respond(res, 500, {\n			success: false,\n			message\n		});\n	}\n};\nfunction parseBody(req) {\n	try {\n		return req.json?.() ?? {};\n	} catch {\n		return {};\n	}\n}\nfunction respond(res, status, body) {\n	res.status(status).set(\"Content-Type\", \"application/json\").send(JSON.stringify(body));\n}\n//#endregion\n\n//# sourceMappingURL=dokumenttypAnpassen.js.map";
@@ -12717,6 +12788,705 @@ createHTML: (html) => {
 			headers,
 			body: body.toString()
 		});
+	}
+	//#endregion
+	//#region ../../helper/classcon-documentreader/documentRouting.ts
+	function documentRoutingUrl(baseUri, subscriptionId) {
+		return `${baseUri}/classcon-documentreader/Configuration/DocumentRouting?subscriptionId=${encodeURIComponent(subscriptionId)}`;
+	}
+	function selectOptions(doc, field) {
+		const options = /* @__PURE__ */ new Map();
+		doc.querySelectorAll("select").forEach((select) => {
+			const key = select.name || select.id;
+			if (!key.endsWith(field) && !key.endsWith(field.replace(".", "_"))) return;
+			select.querySelectorAll("option").forEach((option) => {
+				const value = option.value.trim();
+				if (value && !options.has(value.toLowerCase())) options.set(value.toLowerCase(), {
+					value,
+					text: option.textContent?.trim() ?? ""
+				});
+			});
+		});
+		return [...options.values()];
+	}
+	function parsePage(html) {
+		if (typeof DOMParser === "undefined") throw new Error("Die Dokumentweiterleitung des Rechnungslesers kann nur im Browser gelesen werden.");
+		const doc = new DOMParser().parseFromString(html, "text/html");
+		const rules = /* @__PURE__ */ new Map();
+		doc.querySelectorAll("input[name], select[name], textarea[name]").forEach((element) => {
+			const match = element.name.match(/^DocumentRoutingRules\[([^\]]+)\]\.(.+)$/);
+			if (!match || element.disabled) return;
+			let value;
+			if (element.tagName === "SELECT") {
+				const select = element;
+				value = select.value || select.options[0]?.value || "";
+			} else {
+				const type = element.tagName === "INPUT" ? element.type : "";
+				if ((type === "checkbox" || type === "radio") && !element.checked) return;
+				if (type === "button" || type === "submit" || type === "file") return;
+				value = element.value;
+			}
+			const [, key, field] = match;
+			const rule = rules.get(key) ?? {
+				key,
+				name: "",
+				fields: []
+			};
+			rules.set(key, rule);
+			rule.fields.push([field, value]);
+			if (field === "Name") rule.name = value;
+		});
+		return {
+			rules: [...rules.values()],
+			processSequences: selectOptions(doc, ".DestinationProcessSequence"),
+			nodes: selectOptions(doc, ".DestinationNodeID")
+		};
+	}
+	/**
+	* Liest die Seite "Dokumentweiterleitung" des Rechnungslesers
+	* (GET /classcon-documentreader/Configuration/DocumentRouting?subscriptionId=...).
+	* Nur im Browser (HTML wird per DOMParser gelesen).
+	*/
+	async function getDocumentRouting(baseUri, token, subscriptionId) {
+		const headers = {
+			...token ? { Authorization: `Bearer ${token}` } : {},
+			Accept: "text/html"
+		};
+		const response = await performHttpRequest(documentRoutingUrl(baseUri, subscriptionId), {
+			method: "GET",
+			headers
+		});
+		if (typeof response.body !== "string") throw new Error("Die Dokumentweiterleitung des Rechnungslesers konnte nicht gelesen werden.");
+		return parsePage(response.body);
+	}
+	function ruleFields(rule) {
+		const fields = [
+			["Name", rule.Name],
+			["ManualCreated", String(rule.ManualCreated)],
+			["AutoProcessingRuleDescription", rule.AutoProcessingRuleDescription]
+		];
+		rule.Rules.forEach((condition, index) => {
+			fields.push(["Rules.Index", String(index)], [`Rules[${index}].Subject`, condition.Subject], [`Rules[${index}].Operator`, condition.Operator], [`Rules[${index}].Value`, condition.Value]);
+		});
+		fields.push(["IsRoutingActivated", String(rule.IsRoutingActivated)], ["TaskNameTemplate", rule.TaskNameTemplate], ["UserGroupIDs", rule.UserGroupIDs], ["DestinationProcessSequence", rule.DestinationProcessSequence], ["DestinationNodeID", rule.DestinationNodeID], ["DocumentClass", rule.DocumentClass]);
+		return fields;
+	}
+	/**
+	* Legt die Regel <rule> an bzw. ersetzt die gleichnamige Regel und speichert
+	* die KOMPLETTE Liste (POST als Formulardaten wie die Konfigurationsseite) -
+	* alle übrigen Regeln werden vorher gelesen und unverändert mitgesendet.
+	*/
+	async function saveDocumentRoutingRule(baseUri, token, subscriptionId, rule) {
+		const page = await getDocumentRouting(baseUri, token, subscriptionId);
+		const existing = page.rules.find((r) => r.name === rule.Name);
+		const usedKeys = page.rules.map((r) => Number(r.key)).filter((n) => Number.isInteger(n));
+		const ownKey = existing?.key ?? String(usedKeys.length ? Math.max(...usedKeys) + 1 : 0);
+		const rules = existing ? page.rules.map((r) => r === existing ? {
+			...r,
+			fields: ruleFields(rule)
+		} : r) : [...page.rules, {
+			key: ownKey,
+			name: rule.Name,
+			fields: ruleFields(rule)
+		}];
+		const body = new URLSearchParams();
+		for (const r of rules) {
+			body.append("DocumentRoutingRules.Index", r.key);
+			for (const [field, value] of r.fields) body.append(`DocumentRoutingRules[${r.key}].${field}`, value);
+		}
+		const headers = {
+			...token ? { Authorization: `Bearer ${token}` } : {},
+			Accept: "application/json",
+			"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+		};
+		return await performHttpRequest(documentRoutingUrl(baseUri, subscriptionId), {
+			method: "POST",
+			headers,
+			body: body.toString()
+		});
+	}
+	//#endregion
+	//#region ../../helper/classcon-documentreader/autoRouting.ts
+	var AUTO_ROUTING_MODEL = {
+		name: "invoiceReaderAutoRouting",
+		description: "Rechnungsleser: Regeln für die Dunkelverarbeitung (AutoRoutingFlag)",
+		rules: {
+			name: "autoRoutingRule",
+			pluralName: "autoRoutingRules",
+			description: "Regel je Lieferant (und optional Mandant): wann ein Dokument ohne Prüfung exportiert wird.",
+			key: {
+				name: "id",
+				type: "string",
+				description: "Id der Regel (GUID)"
+			},
+			properties: [
+				{
+					name: "vendorNum",
+					type: "string",
+					required: true,
+					indexed: true
+				},
+				{
+					name: "vendorName",
+					type: "string",
+					required: false,
+					indexed: false
+				},
+				{
+					name: "companyNum",
+					type: "string",
+					required: false,
+					indexed: true
+				},
+				{
+					name: "active",
+					type: "boolean",
+					required: false,
+					indexed: false
+				},
+				{
+					name: "conditions",
+					type: "string",
+					required: false,
+					indexed: false
+				},
+				{
+					name: "validFrom",
+					type: "string",
+					required: false,
+					indexed: false
+				},
+				{
+					name: "validTo",
+					type: "string",
+					required: false,
+					indexed: false
+				},
+				{
+					name: "comment",
+					type: "string",
+					required: false,
+					indexed: false
+				}
+			]
+		},
+		settings: {
+			name: "autoRoutingSetting",
+			pluralName: "autoRoutingSettings",
+			description: "Globale Einstellungen der Dunkelverarbeitung (ein Eintrag mit id \"global\").",
+			key: {
+				name: "id",
+				type: "string",
+				description: "Immer \"global\""
+			},
+			properties: [{
+				name: "enabled",
+				type: "boolean",
+				required: false,
+				indexed: false
+			}, {
+				name: "defaultActive",
+				type: "boolean",
+				required: false,
+				indexed: false
+			}]
+		}
+	};
+	var AUTO_ROUTING_SETTINGS_ID = "global";
+	var DEFAULT_AUTO_ROUTING_SETTINGS = {
+		enabled: true,
+		defaultActive: false
+	};
+	//#endregion
+	//#region ../../helper/businessObjects/customModels.ts
+	function headers(token) {
+		return {
+			...token ? { Authorization: `Bearer ${token}` } : {},
+			Accept: "application/json",
+			"Content-Type": "application/json"
+		};
+	}
+	/** Alle eigenen Modelle (GET /businessobjects/core/models/customModels). */
+	async function getCustomModels(baseUri, token) {
+		return (await performHttpRequest(`${baseUri}/businessobjects/core/models/customModels`, {
+			method: "GET",
+			headers: headers(token)
+		})).body.value ?? [];
+	}
+	/** Entitäten eines Modells (GET …/customModels(<id>)/entityTypes). */
+	async function getCustomEntityTypes(baseUri, token, modelId) {
+		return (await performHttpRequest(`${baseUri}/businessobjects/core/models/customModels(${modelId})/entityTypes`, {
+			method: "GET",
+			headers: headers(token)
+		})).body.value ?? [];
+	}
+	/**
+	* Legt ein eigenes Modell an (POST /businessobjects/core/models/customModels).
+	* Liefert das angelegte Modell (mit id).
+	*/
+	async function createCustomModel(baseUri, token, name, description) {
+		return await performHttpRequest(`${baseUri}/businessobjects/core/models/customModels`, {
+			method: "POST",
+			headers: headers(token),
+			body: JSON.stringify({
+				name,
+				description
+			})
+		});
+	}
+	//#endregion
+	//#region ../../helper/businessObjects/createNewEntityType.ts
+	/**
+	* Creates a new entity type within a specified custom model.
+	*
+	* @template T - The expected response type.
+	* @param baseUri - The base URI of the API.
+	* @param token - The authentication token to be used in the request header.
+	* @param modelId - The unique identifier of the custom model.
+	* @param modelName - The name of the new entity type.
+	* @param modelPluralName - The plural name of the new entity type.
+	* @param modelDescription - A description for the new entity type.
+	* @param keyName - The name of the key property for the entity type.
+	* @param keyType - The type of the key property (from EntityTypePropertyEnums).
+	* @param keyDescription - A description for the key property.
+	* @param properties - An array of additional properties for the entity type.
+	* @returns A promise that resolves to an ApiResponse containing the created entity type.
+	*/
+	async function createNewEntityType(baseUri, token, modelId, modelName, modelPluralName, modelDescription, keyName, keyType, keyDescription, properties) {
+		return await performHttpRequest(`${baseUri}/businessobjects/core/models/customModels(${modelId})/entityTypes`, {
+			method: "POST",
+			headers: {
+				"Authorization": `Bearer ${token}`,
+				"Accept": "application/json",
+				"Content-Type": "application/json"
+			},
+			body: JSON.stringify({
+				name: modelName,
+				pluralName: modelPluralName,
+				description: modelDescription,
+				key: {
+					name: keyName,
+					type: keyType,
+					description: keyDescription
+				},
+				properties
+			})
+		});
+	}
+	//#endregion
+	//#region ../../helper/businessObjects/getAllEntriesFromEntity.ts
+	/**
+	* Retrieves all entries from a specified entity in a paginated API and merges them into a single response.
+	*
+	* @template T - The type of the response body, extending `GetAllEntriesFromEntity`.
+	* 
+	* @param {string} baseUri - The base URI of the API.
+	* @param {string | null} token - The authorization token for the API. Can be `null` if no token is required.
+	* @param {string} modelName - The name of the model to query.
+	* @param {string} entityPluralName - The plural name of the entity to retrieve entries from.
+	* @param {string} [endPointMoreEntries=""] - Optional endpoint to retrieve additional entries. Defaults to an empty string.
+	* 
+	* @returns {Promise<ApiResponse<T>>} A promise that resolves to an `ApiResponse` containing all entries from the entity.
+	* 
+	* @throws {Error} If the HTTP request fails or the response is invalid.
+	* 
+	* @remarks
+	* This function handles pagination by following the `@odata.nextLink` property in the response until all entries are retrieved.
+	* The final response contains all entries merged into the `value` property of the response body.
+	*/
+	async function getAllEntriesFromEntity(baseUri, token, modelName, entityPluralName, endPointMoreEntries = "") {
+		const url = endPointMoreEntries || `${baseUri}/businessobjects/custom/${modelName}/${entityPluralName}`;
+		const options = {
+			method: "GET",
+			headers: {
+				"Authorization": `Bearer ${token}`,
+				"Accept": "application/hal+json"
+			}
+		};
+		const response = await performHttpRequest(url, options);
+		let allValues = response.body.value ?? [];
+		let nextLink = response.body["@odata.nextLink"];
+		while (nextLink) {
+			const nextResponse = await performHttpRequest(nextLink, options);
+			const nextValues = nextResponse.body.value ?? [];
+			allValues = [...allValues, ...nextValues];
+			nextLink = nextResponse.body["@odata.nextLink"];
+		}
+		return {
+			...response,
+			body: {
+				...response.body,
+				value: allValues
+			}
+		};
+	}
+	//#endregion
+	//#region ../../helper/processstudio/getAllForms.ts
+	async function getAllForms(baseUri, token) {
+		return await performHttpRequest(`${baseUri}/processstudio/components/form`, {
+			method: "GET",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				Accept: "application/json",
+				"Content-Type": "application/json"
+			},
+			cache: "no-store"
+		});
+	}
+	//#endregion
+	//#region ../../helper/processstudio/createForm.ts
+	/**
+	* Legt ein neues, noch leeres Formular in Process Studio an (dieselbe Aktion, die
+	* der Formular-Editor beim Klick auf "Neues Formular" ausführt). Das Ergebnis hat
+	* noch keine formioFormDefinition (definition ist ein leerer String) – dafür
+	* anschließend patchForm aus helper/dforms/patchForm.ts verwenden.
+	*
+	* @param baseUri - Die Basis-URI der d.velop-API.
+	* @param token - Das Autorisierungs-Token für den Zugriff auf die API.
+	* @param formId - Die vom Aufrufer vergebene GUID des neuen Formulars.
+	* @param name - Der Name des neuen Formulars.
+	* @param author - Identity-ID des Erstellers/letzten Bearbeiters (optional).
+	* @returns Ein Promise, das zu einer `ApiResponse` mit dem angelegten Formular auflöst.
+	*/
+	async function createForm(baseUri, token, formId, name, author = "") {
+		const url = `${baseUri}/processstudio/components/form`;
+		const headers = {
+			Authorization: `Bearer ${token}`,
+			Accept: "application/json",
+			"Content-Type": "application/json"
+		};
+		const now = (/* @__PURE__ */ new Date()).toISOString();
+		const body = { form: {
+			id: formId,
+			name,
+			author,
+			lastEditor: author,
+			creationDate: now,
+			lastModificationDate: now,
+			definition: "",
+			tags: null,
+			automationIds: null,
+			readOnly: false,
+			versionId: null,
+			_links: {
+				edit: { href: `/dforms/ui/forms/${formId}/edit` },
+				self: { href: `/dforms/api/forms/${formId}` },
+				view: { href: `/dforms/ui/forms/${formId}/view` }
+			}
+		} };
+		return await performHttpRequest(url, {
+			method: "POST",
+			headers,
+			body: JSON.stringify(body)
+		});
+	}
+	//#endregion
+	//#region ../../helper/dforms/getForm.ts
+	/**
+	* Fetches a form by its ID from the d.velop forms API.
+	*
+	* @param baseUri - The base URI of the d.velop API.
+	* @param token - The authorization token to access the API.
+	* @param formId - The unique identifier of the form to retrieve.
+	* @returns A promise that resolves to an `ApiResponse` containing the form data of type `GetForm`.
+	*/
+	async function getForm(baseUri, token, formId) {
+		const response = await performHttpRequest(`${baseUri}/dforms/api/forms/${formId}`, {
+			method: "GET",
+			headers: new Headers({
+				Authorization: `Bearer ${token}`,
+				Accept: "application/json",
+				"Content-Type": "application/json"
+			})
+		});
+		if (typeof response.body.definition === "string") response.body.definition = JSON.parse(response.body.definition);
+		return response;
+	}
+	//#endregion
+	//#region ../../helper/dforms/patchForm.ts
+	/**
+	* Updates an existing form by sending a PATCH request to the specified API endpoint.
+	*
+	* @template T - The type of the response expected from the API.
+	* @param baseUri - The base URI of the API.
+	* @param token - The authorization token to access the API.
+	* @param formId - The unique identifier of the form to be updated.
+	* @param name - The new name for the form.
+	* @param definition - The updated definition of the form.
+	* @returns A promise that resolves to the API response of type `T`.
+	*/
+	async function patchForm(baseUri, token, formId, name, definition) {
+		const url = `${baseUri}/dforms/api/forms/${formId}`;
+		const headers = {
+			Authorization: `Bearer ${token}`,
+			Accept: "application/json",
+			"Content-Type": "application/json"
+		};
+		const body = {
+			id: formId,
+			name,
+			definition: JSON.stringify(definition)
+		};
+		return await performHttpRequest(url, {
+			method: "PUT",
+			headers,
+			body: JSON.stringify(body)
+		});
+	}
+	//#endregion
+	//#region ../Toolbox/src/config/targetForms.ts
+	var targetForms = [
+		{
+			type: "form",
+			id: "businesObjectsEditor",
+			name: "Business Objects Editor",
+			description: "Verwaltet Business-Objects-Modelle und deren Einträge (Anlegen, Bearbeiten, Löschen) direkt im Browser.",
+			formId: "cb60481f-c364-4d82-9965-9ce3f25400e4",
+			bundlePath: "businesObjectsEditor/formBundle.js"
+		},
+		{
+			type: "form",
+			id: "deleteDocuments",
+			name: "Dokumente löschen",
+			description: "Löscht alle Dokumente einer Kategorie oder aller Kategorien aus dem DMS – mit mehrfacher Sicherheitsabfrage, Löschgrund und Protokoll-Download.",
+			formId: "b4b039f1-61db-5faf-b63c-1e5651faf1e7",
+			bundlePath: "deleteDocuments/formBundle.js",
+			formDefinitionPath: "deleteDocuments/form.json"
+		},
+		{
+			type: "form",
+			id: "downloadBatchDocuments",
+			name: "Stapel-Download",
+			description: "Listet alle Stapel der Eingangsverarbeitung (Inbound) auf und lädt alle Dokumente eines Stapels als eine zusammengeführte PDF-Datei herunter.",
+			formId: "393a772c-d2db-5463-9708-488bce1ca6e9",
+			bundlePath: "downloadBatchDocuments/formBundle.js",
+			formDefinitionPath: "downloadBatchDocuments/form.json"
+		},
+		{
+			type: "combined",
+			id: "invoiceFromPurchaseOrder",
+			name: "Rechnung aus Bestellung",
+			description: "Erzeugt aus einer Bestellung in Business Central eine Beispiel-Rechnung als PDF zum Download – z. B. zum Testen des Rechnungslesers.",
+			formId: "b5fe5d8a-13a7-5ff5-81ce-160e029d6621",
+			bundlePath: "invoiceFromPurchaseOrder/formBundle.js",
+			formDefinitionPath: "invoiceFromPurchaseOrder/form.json",
+			scripts: [{
+				name: "Rechnung aus Bestellung",
+				description: "Erzeugt aus einer Bestellung in Business Central eine Beispiel-Rechnung als PDF zum Download – z. B. zum Testen des Rechnungslesers.",
+				bundlePath: "invoiceFromPurchaseOrder/scripts/script.js",
+				customerVariables: [
+					{
+						"key": "erpTenantId",
+						"label": "Entra-Tenant-ID",
+						"encrypted": false,
+						"description": "Microsoft-Entra-Tenant-ID (GUID) des Business-Central-Mandanten."
+					},
+					{
+						"key": "clientId",
+						"label": "Client-ID",
+						"encrypted": false,
+						"description": "Anwendungs-ID (Client-ID) der App-Registrierung mit Zugriff auf die Business-Central-API."
+					},
+					{
+						"key": "clientSecret",
+						"label": "Client-Secret",
+						"encrypted": true,
+						"description": "Geheimer Clientschlüssel der App-Registrierung."
+					}
+				]
+			}]
+		},
+		{
+			type: "form",
+			id: "invoiceReaderAutoRouting",
+			name: "Rechnungsleser Dunkelverarbeitung",
+			description: "Pflegt die Regeln der Dunkelverarbeitung des Rechnungslesers (AutoRoutingFlag) je Lieferant und Mandant - mit Bedingungen wie Bruttobetrag, Dokumenttyp, Bestellnummer oder E-Rechnung. Gespeichert in Business Objects, ausgewertet vom Skript „Rechnungsleser: AfterExtraction“.",
+			formId: "bfcaa441-da67-54c7-8c0d-efca1332bf46",
+			bundlePath: "invoiceReaderAutoRouting/formBundle.js"
+		},
+		{
+			type: "form",
+			id: "invoiceReaderCleanup",
+			name: "Bereinigung Rechnungsleser",
+			description: "Listet die Stapel des Rechnungslesers mit Filter nach Name und Datum und löscht bzw. klassifiziert markierte Stapel erneut.",
+			formId: "507be658-9883-5549-9cc1-3c7398429594",
+			bundlePath: "invoiceReaderCleanup/formBundle.js",
+			formDefinitionPath: "invoiceReaderCleanup/form.json"
+		},
+		{
+			type: "combined",
+			id: "invoiceReaderStatistics",
+			name: "Rechnungsleser-Auswertung",
+			description: "Zeigt, wie viele Rechnungen der Rechnungsleser je Mandant und Monat verarbeitet hat – mit Filter und Export als CSV/Excel.",
+			formId: "cc9d6f5c-b26d-53d9-b61d-a279ee3ad34c",
+			bundlePath: "invoiceReaderStatistics/formBundle.js",
+			formDefinitionPath: "invoiceReaderStatistics/form.json",
+			scripts: [{
+				name: "Rechnungsleser-Auswertung",
+				description: "Zeigt, wie viele Rechnungen der Rechnungsleser je Mandant und Monat verarbeitet hat – mit Filter und Export als CSV/Excel.",
+				bundlePath: "invoiceReaderStatistics/scripts/script.js",
+				customerVariables: [{
+					"key": "baseUri",
+					"label": "Base-URI",
+					"encrypted": false,
+					"description": "Adresse des Mandanten, dessen Rechnungsleser ausgewertet wird.",
+					"default": "{origin}"
+				}, {
+					"key": "apiKey",
+					"label": "API-Key",
+					"encrypted": true,
+					"description": "API-Key eines Benutzers mit Zugriff auf den Webindex-Designer des Rechnungslesers."
+				}]
+			}]
+		},
+		{
+			type: "form",
+			id: "onboardingGevisECMDocumentReader",
+			name: "Onboarding gevis ECM Rechnungsleser",
+			description: "Richtet den Rechnungsleser für gevis ECM in einem Mandanten ein: Stapelprofile, Postfächer, Gruppe, Webindex-Layout, Quell-Mapping sowie Script und Webhook zum Verschieben von Gutschriften.",
+			formId: "15a5e3f1-8025-4501-a811-ff37e3851aee",
+			bundlePath: "onboardingGevisECMDocumentReader/formBundle.js",
+			formDefinitionPath: "onboardingGevisECMDocumentReader/form.json"
+		},
+		{
+			type: "form",
+			id: "orderConfirmationCleanup",
+			name: "Bereinigung Auftragsbestätigungsleser",
+			description: "Listet die Stapel des Auftragsbestätigungslesers mit Filter nach Name und Datum und löscht bzw. klassifiziert markierte Stapel erneut.",
+			formId: "0ccc29d0-ab0d-497b-9246-bfdad0a09e4d",
+			bundlePath: "orderConfirmationCleanup/formBundle.js",
+			formDefinitionPath: "orderConfirmationCleanup/form.json"
+		},
+		{
+			type: "form",
+			id: "processAdministration",
+			name: "Prozess-Administration",
+			description: "Verwaltet die Prozesse in der Systemumgebung.",
+			formId: "2c3e00b6-8e00-4a27-9a9e-2b5dee133ca7",
+			bundlePath: "processAdministration/formBundle.js",
+			formDefinitionPath: "processAdministration/form.json"
+		},
+		{
+			type: "combined",
+			id: "userLicenceCounter",
+			name: "Benutzer-Lizenzübersicht",
+			description: "Zeigt alle Benutzer des Mandanten mit Kennzeichnung als bezahlter, API- oder administrativer Benutzer – mit Filter, Suche und Export als CSV/Excel.",
+			formId: "ce3a0bac-79fd-5080-8742-819797a25f19",
+			bundlePath: "userLicenceCounter/formBundle.js",
+			formDefinitionPath: "userLicenceCounter/form.json",
+			scripts: [{
+				name: "User-Lizenz-Zähler",
+				description: "Zeigt alle Benutzer des Mandanten mit Kennzeichnung als bezahlter, API- oder administrativer Benutzer – mit Filter, Suche und Export als CSV/Excel.",
+				bundlePath: "userLicenceCounter/scripts/script.js",
+				customerVariables: [{
+					"key": "baseUri",
+					"label": "Base-URI",
+					"encrypted": false,
+					"description": "Adresse des Mandanten, gegen den das Script die Benutzer abfragt.",
+					"default": "{origin}"
+				}, {
+					"key": "apiKey",
+					"label": "API-Key",
+					"encrypted": true,
+					"description": "API-Key eines Benutzers mit Leserechten auf die Benutzerverwaltung."
+				}]
+			}]
+		}
+	];
+	//#endregion
+	//#region ../Toolbox/src/config/publicBundleRepo.ts
+	var PUBLIC_BUNDLE_REPO_OWNER = "FOM-MaximilianEllinger";
+	var PUBLIC_BUNDLE_REPO_NAME = "dvelop-codebase-bundles";
+	var PUBLIC_BUNDLE_REPO_BRANCH = "main";
+	var RAW_BASE_URL = `https://raw.githubusercontent.com/${PUBLIC_BUNDLE_REPO_OWNER}/${PUBLIC_BUNDLE_REPO_NAME}`;
+	/** Branch-URL - wird vom CDN bis zu 5 Minuten gecacht (max-age=300), daher nur
+	* noch Fallback, siehe fetchPublishedFile. */
+	var PUBLIC_BUNDLE_REPO_BASE_URL = `${RAW_BASE_URL}/${PUBLIC_BUNDLE_REPO_BRANCH}`;
+	var SHA_CACHE_MS = 3e4;
+	var cachedSha;
+	var pendingSha;
+	async function resolveLatestSha() {
+		if (cachedSha && Date.now() - cachedSha.at < SHA_CACHE_MS) return cachedSha.sha;
+		pendingSha ??= (async () => {
+			try {
+				const response = await fetch(`https://api.github.com/repos/${PUBLIC_BUNDLE_REPO_OWNER}/${PUBLIC_BUNDLE_REPO_NAME}/commits/${PUBLIC_BUNDLE_REPO_BRANCH}`, {
+					headers: { Accept: "application/vnd.github.sha" },
+					cache: "no-store"
+				});
+				const sha = response.ok ? (await response.text()).trim() : "";
+				if (!/^[0-9a-f]{40}$/.test(sha)) {
+					console.warn(`Artefakt-Repo: neuester Commit nicht ermittelbar (Status ${response.status}) - lade über ${PUBLIC_BUNDLE_REPO_BRANCH}.`);
+					return;
+				}
+				cachedSha = {
+					sha,
+					at: Date.now()
+				};
+				return sha;
+			} catch (error) {
+				console.warn(`Artefakt-Repo: neuester Commit nicht ermittelbar (${error}) - lade über ${PUBLIC_BUNDLE_REPO_BRANCH}.`);
+				return;
+			} finally {
+				pendingSha = void 0;
+			}
+		})();
+		return pendingSha;
+	}
+	async function fetchText(url) {
+		return await fetch(url, { cache: "no-store" });
+	}
+	/**
+	* Lädt eine veröffentlichte Datei (Bundle, form.json, Script) aus dem
+	* Artefakt-Repo - bevorzugt über die Commit-URL
+	* (raw.githubusercontent.com/<owner>/<repo>/<sha>/<pfad>): die ist je Commit
+	* eindeutig und damit nie veraltet, anders als die Branch-URL, die das CDN bis
+	* zu 5 Minuten alt ausliefert. Fällt auf die Branch-URL zurück, wenn der SHA
+	* nicht ermittelbar ist (z.B. API-Limit) oder die Datei in diesem Commit noch
+	* fehlt.
+	*
+	* @param path - Pfad innerhalb des Artefakt-Repos, z.B. "toolbox/formBundle.js".
+	*/
+	async function fetchPublishedFile(path) {
+		const content = await tryFetchPublishedFile(path);
+		if (content === void 0) throw new Error(`Bundle konnte nicht geladen werden (Status 404): ${PUBLIC_BUNDLE_REPO_BASE_URL}/${path}`);
+		return content;
+	}
+	async function tryFetchPublishedFile(path) {
+		const sha = await resolveLatestSha();
+		if (sha) {
+			const response = await fetchText(`${RAW_BASE_URL}/${sha}/${path}`);
+			if (response.ok) return await response.text();
+			if (response.status !== 404) throw new Error(`Bundle konnte nicht geladen werden (Status ${response.status}): ${path} @ ${sha}`);
+		}
+		const url = `${PUBLIC_BUNDLE_REPO_BASE_URL}/${path}`;
+		const response = await fetchText(url);
+		if (response.status === 404) return;
+		if (!response.ok) throw new Error(`Bundle konnte nicht geladen werden (Status ${response.status}): ${url}`);
+		return await response.text();
+	}
+	/** Ordner im Artefakt-Repo, z.B. "userLicenceCounter/scripts/script.js" -> "userLicenceCounter". */
+	function publishedFolderOf(bundlePath) {
+		return bundlePath.split("/")[0];
+	}
+	/** Veröffentlichter Versionsstand des Ordners, undefined wenn (noch) keine version.json existiert. */
+	async function fetchPublishedVersion(folder) {
+		const content = await tryFetchPublishedFile(`${folder}/version.json`);
+		if (content === void 0) return;
+		const version = JSON.parse(content).version;
+		return typeof version === "number" ? version : void 0;
+	}
+	var VERSION_MARKER_PATTERN = /VERSION_COUNTER\s*=\s*(\d+)/;
+	function versionMarker(version) {
+		return `VERSION_COUNTER = ${version}`;
+	}
+	/** Setzt den Versions-Marker vor den Bundle-Inhalt (ohne bekannte Version unverändert). */
+	function withVersionMarker(content, version) {
+		return version === void 0 ? content : `/* ${versionMarker(version)} */\n${content}`;
+	}
+	/** Liest den Versions-Marker (siehe VERSION_MARKER_PATTERN) aus installiertem Inhalt. */
+	function parseVersionMarker(content) {
+		const match = content?.match(VERSION_MARKER_PATTERN);
+		return match ? parseInt(match[1], 10) : void 0;
 	}
 	//#endregion
 	//#region src/forms/steps.ts
@@ -13487,6 +14257,73 @@ createHTML: (html) => {
 			}
 		};
 	}
+	var ROUTING_RULE = {
+		Name: "Dunkelverarbeitung",
+		ManualCreated: false,
+		AutoProcessingRuleDescription: "",
+		Rules: [{
+			Subject: "AutoRoutingFlag",
+			Operator: "Equals",
+			Value: "true"
+		}],
+		IsRoutingActivated: true,
+		TaskNameTemplate: "",
+		UserGroupIDs: "",
+		DestinationProcessSequence: "0189e289-edcc-48ae-974e-3edde2029063",
+		DestinationNodeID: "a00d7676-72e9-4f2d-9a49-3b0c28ef0bad",
+		DocumentClass: ""
+	};
+	function routingTargetCheck(options, id) {
+		if (options.length === 0) return void 0;
+		return options.find((option) => option.value.toLowerCase() === id.toLowerCase()) ?? false;
+	}
+	function verifyRoutingTarget(page) {
+		const targets = [{
+			label: "Ziel-Prozess",
+			id: ROUTING_RULE.DestinationProcessSequence,
+			options: page.processSequences
+		}, {
+			label: "Ziel-Knoten",
+			id: ROUTING_RULE.DestinationNodeID,
+			options: page.nodes
+		}];
+		const unverified = [];
+		const found = [];
+		for (const target of targets) {
+			const result = routingTargetCheck(target.options, target.id);
+			if (result === false) {
+				const available = target.options.map((o) => `${o.text || "?"} (${o.value})`).join(", ");
+				throw new Error(`${target.label} ${target.id} gibt es in diesem Mandanten nicht - verfügbar: ${available}. Bitte die Id in ROUTING_RULE (steps.ts) prüfen.`);
+			}
+			if (result) found.push(`${target.label} „${result.text || result.value}“`);
+			else unverified.push(`${target.label} ${target.id}`);
+		}
+		return {
+			note: unverified.length ? ` Nicht prüfbar (Auswahlliste fehlt): ${unverified.join(", ")}.` : ` ${found.join(", ")} geprüft.`,
+			unverified
+		};
+	}
+	function routingFieldValue(page, name, field) {
+		return page.rules.find((r) => r.name === name)?.fields.find(([f]) => f === field)?.[1];
+	}
+	var AUTO_ROUTING_ENTITIES = [AUTO_ROUTING_MODEL.rules, AUTO_ROUTING_MODEL.settings];
+	async function findAutoRoutingModel(apiKey) {
+		const model = (await getCustomModels(BASE_URI$1, apiKey)).find((m) => m.name === AUTO_ROUTING_MODEL.name);
+		if (!model?.id) return {
+			model: void 0,
+			missingEntities: AUTO_ROUTING_ENTITIES
+		};
+		const existing = await getCustomEntityTypes(BASE_URI$1, apiKey, model.id);
+		return {
+			model,
+			missingEntities: AUTO_ROUTING_ENTITIES.filter((entity) => !existing.some((e) => e.pluralName === entity.pluralName))
+		};
+	}
+	var AUTO_ROUTING_TOOL = (() => {
+		const tool = targetForms.find((t) => t.id === "invoiceReaderAutoRouting");
+		if (!tool || tool.type === "script") throw new Error("Werkzeug „invoiceReaderAutoRouting“ fehlt in Toolbox/src/config/targetForms.ts - bitte die Toolbox bauen (generateTargetForms).");
+		return tool;
+	})();
 	var steps = [
 		{
 			id: "targetGroup",
@@ -13655,19 +14492,6 @@ createHTML: (html) => {
 			}
 		},
 		{
-			id: "eventbridgeHook",
-			title: "Eventbridge: DMS-Ereignis aktivieren",
-			description: "Aktiviert das DMS-Ereignis „dmspostimport“ in der Eventbridge. Beliebig wiederholbar.",
-			async check(apiKey) {
-				const event = (await getEventbridgeConfig(BASE_URI$1, apiKey)).events?.find((e) => e.id === "dmspostimport");
-				return event?.enabled ? done("„dmspostimport“ ist aktiv.") : missing(event ? "„dmspostimport“ ist deaktiviert." : "„dmspostimport“ ist nicht eingerichtet.");
-			},
-			async run(apiKey) {
-				await setDmspostimport(BASE_URI$1, apiKey, true);
-				return "„dmspostimport“ aktiviert.";
-			}
-		},
-		{
 			id: "eventbridgeSync",
 			title: "Eventbridge synchronisieren",
 			description: "Synchronisiert die Eventbridge mit dem DMS-Repository - dabei wird der Webhook für „dmspostimport“ im DMS angelegt. Wird pauschal ausgeführt, beliebig wiederholbar.",
@@ -13680,6 +14504,19 @@ createHTML: (html) => {
 			async run(apiKey) {
 				await synchronizeEventbride(BASE_URI$1, apiKey, await getRepositoryId(apiKey));
 				return "Synchronisierung ausgeführt.";
+			}
+		},
+		{
+			id: "eventbridgeHook",
+			title: "Eventbridge: DMS-Ereignis aktivieren",
+			description: "Aktiviert das DMS-Ereignis „dmspostimport“ in der Eventbridge. Beliebig wiederholbar.",
+			async check(apiKey) {
+				const event = (await getEventbridgeConfig(BASE_URI$1, apiKey)).events?.find((e) => e.id === "dmspostimport");
+				return event?.enabled ? done("„dmspostimport“ ist aktiv.") : missing(event ? "„dmspostimport“ ist deaktiviert." : "„dmspostimport“ ist nicht eingerichtet.");
+			},
+			async run(apiKey) {
+				await setDmspostimport(BASE_URI$1, apiKey, true);
+				return "„dmspostimport“ aktiviert.";
 			}
 		},
 		{
@@ -13711,6 +14548,112 @@ createHTML: (html) => {
 			async run(apiKey) {
 				await setDocumentProcessingConfiguration(BASE_URI$1, apiKey, await findDocumentReaderSubscriptionId(apiKey), "DuplicateCheck", false);
 				return "Dublettenprüfung ausgeschaltet.";
+			}
+		},
+		{
+			id: "documentRouting",
+			title: `Dokumentweiterleitung „${ROUTING_RULE.Name}“`,
+			description: `Legt im Rechnungsleser die Weiterleitungsregel „${ROUTING_RULE.Name}“ an (AutoRoutingFlag = true → Export ohne Prüfung) bzw. setzt eine gleichnamige Regel auf die Vorlage zurück. Ziel-Prozess und -Knoten werden vorher gegen die Auswahllisten des Mandanten geprüft, alle übrigen Regeln bleiben unverändert.`,
+			async check(apiKey) {
+				const page = await getDocumentRouting(BASE_URI$1, apiKey, await findDocumentReaderSubscriptionId(apiKey));
+				const { note } = verifyRoutingTarget(page);
+				if (!page.rules.some((r) => r.name === ROUTING_RULE.Name)) return missing(`Regel fehlt.${note}`);
+				return routingFieldValue(page, ROUTING_RULE.Name, "DestinationProcessSequence")?.toLowerCase() === ROUTING_RULE.DestinationProcessSequence && routingFieldValue(page, ROUTING_RULE.Name, "DestinationNodeID")?.toLowerCase() === ROUTING_RULE.DestinationNodeID && routingFieldValue(page, ROUTING_RULE.Name, "IsRoutingActivated") === "true" ? done(`Eingerichtet.${note}`) : exists(`Abweichend eingerichtet - wird aktualisiert.${note}`);
+			},
+			async beforeRun(apiKey) {
+				const { unverified } = verifyRoutingTarget(await getDocumentRouting(BASE_URI$1, apiKey, await findDocumentReaderSubscriptionId(apiKey)));
+				if (unverified.length === 0) return true;
+				return confirmWarning("Ziel nicht prüfbar", `Die Seite „Dokumentweiterleitung“ liefert keine Auswahlliste für <ul style="text-align:left;font-size:0.85em;margin-top:8px">${unverified.map((u) => `<li>${escapeHtml(u)}</li>`).join("")}</ul>
+         Die Regel wird mit diesen Ids aus der Vorlage gespeichert - bitte danach in der Dokumentweiterleitung kontrollieren.`, "Trotzdem speichern");
+			},
+			async run(apiKey) {
+				const subscriptionId = await findDocumentReaderSubscriptionId(apiKey);
+				const page = await getDocumentRouting(BASE_URI$1, apiKey, subscriptionId);
+				verifyRoutingTarget(page);
+				const existed = page.rules.some((r) => r.name === ROUTING_RULE.Name);
+				await saveDocumentRoutingRule(BASE_URI$1, apiKey, subscriptionId, ROUTING_RULE);
+				return existed ? "Regel aktualisiert." : "Regel angelegt.";
+			}
+		},
+		{
+			id: "autoRoutingModel",
+			title: "Dunkelverarbeitung: Business Objects",
+			description: `Legt das Business-Objects-Modell „${AUTO_ROUTING_MODEL.name}“ mit den Entitäten „${AUTO_ROUTING_MODEL.rules.pluralName}“ (Regeln je Lieferant) und „${AUTO_ROUTING_MODEL.settings.pluralName}“ (globale Einstellungen) an. Vorhandenes bleibt unverändert, fehlende Entitäten werden ergänzt.`,
+			async check(apiKey) {
+				const { model, missingEntities } = await findAutoRoutingModel(apiKey);
+				if (!model) return missing("Modell fehlt.");
+				return missingEntities.length ? missing(`Entität(en) fehlen: ${missingEntities.map((e) => e.pluralName).join(", ")}.`) : done(`Vorhanden${model.state ? ` (Status: ${model.state})` : ""}.`);
+			},
+			async run(apiKey) {
+				let { model, missingEntities } = await findAutoRoutingModel(apiKey);
+				const created = [];
+				if (!model) {
+					model = (await createCustomModel(BASE_URI$1, apiKey, AUTO_ROUTING_MODEL.name, AUTO_ROUTING_MODEL.description)).body;
+					if (!model?.id) model = (await getCustomModels(BASE_URI$1, apiKey)).find((m) => m.name === AUTO_ROUTING_MODEL.name);
+					if (!model?.id) throw new Error(`Modell „${AUTO_ROUTING_MODEL.name}“ konnte nicht angelegt werden (keine Id).`);
+					created.push("Modell");
+				}
+				for (const entity of missingEntities) {
+					await createNewEntityType(BASE_URI$1, apiKey, model.id, entity.name, entity.pluralName, entity.description, entity.key.name, entity.key.type, entity.key.description, entity.properties.map((p) => ({
+						...p,
+						type: p.type
+					})));
+					created.push(`Entität „${entity.pluralName}“`);
+				}
+				let settingsNote = "";
+				try {
+					if (!((await getAllEntriesFromEntity(BASE_URI$1, apiKey, AUTO_ROUTING_MODEL.name, AUTO_ROUTING_MODEL.settings.pluralName)).body.value ?? []).some((entry) => entry.id === "global")) {
+						await performHttpRequest(`${BASE_URI$1}/businessobjects/custom/${AUTO_ROUTING_MODEL.name}/${AUTO_ROUTING_MODEL.settings.pluralName}`, {
+							method: "POST",
+							headers: {
+								Authorization: `Bearer ${apiKey}`,
+								Accept: "application/json",
+								"Content-Type": "application/json"
+							},
+							body: JSON.stringify({
+								id: AUTO_ROUTING_SETTINGS_ID,
+								...DEFAULT_AUTO_ROUTING_SETTINGS
+							})
+						});
+						created.push("globale Einstellungen");
+					}
+				} catch (error) {
+					settingsNote = ` Globale Einstellungen nicht angelegt (${getErrorMessage(error)}) - prüfen, ob das Modell in Business Objects veröffentlicht ist.`;
+				}
+				return (created.length ? `Angelegt: ${created.join(", ")}.` : "Bereits vollständig vorhanden.") + settingsNote;
+			}
+		},
+		{
+			id: "autoRoutingForm",
+			title: `Werkzeug „${AUTO_ROUTING_TOOL.name}“`,
+			description: "Legt das Formular zum Pflegen der Dunkelverarbeitungs-Regeln an bzw. aktualisiert es auf die veröffentlichte Version (wie die Toolbox). Ausgewertet werden die Regeln vom Skript AfterExtraction.",
+			async check(apiKey) {
+				const forms = (await getAllForms(BASE_URI$1, apiKey)).body.forms ?? [];
+				const remote = await fetchPublishedVersion(publishedFolderOf(AUTO_ROUTING_TOOL.bundlePath));
+				if (!forms.some((f) => f.id === AUTO_ROUTING_TOOL.formId)) return missing(remote === void 0 ? "Formular fehlt - noch nicht veröffentlicht." : "Formular fehlt.");
+				const installed = parseVersionMarker((await getForm(BASE_URI$1, apiKey, AUTO_ROUTING_TOOL.formId)).body.definition.customJs);
+				if (remote !== void 0 && (installed === void 0 || installed < remote)) return exists(`Version ${installed ?? "?"} - wird auf Version ${remote} aktualisiert.`);
+				return done(`Version ${installed ?? "?"} - aktuell.`);
+			},
+			async run(apiKey) {
+				const bundlePath = AUTO_ROUTING_TOOL.bundlePath;
+				const [bundle, version] = await Promise.all([fetchPublishedFile(bundlePath).catch((error) => {
+					throw new Error(`Das Werkzeug ist noch nicht veröffentlicht (erst nach einem Push auf main verfügbar): ${getErrorMessage(error)}`);
+				}), fetchPublishedVersion(publishedFolderOf(bundlePath))]);
+				const existed = ((await getAllForms(BASE_URI$1, apiKey)).body.forms ?? []).some((f) => f.id === AUTO_ROUTING_TOOL.formId);
+				const current = existed ? (await getForm(BASE_URI$1, apiKey, AUTO_ROUTING_TOOL.formId)).body.definition : void 0;
+				if (!existed) await createForm(BASE_URI$1, apiKey, AUTO_ROUTING_TOOL.formId, AUTO_ROUTING_TOOL.name);
+				const definition = {
+					formioFormDefinition: current?.formioFormDefinition ?? {
+						display: "form",
+						components: []
+					},
+					customCss: current?.customCss ?? "",
+					dvfDefVersion: "1.0",
+					customJs: withVersionMarker(bundle, version)
+				};
+				await patchForm(BASE_URI$1, apiKey, AUTO_ROUTING_TOOL.formId, AUTO_ROUTING_TOOL.name, definition);
+				return `${existed ? "Aktualisiert" : "Angelegt"} (Version ${version ?? "?"}).`;
 			}
 		},
 		{
