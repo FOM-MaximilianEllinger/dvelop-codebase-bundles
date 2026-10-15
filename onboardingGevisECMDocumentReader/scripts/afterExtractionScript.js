@@ -333,19 +333,11 @@ var AUTO_ROUTING_MODEL = {
 			type: "boolean",
 			required: false,
 			indexed: false
-		}, {
-			name: "defaultActive",
-			type: "boolean",
-			required: false,
-			indexed: false
 		}]
 	}
 };
 var AUTO_ROUTING_SETTINGS_ID = "global";
-var DEFAULT_AUTO_ROUTING_SETTINGS = {
-	enabled: true,
-	defaultActive: false
-};
+var DEFAULT_AUTO_ROUTING_SETTINGS = { enabled: true };
 var OPERATOR_LABELS = {
 	lte: "≤",
 	gte: "≥",
@@ -497,8 +489,8 @@ function evaluateAutoRouting(rules, settings, doc) {
 	};
 	const rule = findAutoRoutingRule(rules, doc.vendorNum, doc.companyNum, doc.today);
 	if (!rule) return {
-		flag: settings.defaultActive,
-		reason: `Keine Regel für Lieferant ${doc.vendorNum} - Standard: ${settings.defaultActive ? "an" : "aus"}.`
+		flag: false,
+		reason: `Keine Regel für Lieferant ${doc.vendorNum}.`
 	};
 	if (!rule.active) return {
 		flag: false,
@@ -515,10 +507,7 @@ function evaluateAutoRouting(rules, settings, doc) {
 }
 /** Globale Einstellungen aus dem Business-Objects-Eintrag (fehlend = Standard). */
 function toAutoRoutingSettings(entry) {
-	return {
-		enabled: typeof entry?.enabled === "boolean" ? entry.enabled : DEFAULT_AUTO_ROUTING_SETTINGS.enabled,
-		defaultActive: typeof entry?.defaultActive === "boolean" ? entry.defaultActive : DEFAULT_AUTO_ROUTING_SETTINGS.defaultActive
-	};
+	return { enabled: typeof entry?.enabled === "boolean" ? entry.enabled : DEFAULT_AUTO_ROUTING_SETTINGS.enabled };
 }
 //#endregion
 //#region src/scripts/afterExtractionScript.ts

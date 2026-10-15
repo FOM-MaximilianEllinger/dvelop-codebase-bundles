@@ -4977,19 +4977,11 @@ createHTML: (html) => {
 				type: "boolean",
 				required: false,
 				indexed: false
-			}, {
-				name: "defaultActive",
-				type: "boolean",
-				required: false,
-				indexed: false
 			}]
 		}
 	};
 	var AUTO_ROUTING_SETTINGS_ID = "global";
-	var DEFAULT_AUTO_ROUTING_SETTINGS = {
-		enabled: true,
-		defaultActive: false
-	};
+	var DEFAULT_AUTO_ROUTING_SETTINGS = { enabled: true };
 	var OPERATOR_LABELS = {
 		lte: "≤",
 		gte: "≥",
@@ -5102,10 +5094,7 @@ createHTML: (html) => {
 	}
 	/** Globale Einstellungen aus dem Business-Objects-Eintrag (fehlend = Standard). */
 	function toAutoRoutingSettings(entry) {
-		return {
-			enabled: typeof entry?.enabled === "boolean" ? entry.enabled : DEFAULT_AUTO_ROUTING_SETTINGS.enabled,
-			defaultActive: typeof entry?.defaultActive === "boolean" ? entry.defaultActive : DEFAULT_AUTO_ROUTING_SETTINGS.defaultActive
-		};
+		return { enabled: typeof entry?.enabled === "boolean" ? entry.enabled : DEFAULT_AUTO_ROUTING_SETTINGS.enabled };
 	}
 	//#endregion
 	//#region src/forms/App.svelte
@@ -5127,24 +5116,24 @@ createHTML: (html) => {
 	var root_9 = /* @__PURE__ */ from_html(`<div class="btn-group btn-group-sm" role="group" aria-label="Wert"><button type="button">ja</button> <button type="button">nein</button></div>`);
 	var root_10 = /* @__PURE__ */ from_html(`<div class="ar-condition svelte-1jio28y"><select class="form-select form-select-sm svelte-1jio28y" aria-label="Feld"><!><!></select> <!> <!> <button type="button" class="btn btn-sm btn-link text-danger ms-auto" title="Bedingung entfernen">✕</button></div>`);
 	var root_11 = /* @__PURE__ */ from_html(`<div class="ar-details svelte-1jio28y"><!> <div class="row g-2 mb-3"><div class="col-sm-3"><label class="form-label small mb-1">Kreditor-Nr.</label> <input class="form-control form-control-sm" placeholder="z.B. 70001"/></div> <div class="col-sm-5"><label class="form-label small mb-1">Name</label> <input class="form-control form-control-sm" placeholder="nur zur Anzeige"/></div> <div class="col-sm-4"><label class="form-label small mb-1">Mandant</label> <input class="form-control form-control-sm" placeholder="leer = alle Mandanten"/></div></div> <div class="ar-conditions mb-3 svelte-1jio28y"><div class="small fw-semibold mb-2"><!></div> <!> <button type="button" class="btn btn-sm btn-outline-primary mt-1">+ Bedingung</button></div> <div class="row g-2 align-items-end"><div class="col-sm-3"><label class="form-label small mb-1">Gültig ab</label> <input type="date" class="form-control form-control-sm"/></div> <div class="col-sm-3"><label class="form-label small mb-1">Gültig bis</label> <input type="date" class="form-control form-control-sm"/></div> <div class="col-sm-6"><label class="form-label small mb-1">Bemerkung</label> <input class="form-control form-control-sm"/></div></div> <div class="mt-3 d-flex gap-2"><button type="button" class="btn btn-sm btn-outline-secondary">Für weiteren Mandanten kopieren</button></div></div>`);
-	var root_12 = /* @__PURE__ */ from_html(`<div class="d-flex gap-4 flex-wrap"><div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" role="switch" id="ar-enabled"/> <label class="form-check-label" for="ar-enabled">Dunkelverarbeitung global</label></div> <div class="form-check form-switch mb-0" title="Gilt für Lieferanten ohne eigene Regel"><input class="form-check-input" type="checkbox" role="switch" id="ar-default"/> <label class="form-check-label" for="ar-default">Lieferanten ohne Regel dunkel verarbeiten</label></div></div>`);
+	var root_12 = /* @__PURE__ */ from_html(`<div class="form-check form-switch mb-0 ar-master"><input class="form-check-input" type="checkbox" role="switch" id="ar-enabled" aria-describedby="ar-enabled-help"/> <label class="form-check-label fw-semibold" for="ar-enabled"> </label> <div id="ar-enabled-help" class="small text-muted"><!></div></div>`);
 	var root_13 = /* @__PURE__ */ from_html(`<div class="ar-empty svelte-1jio28y"><div class="spinner-border spinner-border-sm me-2"></div>Lade Regeln…</div>`);
 	var root_14 = /* @__PURE__ */ from_html(`<div class="ar-empty svelte-1jio28y"><div class="alert alert-warning mb-0">Das Business-Objects-Modell für die Dunkelverarbeitung fehlt in diesem Mandanten.
         Bitte im Werkzeug „Onboarding gevis ECM Rechnungsleser“ den Schritt „Dunkelverarbeitung: Business Objects“ ausführen. <div class="mt-2"><button type="button" class="btn btn-sm btn-outline-secondary">Erneut prüfen</button></div></div></div>`);
 	var root_15 = /* @__PURE__ */ from_html(`<div class="ar-empty svelte-1jio28y"><div class="alert alert-danger mb-0"> <div class="mt-2"><button type="button" class="btn btn-sm btn-outline-secondary">Erneut laden</button></div></div></div>`);
-	var root_16 = /* @__PURE__ */ from_html(`<div class="alert alert-secondary rounded-0 mb-0 py-2 small">Die Dunkelverarbeitung ist global ausgeschaltet - alle Dokumente werden geprüft, die Regeln bleiben erhalten.</div>`);
+	var root_16 = /* @__PURE__ */ from_html(`<div class="alert alert-warning rounded-0 mb-0 py-2 small">Die Dunkelverarbeitung ist ausgeschaltet: Keine der Regeln unten wird angewendet, bis sie wieder eingeschaltet wird.</div>`);
 	var root_17 = /* @__PURE__ */ from_html(`<span> </span>`);
 	var root_18 = /* @__PURE__ */ from_html(`<span class="text-muted">immer</span>`);
 	var root_19 = /* @__PURE__ */ from_html(`<tr class="ar-details-row svelte-1jio28y"><td colspan="8" class="svelte-1jio28y"><!></td></tr>`);
-	var root_20 = /* @__PURE__ */ from_html(`<tr><td class="ar-col-toggle svelte-1jio28y"><button type="button" class="btn btn-sm btn-link p-0" aria-label="Details"><!></button></td><td class="ar-click svelte-1jio28y"> </td><td class="ar-click svelte-1jio28y"> </td><td class="ar-click svelte-1jio28y"> </td><td class="text-center svelte-1jio28y"><div class="form-check form-switch d-inline-block mb-0"><input class="form-check-input" type="checkbox" role="switch" aria-label="Dunkelverarbeitung"/></div></td><td class="ar-click svelte-1jio28y"><span class="small"> </span></td><td class="small svelte-1jio28y"><!></td><td class="ar-col-actions svelte-1jio28y"><button type="button"> </button></td></tr> <!>`, 1);
-	var root_21 = /* @__PURE__ */ from_html(`<tr><td colspan="8" class="text-center text-muted py-4 svelte-1jio28y"> </td></tr>`);
+	var root_20 = /* @__PURE__ */ from_html(`<tr><td class="ar-col-toggle svelte-1jio28y"><button type="button" class="btn btn-link p-0 ar-icon-btn svelte-1jio28y" aria-label="Details"><!></button></td><td class="ar-click svelte-1jio28y"> </td><td class="ar-click svelte-1jio28y"> </td><td class="ar-click svelte-1jio28y"> </td><td class="ar-switch-cell svelte-1jio28y"><div class="form-check form-switch svelte-1jio28y"><input class="form-check-input svelte-1jio28y" type="checkbox" role="switch" aria-label="Regel aktiv" title="Regel anwenden – aus = Rechnungen dieses Lieferanten werden geprüft"/></div></td><td class="ar-click svelte-1jio28y"> </td><td class="svelte-1jio28y"><!></td><td class="ar-col-actions svelte-1jio28y"><button type="button"> </button></td></tr> <!>`, 1);
+	var root_21 = /* @__PURE__ */ from_html(`<tr class="svelte-1jio28y"><td colspan="8" class="text-center text-muted py-4 svelte-1jio28y"> </td></tr>`);
 	var root_22 = /* @__PURE__ */ from_html(`· <strong class="text-body"> </strong>`, 1);
 	var root_23 = /* @__PURE__ */ from_html(`<span class="spinner-border spinner-border-sm me-1"></span>`);
-	var root_24 = /* @__PURE__ */ from_html(`<!> <div class="ar-toolbar svelte-1jio28y"><input class="form-control form-control-sm ar-search svelte-1jio28y" type="search" placeholder="Lieferant suchen…"/> <select class="form-select form-select-sm ar-company svelte-1jio28y" aria-label="Mandant"><option>Alle Regeln</option><option>nur mandantenbezogene</option><!></select> <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="ar-only-active"/> <label class="form-check-label small" for="ar-only-active">nur aktive</label></div> <button type="button" class="btn btn-sm btn-primary ms-auto">+ Regel</button></div> <div class="ar-table-wrap svelte-1jio28y"><table class="table table-sm align-middle mb-0 ar-table svelte-1jio28y"><thead class="svelte-1jio28y"><tr><th class="ar-col-toggle svelte-1jio28y"></th><th class="svelte-1jio28y">Kreditor</th><th class="svelte-1jio28y">Name</th><th class="svelte-1jio28y">Mandant</th><th class="text-center svelte-1jio28y">Dunkel</th><th class="svelte-1jio28y">Bedingungen</th><th class="svelte-1jio28y">Gültig</th><th class="ar-col-actions svelte-1jio28y"></th></tr></thead><tbody></tbody></table></div> <footer class="ar-footer svelte-1jio28y"><span class="small text-muted"> <!></span> <!> <div class="ms-auto d-flex gap-2"><button type="button" class="btn btn-sm btn-outline-secondary">Verwerfen</button> <button type="button" class="btn btn-sm btn-primary"><!>Speichern</button></div></footer>`, 1);
+	var root_24 = /* @__PURE__ */ from_html(`<!> <div class="ar-toolbar svelte-1jio28y"><input class="form-control form-control-sm ar-search svelte-1jio28y" type="search" placeholder="Lieferant suchen…"/> <select class="form-select form-select-sm ar-company svelte-1jio28y" aria-label="Mandant"><option>Alle Regeln</option><option>nur mandantenbezogene</option><!></select> <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="ar-only-active"/> <label class="form-check-label small" for="ar-only-active">nur aktive</label></div> <button type="button" class="btn btn-sm btn-primary ms-auto">+ Regel</button></div> <div class="ar-table-wrap svelte-1jio28y"><table class="table table-sm align-middle mb-0 ar-table svelte-1jio28y"><thead class="svelte-1jio28y"><tr><th class="ar-col-toggle svelte-1jio28y"></th><th class="svelte-1jio28y">Kreditor</th><th class="svelte-1jio28y">Name</th><th class="svelte-1jio28y">Mandant</th><th class="text-center svelte-1jio28y" title="Regel anwenden – aus = Rechnungen dieses Lieferanten werden geprüft">Aktiv</th><th class="svelte-1jio28y">Bedingungen</th><th class="svelte-1jio28y">Gültig</th><th class="ar-col-actions svelte-1jio28y"></th></tr></thead><tbody class="svelte-1jio28y"></tbody></table></div> <footer class="ar-footer svelte-1jio28y"><span class="small text-muted"> <!></span> <!> <div class="ms-auto d-flex gap-2"><button type="button" class="btn btn-sm btn-outline-secondary">Verwerfen</button> <button type="button" class="btn btn-sm btn-primary"><!>Speichern</button></div></footer>`, 1);
 	var root_25 = /* @__PURE__ */ from_html(`<div class="ar-page svelte-1jio28y"><header class="ar-header svelte-1jio28y"><h1 class="h5 mb-0">Rechnungsleser · Dunkelverarbeitung</h1> <!></header> <!></div>`);
 	var $$css = {
 		hash: "svelte-1jio28y",
-		code: ".ar-page.svelte-1jio28y {display:flex;flex-direction:column;height:100vh;font-size:0.9rem;background:#fff;}.ar-header.svelte-1jio28y {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:12px 16px;border-bottom:1px solid #dee2e6;}.ar-toolbar.svelte-1jio28y {display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 16px;border-bottom:1px solid #dee2e6;}.ar-search.svelte-1jio28y {max-width:260px;}.ar-company.svelte-1jio28y {max-width:220px;}.ar-table-wrap.svelte-1jio28y {flex:1;overflow:auto;}.ar-table.svelte-1jio28y thead:where(.svelte-1jio28y) th:where(.svelte-1jio28y) {position:sticky;top:0;background:#f8f9fa;z-index:1;font-weight:600;white-space:nowrap;}.ar-table.svelte-1jio28y td:where(.svelte-1jio28y), .ar-table.svelte-1jio28y th:where(.svelte-1jio28y) {padding-left:10px;padding-right:10px;}.ar-col-toggle.svelte-1jio28y {width:32px;}.ar-col-actions.svelte-1jio28y {width:1%;white-space:nowrap;text-align:right;}.ar-click.svelte-1jio28y {cursor:pointer;}.ar-chevron.svelte-1jio28y {transition:transform 0.15s;}.ar-chevron.open.svelte-1jio28y {transform:rotate(90deg);}.ar-changed.svelte-1jio28y > td:where(.svelte-1jio28y):first-child {box-shadow:inset 3px 0 0 #0d6efd;}.ar-invalid.svelte-1jio28y > td:where(.svelte-1jio28y):first-child {box-shadow:inset 3px 0 0 #dc3545;}.ar-deleted.svelte-1jio28y td:where(.svelte-1jio28y) {text-decoration:line-through;color:#adb5bd;}.ar-deleted.svelte-1jio28y .ar-col-actions:where(.svelte-1jio28y) {text-decoration:none;}.ar-details-row.svelte-1jio28y > td:where(.svelte-1jio28y) {background:#f8f9fa;}.ar-details.svelte-1jio28y {padding:12px 8px 12px 40px;}.ar-conditions.svelte-1jio28y {border:1px solid #dee2e6;border-radius:6px;padding:10px 12px;background:#fff;}.ar-condition.svelte-1jio28y {display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;}.ar-condition.svelte-1jio28y > select:where(.svelte-1jio28y):first-child {width:210px;}.ar-op.svelte-1jio28y {width:110px;}.ar-op-fixed.svelte-1jio28y {width:110px;text-align:center;color:#6c757d;}.ar-value.svelte-1jio28y {width:170px;}.ar-footer.svelte-1jio28y {display:flex;align-items:center;gap:16px;padding:10px 16px;border-top:1px solid #dee2e6;background:#f8f9fa;}.ar-message.svelte-1jio28y {max-width:50%;}.ar-empty.svelte-1jio28y {padding:24px 16px;display:flex;align-items:center;}"
+		code: ".ar-page.svelte-1jio28y {display:flex;flex-direction:column;height:100vh;font-size:0.9rem;background:#fff;}.ar-header.svelte-1jio28y {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:12px 16px;border-bottom:1px solid #dee2e6;}.ar-toolbar.svelte-1jio28y {display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 16px;border-bottom:1px solid #dee2e6;}.ar-search.svelte-1jio28y {max-width:260px;}.ar-company.svelte-1jio28y {max-width:220px;}.ar-table-wrap.svelte-1jio28y {flex:1;overflow:auto;}.ar-table.svelte-1jio28y thead:where(.svelte-1jio28y) th:where(.svelte-1jio28y) {position:sticky;top:0;background:#f8f9fa;z-index:1;font-weight:600;white-space:nowrap;}.ar-table.svelte-1jio28y td:where(.svelte-1jio28y), .ar-table.svelte-1jio28y th:where(.svelte-1jio28y) {padding-left:10px;padding-right:10px;}\n  /* Alle Zellen einer Regelzeile gleich hoch und mittig - Schalter und\n     Buttons bringen sonst eigene Höhen/Abstände aus Bootstrap mit. */.ar-table.svelte-1jio28y > tbody:where(.svelte-1jio28y) > tr:where(.svelte-1jio28y) > td:where(.svelte-1jio28y) {vertical-align:middle;height:42px;padding-top:4px;padding-bottom:4px;line-height:1.4;}.ar-table.svelte-1jio28y > tbody:where(.svelte-1jio28y) > tr.ar-details-row:where(.svelte-1jio28y) > td:where(.svelte-1jio28y) {vertical-align:top;height:auto;}.ar-switch-cell.svelte-1jio28y .form-check:where(.svelte-1jio28y) {display:flex;justify-content:center;align-items:center;margin:0;padding:0;min-height:0;}.ar-switch-cell.svelte-1jio28y .form-check-input:where(.svelte-1jio28y) {float:none;margin:0;}.ar-icon-btn.svelte-1jio28y {display:inline-flex;align-items:center;vertical-align:middle;line-height:1;}.ar-row-btn.svelte-1jio28y {padding:0 4px;font-size:inherit;line-height:inherit;vertical-align:middle;}.ar-col-toggle.svelte-1jio28y {width:32px;}.ar-col-actions.svelte-1jio28y {width:1%;white-space:nowrap;text-align:right;}.ar-click.svelte-1jio28y {cursor:pointer;}.ar-chevron.svelte-1jio28y {transition:transform 0.15s;}.ar-chevron.open.svelte-1jio28y {transform:rotate(90deg);}.ar-changed.svelte-1jio28y > td:where(.svelte-1jio28y):first-child {box-shadow:inset 3px 0 0 #0d6efd;}.ar-invalid.svelte-1jio28y > td:where(.svelte-1jio28y):first-child {box-shadow:inset 3px 0 0 #dc3545;}.ar-deleted.svelte-1jio28y td:where(.svelte-1jio28y) {text-decoration:line-through;color:#adb5bd;}.ar-deleted.svelte-1jio28y .ar-col-actions:where(.svelte-1jio28y) {text-decoration:none;}.ar-details-row.svelte-1jio28y > td:where(.svelte-1jio28y) {background:#f8f9fa;}.ar-details.svelte-1jio28y {padding:12px 8px 12px 40px;}.ar-conditions.svelte-1jio28y {border:1px solid #dee2e6;border-radius:6px;padding:10px 12px;background:#fff;}.ar-condition.svelte-1jio28y {display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;}.ar-condition.svelte-1jio28y > select:where(.svelte-1jio28y):first-child {width:210px;}.ar-op.svelte-1jio28y {width:110px;}.ar-op-fixed.svelte-1jio28y {width:110px;text-align:center;color:#6c757d;}.ar-value.svelte-1jio28y {width:170px;}.ar-footer.svelte-1jio28y {display:flex;align-items:center;gap:16px;padding:10px 16px;border-top:1px solid #dee2e6;background:#f8f9fa;}.ar-message.svelte-1jio28y {max-width:50%;}.ar-empty.svelte-1jio28y {padding:24px 16px;display:flex;align-items:center;}"
 	};
 	function App($$anchor, $$props) {
 		push($$props, true);
@@ -5399,90 +5388,96 @@ createHTML: (html) => {
 		event("beforeunload", $window, onBeforeUnload);
 		var header = child(div_17);
 		var node_8 = sibling(child(header), 2);
-		var consequent_8 = ($$anchor) => {
+		var consequent_9 = ($$anchor) => {
 			var div_18 = root_12();
-			var div_19 = child(div_18);
-			var input_8 = child(div_19);
+			var input_8 = child(div_18);
 			remove_input_defaults(input_8);
-			next(2);
+			var label_6 = sibling(input_8, 2);
+			var text_8 = only_child(label_6);
+			var div_19 = sibling(label_6, 2);
+			var node_9 = child(div_19);
+			var consequent_8 = ($$anchor) => {
+				append($$anchor, text("Rechnungen werden nach den Regeln unten ohne Prüfung exportiert."));
+			};
+			var alternate_2 = ($$anchor) => {
+				append($$anchor, text("Alle Rechnungen gehen in die Prüfung - die Regeln bleiben gespeichert."));
+			};
+			if_block(node_9, ($$render) => {
+				if (editor().settings.enabled) $$render(consequent_8);
+				else $$render(alternate_2, -1);
+			});
 			reset(div_19);
-			var div_20 = sibling(div_19, 2);
-			var input_9 = child(div_20);
-			remove_input_defaults(input_9);
-			next(2);
-			reset(div_20);
 			reset(div_18);
-			template_effect(() => input_9.disabled = !editor().settings.enabled);
+			template_effect(() => set_text(text_8, `Dunkelverarbeitung ${editor().settings.enabled ? "eingeschaltet" : "ausgeschaltet"}`));
 			bind_checked(input_8, () => editor().settings.enabled, ($$value) => editor().settings.enabled = $$value);
-			bind_checked(input_9, () => editor().settings.defaultActive, ($$value) => editor().settings.defaultActive = $$value);
 			append($$anchor, div_18);
 		};
 		if_block(node_8, ($$render) => {
-			if (!editor().modelMissing && !editor().loadError) $$render(consequent_8);
+			if (!editor().modelMissing && !editor().loadError) $$render(consequent_9);
 		});
 		reset(header);
-		var node_9 = sibling(header, 2);
-		var consequent_9 = ($$anchor) => {
+		var node_10 = sibling(header, 2);
+		var consequent_10 = ($$anchor) => {
 			append($$anchor, root_13());
 		};
-		var consequent_10 = ($$anchor) => {
-			var div_22 = root_14();
-			var div_23 = child(div_22);
-			var button_5 = only_child(sibling(child(div_23)));
-			reset(div_23);
-			reset(div_22);
-			delegated("click", button_5, () => editor().load());
-			append($$anchor, div_22);
-		};
 		var consequent_11 = ($$anchor) => {
-			var div_25 = root_15();
-			var div_26 = child(div_25);
-			var text_8 = child(div_26);
-			var button_6 = only_child(sibling(text_8));
-			reset(div_26);
-			reset(div_25);
-			template_effect(() => set_text(text_8, `Die Regeln konnten nicht geladen werden: ${editor().loadError ?? ""} `));
-			delegated("click", button_6, () => editor().load());
-			append($$anchor, div_25);
+			var div_21 = root_14();
+			var div_22 = child(div_21);
+			var button_5 = only_child(sibling(child(div_22)));
+			reset(div_22);
+			reset(div_21);
+			delegated("click", button_5, () => editor().load());
+			append($$anchor, div_21);
 		};
-		var alternate_3 = ($$anchor) => {
+		var consequent_12 = ($$anchor) => {
+			var div_24 = root_15();
+			var div_25 = child(div_24);
+			var text_11 = child(div_25);
+			var button_6 = only_child(sibling(text_11));
+			reset(div_25);
+			reset(div_24);
+			template_effect(() => set_text(text_11, `Die Regeln konnten nicht geladen werden: ${editor().loadError ?? ""} `));
+			delegated("click", button_6, () => editor().load());
+			append($$anchor, div_24);
+		};
+		var alternate_4 = ($$anchor) => {
 			var fragment_2 = root_24();
-			var node_10 = first_child(fragment_2);
-			var consequent_12 = ($$anchor) => {
+			var node_11 = first_child(fragment_2);
+			var consequent_13 = ($$anchor) => {
 				append($$anchor, root_16());
 			};
-			if_block(node_10, ($$render) => {
-				if (!editor().settings.enabled) $$render(consequent_12);
+			if_block(node_11, ($$render) => {
+				if (!editor().settings.enabled) $$render(consequent_13);
 			});
-			var div_29 = sibling(node_10, 2);
-			var input_10 = child(div_29);
-			remove_input_defaults(input_10);
-			var select_3 = sibling(input_10, 2);
+			var div_28 = sibling(node_11, 2);
+			var input_9 = child(div_28);
+			remove_input_defaults(input_9);
+			var select_3 = sibling(input_9, 2);
 			var option_5 = child(select_3);
 			option_5.value = option_5.__value = "";
 			var option_6 = sibling(option_5);
 			option_6.value = option_6.__value = "*";
 			each(sibling(option_6), 16, () => editor().companies, (company) => company, ($$anchor, company) => {
 				var option_7 = root_3();
-				var text_9 = only_child(option_7);
+				var text_12 = only_child(option_7);
 				var option_7_value = {};
 				template_effect(() => {
-					set_text(text_9, `Mandant ${company ?? ""}`);
+					set_text(text_12, `Mandant ${company ?? ""}`);
 					if (option_7_value !== (option_7_value = company)) option_7.value = (option_7.__value = option_7_value) ?? "";
 				});
 				append($$anchor, option_7);
 			});
 			reset(select_3);
 			init_select(select_3);
-			var div_30 = sibling(select_3, 2);
-			var input_11 = child(div_30);
-			remove_input_defaults(input_11);
+			var div_29 = sibling(select_3, 2);
+			var input_10 = child(div_29);
+			remove_input_defaults(input_10);
 			next(2);
-			reset(div_30);
-			var button_7 = sibling(div_30, 2);
 			reset(div_29);
-			var div_31 = sibling(div_29, 2);
-			var table = child(div_31);
+			var button_7 = sibling(div_29, 2);
+			reset(div_28);
+			var div_30 = sibling(div_28, 2);
+			var table = child(div_30);
 			var tbody = sibling(child(table));
 			each(tbody, 21, () => editor().visibleRules, (rule) => rule.id, ($$anchor, rule, $$index_6) => {
 				const open = /* @__PURE__ */ user_derived(() => editor().expandedId === get(rule).id);
@@ -5494,73 +5489,72 @@ createHTML: (html) => {
 				reset(button_8);
 				reset(td);
 				var td_1 = sibling(td);
-				var text_10 = only_child(td_1, true);
+				var text_13 = only_child(td_1, true);
 				var td_2 = sibling(td_1);
-				var text_11 = only_child(td_2, true);
+				var text_14 = only_child(td_2, true);
 				var td_3 = sibling(td_2);
-				var text_12 = only_child(td_3, true);
+				var text_15 = only_child(td_3, true);
 				var td_4 = sibling(td_3);
-				var div_32 = child(td_4);
-				var input_12 = child(div_32);
-				remove_input_defaults(input_12);
-				reset(div_32);
+				var div_31 = child(td_4);
+				var input_11 = child(div_31);
+				remove_input_defaults(input_11);
+				reset(div_31);
 				reset(td_4);
 				var td_5 = sibling(td_4);
-				var text_13 = only_child(child(td_5), true);
-				reset(td_5);
+				var text_16 = only_child(td_5, true);
 				var td_6 = sibling(td_5);
-				var node_13 = child(td_6);
-				var consequent_13 = ($$anchor) => {
-					var span_2 = root_17();
+				var node_14 = child(td_6);
+				var consequent_14 = ($$anchor) => {
+					var span_1 = root_17();
 					let classes_3;
-					var text_14 = only_child(span_2);
+					var text_17 = only_child(span_1);
 					template_effect(($0, $1, $2) => {
-						classes_3 = set_class(span_2, 1, "", null, classes_3, { "text-danger": $0 });
-						set_text(text_14, `${$1 ?? ""} – ${$2 ?? ""}`);
+						classes_3 = set_class(span_1, 1, "", null, classes_3, { "text-danger": $0 });
+						set_text(text_17, `${$1 ?? ""} – ${$2 ?? ""}`);
 					}, [
 						() => get(rule).active && !editor().isEffective(get(rule)),
 						() => get(rule).validFrom ? new Date(get(rule).validFrom).toLocaleDateString("de-DE") : "…",
 						() => get(rule).validTo ? new Date(get(rule).validTo).toLocaleDateString("de-DE") : "…"
 					]);
-					append($$anchor, span_2);
+					append($$anchor, span_1);
 				};
-				var alternate_2 = ($$anchor) => {
+				var alternate_3 = ($$anchor) => {
 					append($$anchor, root_18());
 				};
-				if_block(node_13, ($$render) => {
-					if (get(rule).validFrom || get(rule).validTo) $$render(consequent_13);
-					else $$render(alternate_2, -1);
+				if_block(node_14, ($$render) => {
+					if (get(rule).validFrom || get(rule).validTo) $$render(consequent_14);
+					else $$render(alternate_3, -1);
 				});
 				reset(td_6);
 				var td_7 = sibling(td_6);
 				var button_9 = child(td_7);
-				var text_15 = only_child(button_9, true);
+				var text_18 = only_child(button_9, true);
 				reset(td_7);
 				reset(tr);
-				var node_14 = sibling(tr, 2);
-				var consequent_14 = ($$anchor) => {
+				var node_15 = sibling(tr, 2);
+				var consequent_15 = ($$anchor) => {
 					var tr_1 = root_19();
 					var td_8 = child(tr_1);
-					var node_15 = child(td_8);
-					ruleDetails(node_15, () => get(rule));
+					var node_16 = child(td_8);
+					ruleDetails(node_16, () => get(rule));
 					reset(td_8);
 					reset(tr_1);
 					append($$anchor, tr_1);
 				};
-				if_block(node_14, ($$render) => {
-					if (get(open) && !get(rule).deleted) $$render(consequent_14);
+				if_block(node_15, ($$render) => {
+					if (get(open) && !get(rule).deleted) $$render(consequent_15);
 				});
 				template_effect(($0, $1, $2) => {
 					set_class(tr, 1, $0, "svelte-1jio28y");
 					set_attribute(button_8, "aria-expanded", get(open));
-					set_text(text_10, get(rule).vendorNum || "—");
-					set_text(text_11, get(rule).vendorName);
-					set_text(text_12, get(rule).companyNum || "alle");
-					input_12.disabled = get(rule).deleted;
+					set_text(text_13, get(rule).vendorNum || "—");
+					set_text(text_14, get(rule).vendorName);
+					set_text(text_15, get(rule).companyNum || "alle");
+					input_11.disabled = get(rule).deleted;
 					set_attribute(td_5, "title", $1);
-					set_text(text_13, $2);
-					set_class(button_9, 1, `btn btn-sm btn-link ${get(rule).deleted ? "text-secondary" : "text-danger"}`);
-					set_text(text_15, get(rule).deleted ? "Wiederherstellen" : "Löschen");
+					set_text(text_16, $2);
+					set_class(button_9, 1, `btn btn-link ar-row-btn ${get(rule).deleted ? "text-secondary" : "text-danger"}`, "svelte-1jio28y");
+					set_text(text_18, get(rule).deleted ? "Wiederherstellen" : "Löschen");
 				}, [
 					() => clsx(rowClass(get(rule))),
 					() => get(rule).conditions.map(describeCondition).join("\n"),
@@ -5570,79 +5564,79 @@ createHTML: (html) => {
 				delegated("click", td_1, () => editor().toggleExpanded(get(rule)));
 				delegated("click", td_2, () => editor().toggleExpanded(get(rule)));
 				delegated("click", td_3, () => editor().toggleExpanded(get(rule)));
-				bind_checked(input_12, () => get(rule).active, ($$value) => get(rule).active = $$value);
+				bind_checked(input_11, () => get(rule).active, ($$value) => get(rule).active = $$value);
 				delegated("click", td_5, () => editor().toggleExpanded(get(rule)));
 				delegated("click", button_9, () => editor().toggleDelete(get(rule)));
 				append($$anchor, fragment_3);
 			}, ($$anchor) => {
 				var tr_2 = root_21();
-				var text_16 = only_child(child(tr_2), true);
+				var text_19 = only_child(child(tr_2), true);
 				reset(tr_2);
-				template_effect(() => set_text(text_16, editor().rules.length === 0 ? "Noch keine Regeln - mit „+ Regel“ die erste anlegen." : "Keine Regel passt zum Filter."));
+				template_effect(() => set_text(text_19, editor().rules.length === 0 ? "Noch keine Regeln - mit „+ Regel“ die erste anlegen." : "Keine Regel passt zum Filter."));
 				append($$anchor, tr_2);
 			});
 			reset(tbody);
 			reset(table);
-			reset(div_31);
-			var footer = sibling(div_31, 2);
-			var span_4 = child(footer);
-			var text_17 = child(span_4);
-			var node_16 = sibling(text_17);
-			var consequent_15 = ($$anchor) => {
+			reset(div_30);
+			var footer = sibling(div_30, 2);
+			var span_3 = child(footer);
+			var text_20 = child(span_3);
+			var node_17 = sibling(text_20);
+			var consequent_16 = ($$anchor) => {
 				var fragment_4 = root_22();
-				var text_18 = only_child(sibling(first_child(fragment_4)));
-				template_effect(() => set_text(text_18, `${editor().changeCount ?? ""} ungespeicherte Änderung(en)`));
+				var text_21 = only_child(sibling(first_child(fragment_4)));
+				template_effect(() => set_text(text_21, `${editor().changeCount ?? ""} ungespeicherte Änderung(en)`));
 				append($$anchor, fragment_4);
 			};
-			if_block(node_16, ($$render) => {
-				if (editor().changeCount > 0) $$render(consequent_15);
-			});
-			reset(span_4);
-			var node_17 = sibling(span_4, 2);
-			var consequent_16 = ($$anchor) => {
-				var span_5 = root_17();
-				var text_19 = only_child(span_5, true);
-				template_effect(() => {
-					set_class(span_5, 1, `small text-${editor().saveMessage.type ?? ""} ar-message`, "svelte-1jio28y");
-					set_text(text_19, editor().saveMessage.text);
-				});
-				append($$anchor, span_5);
-			};
 			if_block(node_17, ($$render) => {
-				if (editor().saveMessage) $$render(consequent_16);
+				if (editor().changeCount > 0) $$render(consequent_16);
 			});
-			var div_33 = sibling(node_17, 2);
-			var button_10 = child(div_33);
-			var button_11 = sibling(button_10, 2);
-			var node_18 = child(button_11);
+			reset(span_3);
+			var node_18 = sibling(span_3, 2);
 			var consequent_17 = ($$anchor) => {
-				append($$anchor, root_23());
+				var span_4 = root_17();
+				var text_22 = only_child(span_4, true);
+				template_effect(() => {
+					set_class(span_4, 1, `small text-${editor().saveMessage.type ?? ""} ar-message`, "svelte-1jio28y");
+					set_text(text_22, editor().saveMessage.text);
+				});
+				append($$anchor, span_4);
 			};
 			if_block(node_18, ($$render) => {
-				if (editor().saving) $$render(consequent_17);
+				if (editor().saveMessage) $$render(consequent_17);
+			});
+			var div_32 = sibling(node_18, 2);
+			var button_10 = child(div_32);
+			var button_11 = sibling(button_10, 2);
+			var node_19 = child(button_11);
+			var consequent_18 = ($$anchor) => {
+				append($$anchor, root_23());
+			};
+			if_block(node_19, ($$render) => {
+				if (editor().saving) $$render(consequent_18);
 			});
 			next();
 			reset(button_11);
-			reset(div_33);
+			reset(div_32);
 			reset(footer);
 			template_effect(($0) => {
-				set_text(text_17, `${$0 ?? ""} Regeln `);
+				set_text(text_20, `${$0 ?? ""} Regeln `);
 				button_10.disabled = editor().saving || editor().changeCount === 0;
 				button_11.disabled = editor().saving || editor().changeCount === 0;
 			}, [() => editor().rules.filter((r) => !r.deleted).length]);
-			bind_value(input_10, () => editor().search, ($$value) => editor().search = $$value);
+			bind_value(input_9, () => editor().search, ($$value) => editor().search = $$value);
 			bind_select_value(select_3, () => editor().companyFilter, ($$value) => editor().companyFilter = $$value);
-			bind_checked(input_11, () => editor().onlyActive, ($$value) => editor().onlyActive = $$value);
+			bind_checked(input_10, () => editor().onlyActive, ($$value) => editor().onlyActive = $$value);
 			delegated("click", button_7, () => editor().addRule());
 			delegated("click", button_10, onDiscard);
 			delegated("click", button_11, () => editor().save());
 			append($$anchor, fragment_2);
 		};
-		if_block(node_9, ($$render) => {
-			if (editor().loading && editor().rules.length === 0) $$render(consequent_9);
-			else if (editor().modelMissing) $$render(consequent_10, 1);
-			else if (editor().loadError) $$render(consequent_11, 2);
-			else $$render(alternate_3, -1);
+		if_block(node_10, ($$render) => {
+			if (editor().loading && editor().rules.length === 0) $$render(consequent_10);
+			else if (editor().modelMissing) $$render(consequent_11, 1);
+			else if (editor().loadError) $$render(consequent_12, 2);
+			else $$render(alternate_4, -1);
 		});
 		reset(div_17);
 		append($$anchor, div_17);
