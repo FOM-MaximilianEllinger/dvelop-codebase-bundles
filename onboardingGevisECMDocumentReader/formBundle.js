@@ -11047,6 +11047,19 @@ createHTML: (html) => {
 						"CreateFulltextIndex": false
 					},
 					{
+						"ColumnName": "VENDOR_PAYMENT_TERMS_CODE",
+						"Description": null,
+						"ColumnType": 1,
+						"MaxLength": 1024,
+						"CreateIndex": false,
+						"TryIdentifyPattern": false,
+						"SingleValueEntityName": null,
+						"SemanticType": 0,
+						"SignificantCharacters": null,
+						"DefaultValue": "",
+						"CreateFulltextIndex": false
+					},
+					{
 						"ColumnName": "VENDOR_PAYMENT_TERMS",
 						"Description": null,
 						"ColumnType": 1,
