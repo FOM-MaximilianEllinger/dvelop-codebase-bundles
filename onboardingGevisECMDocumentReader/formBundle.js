@@ -6651,8 +6651,8 @@ createHTML: (html) => {
 					"InboundAlias": null,
 					"LoggingFlag": 0,
 					"InterpretAsMultipleValues": false,
-					"ModelType": 2,
-					"TemplatePath": "mandant"
+					"ModelType": 0,
+					"TemplatePath": null
 				},
 				{
 					"AttributeTypeId": "NAME",
@@ -6660,7 +6660,7 @@ createHTML: (html) => {
 					"SemanticType": 1,
 					"ValueType": 3,
 					"DataBaseDefinition": {
-						"QueryDefinition": "SELECT COMPANY_NUM, NAME, STR, ZIP, CITY, COUNTRY, DEFAULT_CURRENCY, CONCAT(ERPTENANT_ID, '-', COMPANY_ID) AS DEBITOR_MAPPING FROM dbo.CC_COMPANIES WHERE NAME LIKE @NAME",
+						"QueryDefinition": "SELECT COMPANY_NUM, NAME, STR, ZIP, CITY, COUNTRY, DEFAULT_CURRENCY FROM dbo.CC_COMPANIES WHERE NAME LIKE @NAME",
 						"QueryMappings": [
 							{
 								"ColumnName": "COMPANY_NUM",
@@ -6689,10 +6689,6 @@ createHTML: (html) => {
 							{
 								"ColumnName": "DEFAULT_CURRENCY",
 								"AttributeID": "DEFAULT_CURRENCY"
-							},
-							{
-								"ColumnName": "DEBITOR_MAPPING",
-								"AttributeID": "debitorMapping"
 							}
 						],
 						"HttpDataSourceId": null,
@@ -7330,8 +7326,8 @@ createHTML: (html) => {
 					"InboundAlias": null,
 					"LoggingFlag": 2,
 					"InterpretAsMultipleValues": false,
-					"ModelType": 2,
-					"TemplatePath": "custom1"
+					"ModelType": 0,
+					"TemplatePath": null
 				},
 				{
 					"AttributeTypeId": "Custom2",
@@ -7349,8 +7345,8 @@ createHTML: (html) => {
 					"InboundAlias": null,
 					"LoggingFlag": 2,
 					"InterpretAsMultipleValues": false,
-					"ModelType": 2,
-					"TemplatePath": "custom2"
+					"ModelType": 0,
+					"TemplatePath": null
 				},
 				{
 					"AttributeTypeId": "Custom3",
@@ -7368,8 +7364,8 @@ createHTML: (html) => {
 					"InboundAlias": null,
 					"LoggingFlag": 2,
 					"InterpretAsMultipleValues": false,
-					"ModelType": 1,
-					"TemplatePath": "vendor.[TEMPLATE_ID].custom3"
+					"ModelType": 0,
+					"TemplatePath": null
 				},
 				{
 					"AttributeTypeId": "Custom4",
@@ -7387,8 +7383,8 @@ createHTML: (html) => {
 					"InboundAlias": null,
 					"LoggingFlag": 2,
 					"InterpretAsMultipleValues": false,
-					"ModelType": 1,
-					"TemplatePath": "vendor.[TEMPLATE_ID].custom4"
+					"ModelType": 0,
+					"TemplatePath": null
 				},
 				{
 					"AttributeTypeId": "Custom5",
@@ -8522,7 +8518,7 @@ createHTML: (html) => {
 							}],
 							"JSSnippets": [],
 							"DataBaseDefinition": {
-								"QueryDefinition": "SELECT\n  COMPANY_NUM,\n  NAME,\n  STR,\n  ZIP,\n  CITY,\n  COUNTRY,\n  DEFAULT_CURRENCY,\n  CONCAT(ERPTENANT_ID, '-', COMPANY_ID) AS DEBITOR_MAPPING\nFROM\n  dbo.CC_COMPANIES\nWHERE\n  COMPANY_NUM LIKE @DEBITOR_NUM",
+								"QueryDefinition": "SELECT\n  COMPANY_NUM,\n  NAME,\n  STR,\n  ZIP,\n  CITY,\n  COUNTRY,\n  DEFAULT_CURRENCY\nFROM\n  dbo.CC_COMPANIES\nWHERE\n  COMPANY_NUM LIKE @DEBITOR_NUM",
 								"QueryMappings": [
 									{
 										"ColumnName": "COMPANY_NUM",
@@ -8551,10 +8547,6 @@ createHTML: (html) => {
 									{
 										"ColumnName": "DEFAULT_CURRENCY",
 										"AttributeID": "DEFAULT_CURRENCY"
-									},
-									{
-										"ColumnName": "DEBITOR_MAPPING",
-										"AttributeID": "debitorMapping"
 									}
 								],
 								"HttpDataSourceId": null,
@@ -8606,7 +8598,7 @@ createHTML: (html) => {
 							}],
 							"JSSnippets": [],
 							"DataBaseDefinition": {
-								"QueryDefinition": "SELECT\n  COMPANY_NUM,\n  NAME,\n  STR,\n  ZIP,\n  CITY,\n  COUNTRY,\n  DEFAULT_CURRENCY,\n  CONCAT(ERPTENANT_ID, '-', COMPANY_ID) AS DEBITOR_MAPPING\nFROM\n  dbo.CC_COMPANIES\nWHERE\n  NAME LIKE @NAME",
+								"QueryDefinition": "SELECT\n  COMPANY_NUM,\n  NAME,\n  STR,\n  ZIP,\n  CITY,\n  COUNTRY,\n  DEFAULT_CURRENCY\nFROM\n  dbo.CC_COMPANIES\nWHERE\n  NAME LIKE @NAME",
 								"QueryMappings": [
 									{
 										"ColumnName": "COMPANY_NUM",
@@ -8635,10 +8627,6 @@ createHTML: (html) => {
 									{
 										"ColumnName": "DEFAULT_CURRENCY",
 										"AttributeID": "DEFAULT_CURRENCY"
-									},
-									{
-										"ColumnName": "DEBITOR_MAPPING",
-										"AttributeID": "debitorMapping"
 									}
 								],
 								"HttpDataSourceId": null,
@@ -8686,7 +8674,7 @@ createHTML: (html) => {
 							}],
 							"JSSnippets": [],
 							"DataBaseDefinition": {
-								"QueryDefinition": "SELECT\n  COMPANY_NUM,\n  NAME,\n  STR,\n  ZIP,\n  CITY,\n  COUNTRY,\n  DEFAULT_CURRENCY,\n  CONCAT(ERPTENANT_ID, '-', COMPANY_ID) AS DEBITOR_MAPPING\nFROM\n  dbo.CC_COMPANIES\nWHERE\n  STR LIKE @STR",
+								"QueryDefinition": "SELECT\n  COMPANY_NUM,\n  NAME,\n  STR,\n  ZIP,\n  CITY,\n  COUNTRY,\n  DEFAULT_CURRENCY\nFROM\n  dbo.CC_COMPANIES\nWHERE\n  STR LIKE @STR",
 								"QueryMappings": [
 									{
 										"ColumnName": "COMPANY_NUM",
@@ -8715,10 +8703,6 @@ createHTML: (html) => {
 									{
 										"ColumnName": "DEFAULT_CURRENCY",
 										"AttributeID": "DEFAULT_CURRENCY"
-									},
-									{
-										"ColumnName": "DEBITOR_MAPPING",
-										"AttributeID": "debitorMapping"
 									}
 								],
 								"HttpDataSourceId": null,
@@ -8806,7 +8790,7 @@ createHTML: (html) => {
 							}],
 							"JSSnippets": [],
 							"DataBaseDefinition": {
-								"QueryDefinition": "SELECT\n  COMPANY_NUM,\n  NAME,\n  STR,\n  ZIP,\n  CITY,\n  COUNTRY,\n  DEFAULT_CURRENCY,\n  CONCAT(ERPTENANT_ID, '-', COMPANY_ID) AS DEBITOR_MAPPING\nFROM\n  dbo.CC_COMPANIES\nWHERE\n  CITY LIKE @CITY",
+								"QueryDefinition": "SELECT\n  COMPANY_NUM,\n  NAME,\n  STR,\n  ZIP,\n  CITY,\n  COUNTRY,\n  DEFAULT_CURRENCY\nFROM\n  dbo.CC_COMPANIES\nWHERE\n  CITY LIKE @CITY",
 								"QueryMappings": [
 									{
 										"ColumnName": "COMPANY_NUM",
@@ -8835,10 +8819,6 @@ createHTML: (html) => {
 									{
 										"ColumnName": "DEFAULT_CURRENCY",
 										"AttributeID": "DEFAULT_CURRENCY"
-									},
-									{
-										"ColumnName": "DEBITOR_MAPPING",
-										"AttributeID": "debitorMapping"
 									}
 								],
 								"HttpDataSourceId": null,
