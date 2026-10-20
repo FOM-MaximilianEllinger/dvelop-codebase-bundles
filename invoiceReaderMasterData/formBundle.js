@@ -89,6 +89,12 @@
 		console.warn(`https://svelte.dev/e/hydration_mismatch`);
 	}
 	/**
+	* The `value` property of a `<select multiple>` element should be an array, but it received a non-array value. The selection will be kept as is.
+	*/
+	function select_multiple_invalid_value() {
+		console.warn(`https://svelte.dev/e/select_multiple_invalid_value`);
+	}
+	/**
 	* A `<svelte:boundary>` `reset` function only resets the boundary the first time it is called
 	*/
 	function svelte_boundary_reset_noop() {
@@ -1798,6 +1804,22 @@
 				state_prototype_fixed();
 			}
 		});
+	}
+	/**
+	* @param {any} value
+	*/
+	function get_proxied_value(value) {
+		try {
+			if (value !== null && typeof value === "object" && STATE_SYMBOL in value) return value[STATE_SYMBOL];
+		} catch {}
+		return value;
+	}
+	/**
+	* @param {any} a
+	* @param {any} b
+	*/
+	function is(a, b) {
+		return Object.is(get_proxied_value(a), get_proxied_value(b));
 	}
 	//#endregion
 	//#region node_modules/svelte/src/internal/client/dom/operations.js
@@ -4231,6 +4253,146 @@ createHTML: (html) => {
 		return next_classes;
 	}
 	//#endregion
+	//#region node_modules/svelte/src/internal/client/dom/elements/bindings/select.js
+	/**
+	* Sets the `selected` attribute on an option so form reset can restore it.
+	* @param {HTMLOptionElement} option
+	* @param {boolean} selected
+	*/
+	function set_selected(option, selected) {
+		if (selected) {
+			if (!option.hasAttribute("selected")) option.setAttribute("selected", "");
+		} else option.removeAttribute("selected");
+	}
+	/**
+	* Marks the options matching `__defaultValue` as selected. Without `preserve`
+	* a newly matching option gets selected, as an inserted `<option selected>` would.
+	* @param {HTMLSelectElement} select
+	* @param {boolean} preserve
+	*/
+	function apply_default_select_value(select, preserve) {
+		var value = select.__defaultValue;
+		var multiple = select.multiple;
+		var values = multiple ? value ?? [] : null;
+		if (multiple && !is_array(values)) return;
+		var index = select.selectedIndex;
+		var selected = preserve && multiple ? new Set(select.selectedOptions) : null;
+		for (var option of select.options) {
+			var option_value = get_option_value(option);
+			set_selected(option, multiple ? values.includes(option_value) : is(option_value, value));
+		}
+		if (!preserve) return;
+		if (selected !== null) for (option of select.options) {
+			var was_selected = selected.has(option);
+			if (option.selected !== was_selected) option.selected = was_selected;
+		}
+		else if (select.selectedIndex !== index) select.selectedIndex = index;
+	}
+	/**
+	* Selects the correct option(s) (depending on whether this is a multiple select)
+	* @template V
+	* @param {HTMLSelectElement} select
+	* @param {V} value
+	* @param {boolean} mounting
+	*/
+	function select_option(select, value, mounting = false) {
+		if (select.multiple) {
+			if (value == void 0) return;
+			if (!is_array(value)) return select_multiple_invalid_value();
+			for (var option of select.options) option.selected = value.includes(get_option_value(option));
+			return;
+		}
+		for (option of select.options) if (is(get_option_value(option), value)) {
+			option.selected = true;
+			return;
+		}
+		if (!mounting || value !== void 0) select.selectedIndex = -1;
+	}
+	/**
+	* Sets up a mutation observer to sync the current selection
+	* and default to the dom when the options change, for example
+	* when they are inside an `#each` block. Called once per `<select>`,
+	* by the compiled output or by `attribute_effect` for spreads.
+	* @param {HTMLSelectElement} select
+	*/
+	function init_select(select) {
+		var observer = new MutationObserver((entries) => {
+			if (entries.every(is_selectedcontent_mutation)) return;
+			if ("__defaultValue" in select) apply_default_select_value(select, false);
+			if ("__value" in select) select_option(select, select.__value);
+		});
+		observer.observe(select, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+			attributeFilter: ["value"]
+		});
+		teardown(() => {
+			observer.disconnect();
+		});
+	}
+	/**
+	* @param {HTMLSelectElement} select
+	* @param {() => unknown} get
+	* @param {(value: unknown) => void} set
+	* @returns {void}
+	*/
+	function bind_select_value(select, get, set = get) {
+		var batches = /* @__PURE__ */ new WeakSet();
+		var mounting = true;
+		listen_to_event_and_reset_event(select, "change", (is_reset) => {
+			var query = is_reset ? "[selected]" : ":checked";
+			/** @type {unknown} */
+			var value;
+			if (select.multiple) value = [].map.call(select.querySelectorAll(query), get_option_value);
+			else {
+				/** @type {HTMLOptionElement | null} */
+				var selected_option = select.querySelector(query) ?? select.querySelector("option:not([disabled])");
+				value = selected_option && get_option_value(selected_option);
+			}
+			set(value);
+			select.__value = value;
+			if (current_batch !== null) batches.add(current_batch);
+		});
+		effect(() => {
+			var value = get();
+			if (select === document.activeElement) {
+				var batch = async_mode_flag ? previous_batch : current_batch;
+				if (batches.has(batch)) return;
+			}
+			select_option(select, value, mounting);
+			if (mounting && value === void 0) {
+				/** @type {HTMLOptionElement | null} */
+				var selected_option = select.querySelector(":checked");
+				if (selected_option !== null) {
+					value = get_option_value(selected_option);
+					set(value);
+				}
+			}
+			select.__value = value;
+			mounting = false;
+		});
+	}
+	/** @param {HTMLOptionElement} option */
+	function get_option_value(option) {
+		if ("__value" in option) return option.__value;
+		else return option.value;
+	}
+	/**
+	* Returns `true` if the mutation stems from the browser mirroring the selected
+	* option's content into `<selectedcontent>`, or from us replacing the
+	* `<selectedcontent>` element with a clone of itself
+	* @param {MutationRecord} entry
+	*/
+	function is_selectedcontent_mutation(entry) {
+		if (entry.target.closest("selectedcontent") !== null) return true;
+		if (entry.type === "childList") {
+			var nodes = [...entry.addedNodes, ...entry.removedNodes];
+			return nodes.length > 0 && nodes.every((node) => node.nodeName === "SELECTEDCONTENT");
+		}
+		return false;
+	}
+	//#endregion
 	//#region node_modules/svelte/src/internal/client/dom/elements/attributes.js
 	/** @import { Blocker, Effect } from '#client' */
 	var IS_CUSTOM_ELEMENT = Symbol("is custom element");
@@ -4655,6 +4817,18 @@ createHTML: (html) => {
 	function quoteIdentifier(name) {
 		return `[${name.replace(/]/g, "]]")}]`;
 	}
+	function quoteString(value) {
+		return `N'${value.replace(/'/g, "''")}'`;
+	}
+	/** SQL-Datentyp je Spalte (DATA_TYPE, z.B. "nvarchar", "bit", "datetime2"), Spaltenname klein geschrieben. */
+	async function fetchColumnTypes(table) {
+		const result = await query(`SELECT COLUMN_NAME, DATA_TYPE
+FROM information_schema.columns
+WHERE TABLE_SCHEMA = ${quoteString(table.schema)} AND TABLE_NAME = ${quoteString(table.name)};`);
+		const index = (name) => result.columns.findIndex((c) => c.toUpperCase() === name);
+		const [column, type] = [index("COLUMN_NAME"), index("DATA_TYPE")];
+		return Object.fromEntries(result.rows.map((cells) => [(cells[column] ?? "").toLowerCase(), (cells[type] ?? "").toLowerCase()]));
+	}
 	async function fetchTables() {
 		const result = await query(`SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
 FROM information_schema.tables
@@ -4682,6 +4856,15 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 	//#endregion
 	//#region src/forms/viewerState.svelte.ts
 	var MAX_ROWS = 5e3;
+	var DATE_TYPES = [
+		"date",
+		"datetime",
+		"datetime2",
+		"smalldatetime",
+		"datetimeoffset"
+	];
+	var TRUE_VALUES = ["true", "1"];
+	var FALSE_VALUES = ["false", "0"];
 	var collator = new Intl.Collator("de", {
 		numeric: true,
 		sensitivity: "base"
@@ -4689,8 +4872,58 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 	function getErrorMessage(error) {
 		return error instanceof Error ? error.message : String(error);
 	}
-	function compareCells(a, b) {
+	function columnKind(sqlType) {
+		if (sqlType === "bit") return "boolean";
+		if (sqlType && DATE_TYPES.includes(sqlType)) return "date";
+		return "text";
+	}
+	function emptyFilter() {
+		return {
+			text: "",
+			bool: "",
+			from: "",
+			to: ""
+		};
+	}
+	function isFilterActive(filter) {
+		return filter.text.trim() !== "" || filter.bool !== "" || filter.from !== "" || filter.to !== "";
+	}
+	/** Wahrheitswert aus der Zelle; undefined = leer bzw. nicht erkennbar. */
+	function parseBoolean(value) {
+		const lower = value?.trim().toLowerCase() ?? "";
+		if (TRUE_VALUES.includes(lower)) return true;
+		if (FALSE_VALUES.includes(lower)) return false;
+	}
+	/**
+	* Datum der Zelle als JJJJ-MM-TT (vergleichbar als Text) - ISO
+	* ("2024-01-31T12:00:00") oder deutsch ("31.01.2024 12:00:00").
+	* undefined = leer bzw. kein Datum.
+	*/
+	function dateKey(value) {
+		if (!value) return void 0;
+		const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+		if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+		const german = value.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+		if (german) return `${german[3]}-${german[2].padStart(2, "0")}-${german[1].padStart(2, "0")}`;
+		const parsed = new Date(value);
+		return Number.isNaN(parsed.getTime()) ? void 0 : parsed.toISOString().slice(0, 10);
+	}
+	/**
+	* Freitext-Filter als regulärer Ausdruck (ohne Rücksicht auf Groß-/
+	* Kleinschreibung): ohne * reicht ein Teiltreffer, mit * muss der ganze Wert
+	* zum Muster passen (z.B. "Müller*", "*GmbH", "DE*01").
+	*/
+	function textPattern(text) {
+		const term = text.trim();
+		const escaped = term.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+		return new RegExp(term.includes("*") ? `^${escaped}$` : escaped, "i");
+	}
+	function compareCells(a, b, kind) {
 		if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1;
+		if (kind === "date") {
+			const [x, y] = [dateKey(a), dateKey(b)];
+			if (x !== void 0 && y !== void 0 && x !== y) return x < y ? -1 : 1;
+		}
 		const [x, y] = [Number(a), Number(b)];
 		if (a.trim() !== "" && b.trim() !== "" && Number.isFinite(x) && Number.isFinite(y)) return x - y;
 		return collator.compare(a, b);
@@ -4762,6 +4995,20 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 		set columns(value) {
 			set(this.#columns, value, true);
 		}
+		#columnKinds;
+		get columnKinds() {
+			return get(this.#columnKinds);
+		}
+		set columnKinds(value) {
+			set(this.#columnKinds, value, true);
+		}
+		#filters;
+		get filters() {
+			return get(this.#filters);
+		}
+		set filters(value) {
+			set(this.#filters, value, true);
+		}
 		#rows;
 		get rows() {
 			return get(this.#rows);
@@ -4811,6 +5058,20 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 		set searchTexts(value) {
 			set(this.#searchTexts, value);
 		}
+		#activeFilterCount;
+		get activeFilterCount() {
+			return get(this.#activeFilterCount);
+		}
+		set activeFilterCount(value) {
+			set(this.#activeFilterCount, value);
+		}
+		#rowFilters;
+		get rowFilters() {
+			return get(this.#rowFilters);
+		}
+		set rowFilters(value) {
+			set(this.#rowFilters, value);
+		}
 		#visibleIndices;
 		get visibleIndices() {
 			return get(this.#visibleIndices);
@@ -4827,6 +5088,8 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 			this.#rowsStatus = /* @__PURE__ */ state("loading");
 			this.#rowsError = /* @__PURE__ */ state("");
 			this.#columns = /* @__PURE__ */ state(proxy([]));
+			this.#columnKinds = /* @__PURE__ */ state(proxy([]));
+			this.#filters = /* @__PURE__ */ state(proxy([]));
 			this.#rows = /* @__PURE__ */ state(proxy([]));
 			this.#totalCount = /* @__PURE__ */ state();
 			this.#truncated = /* @__PURE__ */ state(false);
@@ -4845,12 +5108,34 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 				}));
 			});
 			this.#searchTexts = /* @__PURE__ */ user_derived(() => this.rows.map((row) => row.map((cell) => (cell ?? "").toLowerCase()).join("\0")));
+			this.#activeFilterCount = /* @__PURE__ */ user_derived(() => this.filters.filter(isFilterActive).length);
+			this.#rowFilters = /* @__PURE__ */ user_derived(() => {
+				const checks = [];
+				this.filters.forEach((filter, c) => {
+					if (!isFilterActive(filter)) return;
+					const kind = this.columnKinds[c];
+					if (kind === "boolean") {
+						const wanted = filter.bool === "null" ? void 0 : filter.bool === "true";
+						checks.push((row) => parseBoolean(row[c] ?? null) === wanted);
+					} else if (kind === "date") checks.push((row) => {
+						const key = dateKey(row[c] ?? null);
+						return key !== void 0 && (!filter.from || key >= filter.from) && (!filter.to || key <= filter.to);
+					});
+					else {
+						const pattern = textPattern(filter.text);
+						checks.push((row) => pattern.test(row[c] ?? ""));
+					}
+				});
+				return checks;
+			});
 			this.#visibleIndices = /* @__PURE__ */ user_derived(() => {
 				const term = this.search.toLowerCase().trim();
-				const indices = this.rows.map((_, i) => i).filter((i) => !term || this.searchTexts[i].includes(term));
+				const checks = this.rowFilters;
+				const indices = this.rows.map((_, i) => i).filter((i) => (!term || this.searchTexts[i].includes(term)) && checks.every((check) => check(this.rows[i])));
 				const sort = this.sort;
 				if (sort) {
-					indices.sort((a, b) => compareCells(this.rows[a][sort.column] ?? null, this.rows[b][sort.column] ?? null));
+					const kind = this.columnKinds[sort.column] ?? "text";
+					indices.sort((a, b) => compareCells(this.rows[a][sort.column] ?? null, this.rows[b][sort.column] ?? null, kind));
 					if (sort.descending) indices.reverse();
 				}
 				return indices;
@@ -4879,9 +5164,14 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 			this.sort = void 0;
 			this.totalCount = void 0;
 			try {
-				const result = await fetchTableRows(table, MAX_ROWS);
+				const [result, types] = await Promise.all([fetchTableRows(table, MAX_ROWS), fetchColumnTypes(table).catch((error) => {
+					getLogger().warn(`Spaltentypen von ${table.name} nicht ermittelbar: ${getErrorMessage(error)}`);
+					return {};
+				})]);
 				if (this.current !== table) return;
 				this.columns = result.columns;
+				this.columnKinds = result.columns.map((column) => columnKind(types[column.toLowerCase()]));
+				this.filters = result.columns.map(emptyFilter);
 				this.truncated = result.rows.length > MAX_ROWS;
 				this.rows = result.rows.slice(0, MAX_ROWS);
 				this.rowsStatus = "loaded";
@@ -4910,7 +5200,10 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 			};
 			else this.sort = void 0;
 		}
-		/** Sichtbare Zeilen (Suche und Sortierung wie angezeigt) als CSV. */
+		clearFilters() {
+			this.filters = this.columns.map(emptyFilter);
+		}
+		/** Sichtbare Zeilen (Suche, Filter und Sortierung wie angezeigt) als CSV. */
 		exportCsv() {
 			return {
 				fileName: `${this.current?.name ?? "export"}.csv`,
@@ -4932,18 +5225,23 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 	var root_9 = /* @__PURE__ */ from_html(`<div class="text-muted p-2">Lade Einträge...</div>`);
 	var root_10 = /* @__PURE__ */ from_html(`<div class="alert alert-danger m-2"> </div>`);
 	var root_11 = /* @__PURE__ */ from_html(`<p class="text-muted">Keine Einträge vorhanden.</p>`);
-	var root_12 = /* @__PURE__ */ from_html(`<p class="small text-muted mb-2"> </p>`);
-	var root_13 = /* @__PURE__ */ from_html(`<span class="ms-1"> </span>`);
-	var root_14 = /* @__PURE__ */ from_html(`<th class="text-nowrap sortable svelte-1jio28y"> <!></th>`);
-	var root_15 = /* @__PURE__ */ from_html(`<span class="text-muted">—</span>`);
-	var root_16 = /* @__PURE__ */ from_html(`<td class="svelte-1jio28y"><!></td>`);
-	var root_17 = /* @__PURE__ */ from_html(`<tr></tr>`);
-	var root_18 = /* @__PURE__ */ from_html(`<!> <div class="overflow-auto flex-grow-1 border"><table class="table table-sm table-bordered table-hover align-middle small mb-0"><thead class="table-dark"><tr></tr></thead><tbody></tbody></table></div>`, 1);
-	var root_19 = /* @__PURE__ */ from_html(`<div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom flex-shrink-0"><h5 class="mb-0 text-truncate"> <!></h5> <div class="ms-auto d-flex align-items-center gap-2"><!> <button type="button" class="btn btn-sm btn-outline-primary text-nowrap">Neu laden</button></div></div> <!>`, 1);
-	var root_20 = /* @__PURE__ */ from_html(`<div class="d-flex h-100 overflow-hidden"><div class="sidebar border-end d-flex flex-column overflow-hidden svelte-1jio28y"><div class="p-2 bg-secondary text-white fw-semibold small flex-shrink-0">Tabellen</div> <div class="p-2 border-bottom flex-shrink-0"><input type="search" class="form-control form-control-sm" placeholder="Tabelle suchen..."/></div> <div class="overflow-y-auto flex-grow-1"><!></div></div> <div class="flex-grow-1 d-flex flex-column overflow-hidden p-3"><!></div></div>`);
+	var root_12 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-link btn-sm p-0"> </button>`);
+	var root_13 = /* @__PURE__ */ from_html(`<div class="d-flex align-items-center gap-2 small text-muted mb-2 flex-shrink-0"> <!></div>`);
+	var root_14 = /* @__PURE__ */ from_html(`<span class="ms-1"> </span>`);
+	var root_15 = /* @__PURE__ */ from_html(`<th class="text-nowrap sortable svelte-1jio28y"> <!></th>`);
+	var root_16 = /* @__PURE__ */ from_html(`<select class="form-select form-select-sm"><option>Alle</option><option>Ja (true)</option><option>Nein (false)</option><option>leer</option></select>`);
+	var root_17 = /* @__PURE__ */ from_html(`<div class="d-flex flex-column gap-1"><input type="date" class="form-control form-control-sm" title="von (einschließlich)"/> <input type="date" class="form-control form-control-sm" title="bis (einschließlich)"/></div>`);
+	var root_18 = /* @__PURE__ */ from_html(`<input type="search" class="form-control form-control-sm" placeholder="Filter, * = beliebig" title="Ohne *: enthält den Text. Mit *: ganzer Wert passt zum Muster, z.B. Müller*, *GmbH, DE*01"/>`);
+	var root_19 = /* @__PURE__ */ from_html(`<th class="fw-normal svelte-1jio28y"><!></th>`);
+	var root_20 = /* @__PURE__ */ from_html(`<span class="text-muted">—</span>`);
+	var root_21 = /* @__PURE__ */ from_html(`<td class="svelte-1jio28y"><!></td>`);
+	var root_22 = /* @__PURE__ */ from_html(`<tr></tr>`);
+	var root_23 = /* @__PURE__ */ from_html(`<!> <div class="overflow-auto flex-grow-1 border"><table class="table table-sm table-bordered table-hover align-middle small mb-0"><thead class="table-dark svelte-1jio28y"><tr></tr><tr class="filters svelte-1jio28y"></tr></thead><tbody></tbody></table></div>`, 1);
+	var root_24 = /* @__PURE__ */ from_html(`<div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom flex-shrink-0"><h5 class="mb-0 text-truncate"> <!></h5> <div class="ms-auto d-flex align-items-center gap-2"><!> <button type="button" class="btn btn-sm btn-outline-primary text-nowrap">Neu laden</button></div></div> <!>`, 1);
+	var root_25 = /* @__PURE__ */ from_html(`<div class="d-flex h-100 overflow-hidden"><div class="sidebar border-end d-flex flex-column overflow-hidden svelte-1jio28y"><div class="p-2 bg-secondary text-white fw-semibold small flex-shrink-0">Tabellen</div> <div class="p-2 border-bottom flex-shrink-0"><input type="search" class="form-control form-control-sm" placeholder="Tabelle suchen..."/></div> <div class="overflow-y-auto flex-grow-1"><!></div></div> <div class="flex-grow-1 d-flex flex-column overflow-hidden p-3"><!></div></div>`);
 	var $$css = {
 		hash: "svelte-1jio28y",
-		code: ".sidebar.svelte-1jio28y {width:20%;min-width:200px;}.schema.svelte-1jio28y {font-size:0.7rem;font-weight:600;letter-spacing:0.04em;}.table-entry.svelte-1jio28y {font-size:0.8rem;}.search.svelte-1jio28y {min-width:220px;max-width:320px;}.sortable.svelte-1jio28y {cursor:pointer;user-select:none;position:sticky;top:0;}td.svelte-1jio28y {white-space:pre-wrap;}"
+		code: ".sidebar.svelte-1jio28y {width:20%;min-width:200px;}.schema.svelte-1jio28y {font-size:0.7rem;font-weight:600;letter-spacing:0.04em;}.table-entry.svelte-1jio28y {font-size:0.8rem;}.search.svelte-1jio28y {min-width:220px;max-width:320px;}thead.svelte-1jio28y {position:sticky;top:0;z-index:1;}.sortable.svelte-1jio28y {cursor:pointer;user-select:none;}.filters.svelte-1jio28y th:where(.svelte-1jio28y) {min-width:140px;}td.svelte-1jio28y {white-space:pre-wrap;}"
 	};
 	function App($$anchor, $$props) {
 		push($$props, true);
@@ -4963,7 +5261,7 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 			const total = viewer().totalCount === void 0 ? `mehr als ${MAX_ROWS}` : viewer().totalCount.toLocaleString("de-DE");
 			return `erste ${MAX_ROWS.toLocaleString("de-DE")} von ${total} Zeilen`;
 		});
-		var div = root_20();
+		var div = root_25();
 		var div_1 = child(div);
 		var div_2 = sibling(child(div_1), 2);
 		var input = child(div_2);
@@ -5033,8 +5331,8 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 		var consequent_3 = ($$anchor) => {
 			append($$anchor, root_6());
 		};
-		var alternate_3 = ($$anchor) => {
-			var fragment_2 = root_19();
+		var alternate_4 = ($$anchor) => {
+			var fragment_2 = root_24();
 			var div_9 = first_child(fragment_2);
 			var h5 = child(div_9);
 			var text_3 = child(h5);
@@ -5079,76 +5377,140 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 			var consequent_8 = ($$anchor) => {
 				append($$anchor, root_11());
 			};
-			var alternate_2 = ($$anchor) => {
-				var fragment_4 = root_18();
+			var alternate_3 = ($$anchor) => {
+				var fragment_4 = root_23();
 				var node_8 = first_child(fragment_4);
-				var consequent_9 = ($$anchor) => {
-					var p_2 = root_12();
-					var text_6 = only_child(p_2);
-					template_effect(() => set_text(text_6, `${viewer().visibleIndices.length ?? ""} Treffer`));
-					append($$anchor, p_2);
+				var consequent_10 = ($$anchor) => {
+					var div_13 = root_13();
+					var text_6 = child(div_13);
+					var node_9 = sibling(text_6);
+					var consequent_9 = ($$anchor) => {
+						var button_4 = root_12();
+						var text_7 = only_child(button_4);
+						template_effect(() => set_text(text_7, `${viewer().activeFilterCount === 1 ? "Spaltenfilter" : `${viewer().activeFilterCount} Spaltenfilter`} zurücksetzen`));
+						delegated("click", button_4, () => viewer().clearFilters());
+						append($$anchor, button_4);
+					};
+					if_block(node_9, ($$render) => {
+						if (viewer().activeFilterCount > 0) $$render(consequent_9);
+					});
+					reset(div_13);
+					template_effect(() => set_text(text_6, `${viewer().visibleIndices.length ?? ""} Treffer `));
+					append($$anchor, div_13);
 				};
 				if_block(node_8, ($$render) => {
-					if (viewer().search && viewer().visibleIndices.length !== viewer().rows.length) $$render(consequent_9);
+					if (viewer().search || viewer().activeFilterCount > 0) $$render(consequent_10);
 				});
-				var div_13 = sibling(node_8, 2);
-				var table_1 = child(div_13);
+				var div_14 = sibling(node_8, 2);
+				var table_1 = child(div_14);
 				var thead = child(table_1);
 				var tr = child(thead);
 				each(tr, 21, () => viewer().columns, index, ($$anchor, column, c) => {
-					var th = root_14();
-					var text_7 = child(th, true);
-					var node_9 = sibling(text_7);
-					var consequent_10 = ($$anchor) => {
-						var span_1 = root_13();
-						var text_8 = only_child(span_1, true);
-						template_effect(() => set_text(text_8, viewer().sort.descending ? "▼" : "▲"));
+					var th = root_15();
+					var text_8 = child(th, true);
+					var node_10 = sibling(text_8);
+					var consequent_11 = ($$anchor) => {
+						var span_1 = root_14();
+						var text_9 = only_child(span_1, true);
+						template_effect(() => set_text(text_9, viewer().sort.descending ? "▼" : "▲"));
 						append($$anchor, span_1);
 					};
-					if_block(node_9, ($$render) => {
-						if (viewer().sort?.column === c) $$render(consequent_10);
+					if_block(node_10, ($$render) => {
+						if (viewer().sort?.column === c) $$render(consequent_11);
 					});
 					reset(th);
-					template_effect(() => set_text(text_7, get(column)));
+					template_effect(() => set_text(text_8, get(column)));
 					delegated("click", th, () => viewer().toggleSort(c));
 					append($$anchor, th);
 				});
 				reset(tr);
+				var tr_1 = sibling(tr);
+				each(tr_1, 21, () => viewer().filters, index, ($$anchor, filter, c) => {
+					const kind = /* @__PURE__ */ user_derived(() => viewer().columnKinds[c]);
+					var th_1 = root_19();
+					var node_11 = child(th_1);
+					var consequent_12 = ($$anchor) => {
+						var select = root_16();
+						var option = child(select);
+						option.value = option.__value = "";
+						var option_1 = sibling(option);
+						option_1.value = option_1.__value = "true";
+						var option_2 = sibling(option_1);
+						option_2.value = option_2.__value = "false";
+						var option_3 = sibling(option_2);
+						option_3.value = option_3.__value = "null";
+						reset(select);
+						init_select(select);
+						template_effect(() => set_attribute(select, "aria-label", `Filter ${viewer().columns[c] ?? ""}`));
+						bind_select_value(select, () => get(filter).bool, ($$value) => get(filter).bool = $$value);
+						append($$anchor, select);
+					};
+					var consequent_13 = ($$anchor) => {
+						var div_15 = root_17();
+						var input_2 = child(div_15);
+						remove_input_defaults(input_2);
+						var input_3 = sibling(input_2, 2);
+						remove_input_defaults(input_3);
+						reset(div_15);
+						template_effect(() => {
+							set_attribute(input_2, "aria-label", `${viewer().columns[c] ?? ""} von`);
+							set_attribute(input_3, "aria-label", `${viewer().columns[c] ?? ""} bis`);
+						});
+						bind_value(input_2, () => get(filter).from, ($$value) => get(filter).from = $$value);
+						bind_value(input_3, () => get(filter).to, ($$value) => get(filter).to = $$value);
+						append($$anchor, div_15);
+					};
+					var alternate_1 = ($$anchor) => {
+						var input_4 = root_18();
+						remove_input_defaults(input_4);
+						template_effect(() => set_attribute(input_4, "aria-label", `Filter ${viewer().columns[c] ?? ""}`));
+						bind_value(input_4, () => get(filter).text, ($$value) => get(filter).text = $$value);
+						append($$anchor, input_4);
+					};
+					if_block(node_11, ($$render) => {
+						if (get(kind) === "boolean") $$render(consequent_12);
+						else if (get(kind) === "date") $$render(consequent_13, 1);
+						else $$render(alternate_1, -1);
+					});
+					reset(th_1);
+					append($$anchor, th_1);
+				});
+				reset(tr_1);
 				reset(thead);
 				var tbody = sibling(thead);
 				each(tbody, 20, () => viewer().visibleIndices, (i) => i, ($$anchor, i) => {
-					var tr_1 = root_17();
-					each(tr_1, 21, () => viewer().rows[i], index, ($$anchor, cell) => {
-						var td = root_16();
-						var node_10 = child(td);
-						var consequent_11 = ($$anchor) => {
-							append($$anchor, root_15());
+					var tr_2 = root_22();
+					each(tr_2, 21, () => viewer().rows[i], index, ($$anchor, cell) => {
+						var td = root_21();
+						var node_12 = child(td);
+						var consequent_14 = ($$anchor) => {
+							append($$anchor, root_20());
 						};
-						var alternate_1 = ($$anchor) => {
-							var text_9 = text();
-							template_effect(() => set_text(text_9, get(cell)));
-							append($$anchor, text_9);
+						var alternate_2 = ($$anchor) => {
+							var text_10 = text();
+							template_effect(() => set_text(text_10, get(cell)));
+							append($$anchor, text_10);
 						};
-						if_block(node_10, ($$render) => {
-							if (get(cell) === null) $$render(consequent_11);
-							else $$render(alternate_1, -1);
+						if_block(node_12, ($$render) => {
+							if (get(cell) === null) $$render(consequent_14);
+							else $$render(alternate_2, -1);
 						});
 						reset(td);
 						append($$anchor, td);
 					});
-					reset(tr_1);
-					append($$anchor, tr_1);
+					reset(tr_2);
+					append($$anchor, tr_2);
 				});
 				reset(tbody);
 				reset(table_1);
-				reset(div_13);
+				reset(div_14);
 				append($$anchor, fragment_4);
 			};
 			if_block(node_7, ($$render) => {
 				if (viewer().rowsStatus === "loading") $$render(consequent_6);
 				else if (viewer().rowsStatus === "error") $$render(consequent_7, 1);
 				else if (viewer().rows.length === 0) $$render(consequent_8, 2);
-				else $$render(alternate_2, -1);
+				else $$render(alternate_3, -1);
 			});
 			template_effect(() => {
 				set_text(text_3, `${viewer().current.name ?? ""} `);
@@ -5159,7 +5521,7 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 		};
 		if_block(node_4, ($$render) => {
 			if (!viewer().current) $$render(consequent_3);
-			else $$render(alternate_3, -1);
+			else $$render(alternate_4, -1);
 		});
 		reset(div_8);
 		reset(div);
