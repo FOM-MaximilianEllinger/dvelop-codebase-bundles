@@ -9281,6 +9281,11 @@ ${groups}`,
 	*  - existiert es nicht: wird per createForm (POST /processstudio/components/form)
 	*    neu angelegt und mit einem minimalen Bootstrap-Schema plus dem Bundle-Inhalt
 	*    befüllt.
+	* In beiden Fällen legt newVersion danach eine neue dforms-Version an (wie bei
+	* installToolboxUpdate): patchForm ändert nur den Entwurf - hat das Formular
+	* schon eine Version (z.B. im Formular-Editor veröffentlicht), liefert dforms
+	* beim Öffnen sonst weiter diese alte Version aus, obwohl getForm (und damit
+	* die Versionsanzeige der Toolbox) bereits den neuen Stand zeigt.
 	*/
 	async function ensureTargetFormUpToDate(target) {
 		const baseUri = window.location.origin;
@@ -9297,6 +9302,7 @@ ${groups}`,
 				customJs: customJsContent
 			};
 			await patchForm(baseUri, NO_TOKEN, target.formId, target.name, definition);
+			await newVersion(baseUri, NO_TOKEN, target.formId);
 			return definition;
 		}
 		getLogger().debug(`Formular "${target.name}" existiert noch nicht, lege es neu an.`);
@@ -9311,6 +9317,7 @@ ${groups}`,
 			customJs: customJsContent
 		};
 		await patchForm(baseUri, NO_TOKEN, target.formId, target.name, definition);
+		await newVersion(baseUri, NO_TOKEN, target.formId);
 		return definition;
 	}
 	/**
