@@ -4954,6 +4954,14 @@ createHTML: (html) => {
 			formDefinitionPath: "invoiceReaderCleanup/form.json"
 		},
 		{
+			type: "form",
+			id: "invoiceReaderMasterData",
+			name: "Rechnungsleser-Stammdaten",
+			description: "Zeigt alle Tabellen der Rechnungsleser-Datenbank (Stammdaten) mit Suche, Sortierung und CSV-Export an – nur lesend.",
+			formId: "87fa80a2-7231-564e-8354-e724ea81fa8d",
+			bundlePath: "invoiceReaderMasterData/formBundle.js"
+		},
+		{
 			type: "combined",
 			id: "invoiceReaderStatistics",
 			name: "Rechnungsleser-Auswertung",
