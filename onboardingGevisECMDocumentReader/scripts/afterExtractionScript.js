@@ -643,7 +643,7 @@ async function applyAutoRouting(baseUri, apiKey, body, isEInvoice) {
 		today: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)
 	});
 	logger.info(`${AUTO_ROUTING_ATTRIBUTE}: "${attribute(body, AUTO_ROUTING_ATTRIBUTE)}" -> ${result.flag} (${result.reason})`);
-	setAttribute(body, AUTO_ROUTING_ATTRIBUTE, result.flag);
+	setAttribute(body, AUTO_ROUTING_ATTRIBUTE, String(result.flag));
 }
 async function findDuplicates(baseUri, apiKey, vendorNum, invoiceNumber, currentDocumentId) {
 	const sqlQuery = `
