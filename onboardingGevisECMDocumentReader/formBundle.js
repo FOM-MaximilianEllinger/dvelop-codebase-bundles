@@ -5235,6 +5235,26 @@ createHTML: (html) => {
 		});
 	}
 	//#endregion
+	//#region ../../helper/identityprovider/validateApiKey.ts
+	/**
+	* Prüft einen API-Key beim Identityprovider (GET /identityprovider/validate)
+	* und liefert den zugehörigen Benutzer. Ohne Cookies (credentials "omit"),
+	* sonst würde die Browser-Session des angemeldeten Benutzers einspringen und
+	* auch ein ungültiger Key als gültig durchgehen. Wirft bei ungültigem Key.
+	*/
+	async function validateApiKey(baseUri, apiKey) {
+		const response = await performHttpRequest(`${baseUri}/identityprovider/validate?allowExternalValidation=false`, {
+			method: "GET",
+			headers: {
+				Authorization: `Bearer ${apiKey}`,
+				Accept: "application/json"
+			},
+			credentials: "omit"
+		});
+		if (!response.body?.id) throw new Error("Der Identityprovider hat keinen Benutzer zum API-Key geliefert.");
+		return response.body;
+	}
+	//#endregion
 	//#region ../../helper/identityprovider/getUsers.ts
 	/**
 	* Fetches a list of users from the identity provider using the SCIM protocol.
@@ -6661,37 +6681,8 @@ createHTML: (html) => {
 					"SemanticType": 1,
 					"ValueType": 3,
 					"DataBaseDefinition": {
-						"QueryDefinition": "SELECT COMPANY_NUM, NAME, STR, ZIP, CITY, COUNTRY, DEFAULT_CURRENCY FROM dbo.CC_COMPANIES WHERE NAME LIKE @NAME",
-						"QueryMappings": [
-							{
-								"ColumnName": "COMPANY_NUM",
-								"AttributeID": "DEBITOR_NUM"
-							},
-							{
-								"ColumnName": "NAME",
-								"AttributeID": "NAME"
-							},
-							{
-								"ColumnName": "STR",
-								"AttributeID": "STR"
-							},
-							{
-								"ColumnName": "ZIP",
-								"AttributeID": "ZIP"
-							},
-							{
-								"ColumnName": "CITY",
-								"AttributeID": "CITY"
-							},
-							{
-								"ColumnName": "COUNTRY",
-								"AttributeID": "COUNTRY"
-							},
-							{
-								"ColumnName": "DEFAULT_CURRENCY",
-								"AttributeID": "DEFAULT_CURRENCY"
-							}
-						],
+						"QueryDefinition": null,
+						"QueryMappings": null,
 						"HttpDataSourceId": null,
 						"IsResultTransformationEnabled": false
 					},
@@ -8227,7 +8218,7 @@ createHTML: (html) => {
 					"AttributeTypeId": "DEBITOR_NAME",
 					"AttributeTypeDescription": "DEBITOR_NAME",
 					"SemanticType": 0,
-					"ValueType": 3,
+					"ValueType": 5,
 					"DataBaseDefinition": {
 						"QueryDefinition": null,
 						"QueryMappings": null,
@@ -8469,6 +8460,25 @@ createHTML: (html) => {
 					"InterpretAsMultipleValues": false,
 					"ModelType": 0,
 					"TemplatePath": null
+				},
+				{
+					"AttributeTypeId": "Test",
+					"AttributeTypeDescription": "Test",
+					"SemanticType": 0,
+					"ValueType": 3,
+					"DataBaseDefinition": {
+						"QueryDefinition": null,
+						"QueryMappings": null,
+						"HttpDataSourceId": null,
+						"IsResultTransformationEnabled": false
+					},
+					"DInfSaveOption": 0,
+					"DClassifyAlias": "Test",
+					"InboundAlias": null,
+					"LoggingFlag": 1,
+					"InterpretAsMultipleValues": false,
+					"ModelType": 0,
+					"TemplatePath": null
 				}
 			],
 			"AttributeTypeStructureDefinitions": [],
@@ -8479,8 +8489,8 @@ createHTML: (html) => {
 					"MinifiedView": true,
 					"AttributeDefinitions": [
 						{
-							"AttributeID": "DEBITOR_NUM",
-							"Description": null,
+							"AttributeID": "DEBITOR_NAME",
+							"Description": "",
 							"LocalizedDescriptions": {},
 							"AttributeLabel": null,
 							"AttributeIcon": null,
@@ -8493,11 +8503,11 @@ createHTML: (html) => {
 							"ColumnSizePercent": 0,
 							"MinLength": 0,
 							"MaxLength": 0,
-							"SizeDesktop": 3,
+							"SizeDesktop": 12,
 							"SizeTablet": 3,
 							"SizePhone": 4,
 							"Minified": {
-								"SizeDesktop": 3,
+								"SizeDesktop": 12,
 								"SizeTablet": 3,
 								"SizePhone": 4
 							},
@@ -8509,127 +8519,14 @@ createHTML: (html) => {
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
-							"QueryAttributes": [{
-								"AttributeID": "DEBITOR_NUM",
-								"AttributeValue": null,
-								"AttributeQueryPrefix": "%",
-								"AttributeQuerySuffix": "%",
-								"Prefix": false,
-								"MultipleParameter": false
+							"QueryAttributes": [],
+							"JSSnippets": [{
+								"OnMethod": "change",
+								"Code": "let debitorName = GetAttribute('DEBITOR_NAME');\r\n\r\nconst sqlQuery = `SELECT * FROM CC_COMPANIES WHERE NAME = '${debitorName}'`;\r\nif (!debitorName || debitorName.trim() === \"\") {\r\n    return;\r\n}\r\n\r\nGetSqlResult(sqlQuery)\r\n    .then(result => {\r\n\r\n        const headers = result.Headers;\r\n\r\n        const idxCompanyERPTenantId = headers.indexOf('ERPTENANT_ID');\r\n        const idxCompanyCompanyNum = headers.indexOf('COMPANY_ID');\r\n\r\n        const idxCompanyStrNum = headers.indexOf('STR');\r\n\r\n        const idxCompanyZipNum = headers.indexOf('ZIP');\r\n\r\n        const idxCompanyCityNum = headers.indexOf('CITY');\r\n\r\n        const row = result.Rows[0];\r\n\r\n        const companyERPTenantId = row.Cells[idxCompanyERPTenantId];\r\n\r\n        const companyCompanyNum = row.Cells[idxCompanyCompanyNum];\r\n\r\n        const companyStr = row.Cells[idxCompanyStrNum];\r\n\r\n        const companyZip = row.Cells[idxCompanyZipNum];\r\n\r\n        const companyCity = row.Cells[idxCompanyCityNum];\r\n\r\n        SetAttribute('DEBITOR_NUM', companyCompanyNum);\r\n        SetAttribute('STR', companyStr);\r\n        SetAttribute('ZIP', companyZip);\r\n        SetAttribute('CITY', companyCity);\r\n        SetAttribute('debitorMapping', `${companyERPTenantId}-${companyCompanyNum}`);\r\n\r\n    })\r\n    .catch(console.error);"
 							}],
-							"JSSnippets": [],
 							"DataBaseDefinition": {
-								"QueryDefinition": "SELECT\n  COMPANY_NUM,\n  NAME,\n  STR,\n  ZIP,\n  CITY,\n  COUNTRY,\n  DEFAULT_CURRENCY\nFROM\n  dbo.CC_COMPANIES\nWHERE\n  COMPANY_NUM LIKE @DEBITOR_NUM",
-								"QueryMappings": [
-									{
-										"ColumnName": "COMPANY_NUM",
-										"AttributeID": "DEBITOR_NUM"
-									},
-									{
-										"ColumnName": "NAME",
-										"AttributeID": "NAME"
-									},
-									{
-										"ColumnName": "STR",
-										"AttributeID": "STR"
-									},
-									{
-										"ColumnName": "ZIP",
-										"AttributeID": "ZIP"
-									},
-									{
-										"ColumnName": "CITY",
-										"AttributeID": "CITY"
-									},
-									{
-										"ColumnName": "COUNTRY",
-										"AttributeID": "COUNTRY"
-									},
-									{
-										"ColumnName": "DEFAULT_CURRENCY",
-										"AttributeID": "DEFAULT_CURRENCY"
-									}
-								],
-								"HttpDataSourceId": null,
-								"IsResultTransformationEnabled": false
-							},
-							"IsTransitive": false,
-							"PositionCounterpart": null,
-							"AutoComplete": true,
-							"AllowNegativeAmount": false
-						},
-						{
-							"AttributeID": "NAME",
-							"Description": null,
-							"LocalizedDescriptions": {},
-							"AttributeLabel": null,
-							"AttributeIcon": null,
-							"AttributeType": 0,
-							"Required": false,
-							"ReadOnly": false,
-							"DoAlignStart": true,
-							"DefaultValue": null,
-							"Values": [],
-							"ColumnSizePercent": 0,
-							"MinLength": 0,
-							"MaxLength": 0,
-							"SizeDesktop": 9,
-							"SizeTablet": 5,
-							"SizePhone": 4,
-							"Minified": {
-								"SizeDesktop": 9,
-								"SizeTablet": 5,
-								"SizePhone": 4
-							},
-							"Position": {
-								"verticalPosition": 0,
-								"horizontalPosition": 1
-							},
-							"TabStop": 2,
-							"ValueConversion": null,
-							"Title": null,
-							"Pattern": null,
-							"QueryAttributes": [{
-								"AttributeID": "NAME",
-								"AttributeValue": null,
-								"AttributeQueryPrefix": "%",
-								"AttributeQuerySuffix": "%",
-								"Prefix": false,
-								"MultipleParameter": false
-							}],
-							"JSSnippets": [],
-							"DataBaseDefinition": {
-								"QueryDefinition": "SELECT\n  COMPANY_NUM,\n  NAME,\n  STR,\n  ZIP,\n  CITY,\n  COUNTRY,\n  DEFAULT_CURRENCY\nFROM\n  dbo.CC_COMPANIES\nWHERE\n  NAME LIKE @NAME",
-								"QueryMappings": [
-									{
-										"ColumnName": "COMPANY_NUM",
-										"AttributeID": "DEBITOR_NUM"
-									},
-									{
-										"ColumnName": "NAME",
-										"AttributeID": "NAME"
-									},
-									{
-										"ColumnName": "STR",
-										"AttributeID": "STR"
-									},
-									{
-										"ColumnName": "ZIP",
-										"AttributeID": "ZIP"
-									},
-									{
-										"ColumnName": "CITY",
-										"AttributeID": "CITY"
-									},
-									{
-										"ColumnName": "COUNTRY",
-										"AttributeID": "COUNTRY"
-									},
-									{
-										"ColumnName": "DEFAULT_CURRENCY",
-										"AttributeID": "DEFAULT_CURRENCY"
-									}
-								],
+								"QueryDefinition": "",
+								"QueryMappings": null,
 								"HttpDataSourceId": null,
 								"IsResultTransformationEnabled": false
 							},
@@ -8658,7 +8555,7 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 2,
+								"verticalPosition": 1,
 								"horizontalPosition": 0
 							},
 							"TabStop": 1,
@@ -8734,10 +8631,10 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 2,
+								"verticalPosition": 1,
 								"horizontalPosition": 1
 							},
-							"TabStop": 3,
+							"TabStop": 2,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -8774,10 +8671,10 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 2,
+								"verticalPosition": 1,
 								"horizontalPosition": 2
 							},
-							"TabStop": 4,
+							"TabStop": 3,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -8831,6 +8728,46 @@ createHTML: (html) => {
 							"AllowNegativeAmount": false
 						},
 						{
+							"AttributeID": "DEBITOR_NUM",
+							"Description": null,
+							"LocalizedDescriptions": {},
+							"AttributeLabel": null,
+							"AttributeIcon": null,
+							"AttributeType": 0,
+							"Required": false,
+							"ReadOnly": true,
+							"DoAlignStart": true,
+							"DefaultValue": null,
+							"Values": [],
+							"ColumnSizePercent": 0,
+							"MinLength": 0,
+							"MaxLength": 0,
+							"SizeDesktop": 6,
+							"SizeTablet": 4,
+							"SizePhone": 4,
+							"Minified": null,
+							"Position": {
+								"verticalPosition": 2,
+								"horizontalPosition": 0
+							},
+							"TabStop": 4,
+							"ValueConversion": null,
+							"Title": null,
+							"Pattern": null,
+							"QueryAttributes": [],
+							"JSSnippets": [],
+							"DataBaseDefinition": {
+								"QueryDefinition": "",
+								"QueryMappings": null,
+								"HttpDataSourceId": null,
+								"IsResultTransformationEnabled": false
+							},
+							"IsTransitive": false,
+							"PositionCounterpart": null,
+							"AutoComplete": true,
+							"AllowNegativeAmount": true
+						},
+						{
 							"AttributeID": "debitorMapping",
 							"Description": null,
 							"LocalizedDescriptions": {},
@@ -8850,7 +8787,7 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 3,
+								"verticalPosition": 2,
 								"horizontalPosition": 1
 							},
 							"TabStop": 5,
@@ -9637,7 +9574,7 @@ createHTML: (html) => {
 								"verticalPosition": 2,
 								"horizontalPosition": 3
 							},
-							"TabStop": -1,
+							"TabStop": 14,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -9685,7 +9622,7 @@ createHTML: (html) => {
 								"verticalPosition": 0,
 								"horizontalPosition": 0
 							},
-							"TabStop": 14,
+							"TabStop": 15,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -9725,7 +9662,7 @@ createHTML: (html) => {
 								"verticalPosition": 0,
 								"horizontalPosition": 1
 							},
-							"TabStop": 15,
+							"TabStop": 16,
 							"ValueConversion": "ConvertInputDate",
 							"Title": "dd.mm.YYYY",
 							"Pattern": "^(0?[1-9]|[12][0-9]|3[01])[.](0?[1-9]|1[012])[.](\\d{4})$",
@@ -9768,7 +9705,7 @@ createHTML: (html) => {
 								"verticalPosition": 0,
 								"horizontalPosition": 2
 							},
-							"TabStop": 16,
+							"TabStop": 17,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -9808,14 +9745,14 @@ createHTML: (html) => {
 								"verticalPosition": 1,
 								"horizontalPosition": 0
 							},
-							"TabStop": 17,
+							"TabStop": 18,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
 							"QueryAttributes": [],
 							"JSSnippets": [],
 							"DataBaseDefinition": {
-								"QueryDefinition": null,
+								"QueryDefinition": "",
 								"QueryMappings": null,
 								"HttpDataSourceId": null,
 								"IsResultTransformationEnabled": false
@@ -9848,7 +9785,7 @@ createHTML: (html) => {
 								"verticalPosition": 1,
 								"horizontalPosition": 1
 							},
-							"TabStop": 18,
+							"TabStop": 19,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -9888,7 +9825,7 @@ createHTML: (html) => {
 								"verticalPosition": 2,
 								"horizontalPosition": 0
 							},
-							"TabStop": -1,
+							"TabStop": 20,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -9928,7 +9865,7 @@ createHTML: (html) => {
 								"verticalPosition": 2,
 								"horizontalPosition": 1
 							},
-							"TabStop": -1,
+							"TabStop": 21,
 							"ValueConversion": "ConvertInputDate",
 							"Title": "dd.mm.YYYY",
 							"Pattern": "^(0?[1-9]|[12][0-9]|3[01])[.](0?[1-9]|1[012])[.](\\d{4})$",
@@ -9968,7 +9905,7 @@ createHTML: (html) => {
 								"verticalPosition": 3,
 								"horizontalPosition": 0
 							},
-							"TabStop": 19,
+							"TabStop": 22,
 							"ValueConversion": "ConvertInputFloatWithCustomDelimiter",
 							"Title": null,
 							"Pattern": null,
@@ -10011,7 +9948,7 @@ createHTML: (html) => {
 								"verticalPosition": 3,
 								"horizontalPosition": 1
 							},
-							"TabStop": 20,
+							"TabStop": 23,
 							"ValueConversion": "ConvertInputFloatWithCustomDelimiter",
 							"Title": null,
 							"Pattern": null,
@@ -10054,7 +9991,7 @@ createHTML: (html) => {
 								"verticalPosition": 4,
 								"horizontalPosition": 0
 							},
-							"TabStop": 21,
+							"TabStop": 24,
 							"ValueConversion": "ConvertInputFloatWithCustomDelimiter",
 							"Title": null,
 							"Pattern": null,
@@ -10097,7 +10034,7 @@ createHTML: (html) => {
 								"verticalPosition": 4,
 								"horizontalPosition": 1
 							},
-							"TabStop": 22,
+							"TabStop": 25,
 							"ValueConversion": "ConvertInputFloatWithCustomDelimiter",
 							"Title": null,
 							"Pattern": null,
@@ -10140,7 +10077,7 @@ createHTML: (html) => {
 								"verticalPosition": 5,
 								"horizontalPosition": 0
 							},
-							"TabStop": 23,
+							"TabStop": 26,
 							"ValueConversion": "ConvertInputFloatWithCustomDelimiter",
 							"Title": null,
 							"Pattern": null,
@@ -10183,7 +10120,7 @@ createHTML: (html) => {
 								"verticalPosition": 5,
 								"horizontalPosition": 1
 							},
-							"TabStop": 24,
+							"TabStop": 27,
 							"ValueConversion": "ConvertInputFloatWithCustomDelimiter",
 							"Title": null,
 							"Pattern": null,
@@ -10226,7 +10163,7 @@ createHTML: (html) => {
 								"verticalPosition": 6,
 								"horizontalPosition": 0
 							},
-							"TabStop": 25,
+							"TabStop": 28,
 							"ValueConversion": "ConvertInputFloatWithCustomDelimiter",
 							"Title": null,
 							"Pattern": null,
@@ -10269,7 +10206,7 @@ createHTML: (html) => {
 								"verticalPosition": 7,
 								"horizontalPosition": 0
 							},
-							"TabStop": 26,
+							"TabStop": 29,
 							"ValueConversion": "ConvertInputFloatWithCustomDelimiter",
 							"Title": null,
 							"Pattern": null,
@@ -10337,7 +10274,7 @@ createHTML: (html) => {
 								"verticalPosition": 7,
 								"horizontalPosition": 1
 							},
-							"TabStop": 27,
+							"TabStop": 30,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -10377,7 +10314,7 @@ createHTML: (html) => {
 								"verticalPosition": 8,
 								"horizontalPosition": 0
 							},
-							"TabStop": 28,
+							"TabStop": 31,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -10428,7 +10365,7 @@ createHTML: (html) => {
 								"verticalPosition": 0,
 								"horizontalPosition": 0
 							},
-							"TabStop": -1,
+							"TabStop": 32,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -10468,7 +10405,7 @@ createHTML: (html) => {
 								"verticalPosition": 0,
 								"horizontalPosition": 1
 							},
-							"TabStop": -1,
+							"TabStop": 33,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -10511,7 +10448,7 @@ createHTML: (html) => {
 								"verticalPosition": 0,
 								"horizontalPosition": 2
 							},
-							"TabStop": -1,
+							"TabStop": 34,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -10551,7 +10488,7 @@ createHTML: (html) => {
 								"verticalPosition": 0,
 								"horizontalPosition": 3
 							},
-							"TabStop": -1,
+							"TabStop": 35,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -10608,7 +10545,7 @@ createHTML: (html) => {
 								"verticalPosition": 1,
 								"horizontalPosition": 0
 							},
-							"TabStop": -1,
+							"TabStop": 36,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -10648,7 +10585,7 @@ createHTML: (html) => {
 								"verticalPosition": 1,
 								"horizontalPosition": 1
 							},
-							"TabStop": -1,
+							"TabStop": 37,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -10688,7 +10625,7 @@ createHTML: (html) => {
 								"verticalPosition": 1,
 								"horizontalPosition": 2
 							},
-							"TabStop": -1,
+							"TabStop": 38,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -10728,7 +10665,7 @@ createHTML: (html) => {
 								"verticalPosition": 1,
 								"horizontalPosition": 3
 							},
-							"TabStop": -1,
+							"TabStop": 39,
 							"ValueConversion": null,
 							"Title": null,
 							"Pattern": null,
@@ -10769,7 +10706,7 @@ createHTML: (html) => {
 			"StructureGroups": [],
 			"JSSnippets": [{
 				"OnMethod": "documentready",
-				"Code": "// Aktuellen Task und Dokument-ID ermitteln\r\nvar taskId = __ActiveTask__.Task;\r\nvar documentId = __ActiveTask__.Document;\r\nvar subscriptionId = taskList[__ActiveTask__.Task].batchTask.subscriptionId;\r\nvar processSequenceId = taskList[__ActiveTask__.Task].batchTask.processSequenceId;\r\nvar invoiceNumber = GetAttribute('InvoiceNumber');\r\nvar vendorNum = GetAttribute('VENDOR_NUM');\r\n\r\nconsole.log({\r\n    taskId: taskId,\r\n    documentId: documentId,\r\n    subscriptionId: subscriptionId,\r\n    processSequenceId: processSequenceId\r\n});\r\n\r\n// // Dropdownfeld für Mandant\r\n// GetSqlResult('SELECT * FROM CC_COMPANIES')\r\n//     .then(result => {\r\n//         const companyNumIndex = result.Headers.indexOf('COMPANY_NUM');\r\n//         const nameIndex = result.Headers.indexOf('NAME');\r\n\r\n//         // Wert = COMPANY_NUM (für die Lieferanten-Abfragen), Anzeige = Name\r\n//         const selectValues = result.Rows.map(row => [row.Cells[companyNumIndex], row.Cells[nameIndex]]);\r\n//         SetAttributeSelection('DEBITOR_NAME', selectValues);\r\n\r\n//         // Erkannten Mandanten nicht überschreiben, nur als Fallback den ersten nehmen\r\n//         const companyNum = GetAttribute('DEBITOR_NUM') || selectValues[0]?.[0];\r\n//         if (!companyNum) return;\r\n\r\n//         const row = result.Rows.find(r => r.Cells[companyNumIndex] === companyNum);\r\n//         if (!row) return;\r\n\r\n//         const h = result.Headers;\r\n//         const cell = name => row.Cells[h.indexOf(name)];\r\n\r\n//         SetAttribute('DEBITOR_NUM', companyNum);\r\n//         SetAttribute('DEBITOR_NAME', companyNum);\r\n//         SetAttribute('STR', cell('STR'));\r\n//         SetAttribute('ZIP', cell('ZIP'));\r\n//         SetAttribute('CITY', cell('CITY'));\r\n//         SetAttribute('debitorMapping', `${cell('ERPTENANT_ID')}-${cell('COMPANY_ID')}`);\r\n//     })\r\n//     .catch(console.error);\r\n\r\n\r\n\r\nlet IsDuplicate = GetAttribute(\"IsDuplicate\");\r\nif (IsDuplicate) {\r\n    showDuplicateWarning()\r\n}\r\n\r\n\r\nfunction showDuplicateWarning() {\r\n    // Definition der Fehlerdaten\r\n    var customValidation = [\r\n        {\r\n            \"errorGroupId\": \"CustomValidation\",\r\n            \"errorGroup\": \"Dublettenprüfung\",\r\n            \"result\": false,\r\n            \"errorMessages\": [\r\n                {\r\n                    \"message\": `Die Rechnung vom Lieferanten ${vendorNum} mit der Rechnungsnummer ${invoiceNumber} wurde bereits verarbeitet.`,\r\n                    \"attributesConcerned\": [\"InvoiceNumber\", \"VENDOR_NUM\"]\r\n                }\r\n            ]\r\n        }\r\n    ];\r\n    // Die Daten in das Live-Objekt taskList schreiben\r\n    if (taskList[taskId]) {\r\n        taskList[taskId].documentModels.forEach(function (doc) {\r\n            if (doc.documentNumber === documentId) {\r\n                doc.validationResults = customValidation;\r\n                if (typeof ElementAddFlag === 'function') {\r\n                    ElementAddFlag(taskId + \"_\" + documentId, \"Rejected\");\r\n                }\r\n            }\r\n        });\r\n    }\r\n\r\n    __ValidationErrors__ = customValidation;\r\n    showDocumentInformation();\r\n}\r\n\r\n\r\n\r\n// Lupe im Feld: löst STRG + F9 im Feld aus.\r\n(function () {\r\n    const FIELD_IDS = [\"VENDOR_NUM\"]; // weitere Felder hier ergänzen\r\n    const ICON_NAME = \"ccCtrlF9Icon\";\r\n\r\n    FIELD_IDS.forEach(function (id) { waitForField(id, 0); });\r\n\r\n    // Wartet, bis das Feld im DOM ist (max. 10 s)\r\n    function waitForField(id, attempt) {\r\n        const input = document.getElementById(id);\r\n        if (input) {\r\n            addIcon(input, attempt);\r\n        } else if (attempt < 50) {\r\n            setTimeout(function () { waitForField(id, attempt + 1); }, 200);\r\n        } else {\r\n            console.warn(\"[Lupe] Feld nicht gefunden: \" + id);\r\n        }\r\n    }\r\n\r\n    function addIcon(input, attempt) {\r\n        const label = input.closest(\"label\") || input.parentElement;\r\n        if (label.querySelector('[name=\"' + ICON_NAME + '\"]')) return; // nur einmal\r\n\r\n        const icon = document.createElement(\"i\");\r\n        icon.setAttribute(\"name\", ICON_NAME);\r\n        icon.className = \"material-icons\"; // nur für das Lupen-Zeichen\r\n        icon.textContent = \"search\";\r\n        icon.title = \"Suche (STRG + F9)\";\r\n        icon.setAttribute(\"role\", \"button\");\r\n        icon.setAttribute(\"tabindex\", \"0\");\r\n        // Aussehen direkt am Symbol, damit das CSS des Webindex es nicht ausblendet\r\n        icon.style.cssText =\r\n            \"display:inline-flex !important; align-items:center; align-self:center;\" +\r\n            \"position:relative; z-index:2; cursor:pointer; padding:0 4px;\" +\r\n            \"font-size:22px; color:rgba(0,0,0,.54); user-select:none;\";\r\n\r\n        // Fokus im Feld lassen, sonst startet onblur die Hintergrundabfrage (BackgroundQuery)\r\n        icon.addEventListener(\"mousedown\", function (e) { e.preventDefault(); });\r\n        icon.addEventListener(\"click\", function (e) {\r\n            e.preventDefault();\r\n            e.stopPropagation();\r\n            pressCtrlF9(input);\r\n        });\r\n        icon.addEventListener(\"keydown\", function (e) {\r\n            if (e.key === \"Enter\" || e.key === \" \") {\r\n                e.preventDefault();\r\n                pressCtrlF9(input);\r\n            }\r\n        });\r\n\r\n        // Direkt hinter dem Eingabefeld einfügen\r\n        input.insertAdjacentElement(\"afterend\", icon);\r\n        console.log(\"[Lupe] eingefügt in \" + input.id + \" nach \" + (attempt * 200) + \" ms\");\r\n    }\r\n\r\n    function pressCtrlF9(target) {\r\n        target.focus(); // setzt über onfocus das aktive Feld (changeActiveInput)\r\n        [\"keydown\", \"keyup\"].forEach(function (type) {\r\n            const event = new KeyboardEvent(type, {\r\n                key: \"F9\", code: \"F9\", ctrlKey: true, bubbles: true, cancelable: true\r\n            });\r\n            // Ältere Tasten-Handler lesen keyCode/which; das lässt sich im Konstruktor nicht setzen\r\n            Object.defineProperty(event, \"keyCode\", { get: function () { return 120; } });\r\n            Object.defineProperty(event, \"which\", { get: function () { return 120; } });\r\n            target.dispatchEvent(event);\r\n        });\r\n        console.log(\"[Lupe] STRG + F9 ausgelöst in \" + target.id);\r\n        TriggerAttributeQuery(\"VENDOR_NUM\");\r\n    }\r\n})();\r\n\r\n//Todo: TermofPayment und TermofPayment2 über sql raussuchen und befüllen\r\n// TriggerAttributeQuery('TermOfPayment');\r\n// TriggerAttributeQuery('TermOfPayment2');\r\n\r\nlet vendTermOfPayment = GetAttribute('VENDOR_PAYMENT_TERM')\r\nlet docTermOfPayment1 = GetAttribute('TermOfPayment')\r\n\r\nif (vendTermOfPayment != docTermOfPayment1) {\r\n    SetTextColor('TermOfPayment', '#eb3734')\r\n}\r\n\r\n\r\n"
+				"Code": "// Aktuellen Task und Dokument-ID ermitteln\r\nvar taskId = __ActiveTask__.Task;\r\nvar documentId = __ActiveTask__.Document;\r\nvar subscriptionId = taskList[__ActiveTask__.Task].batchTask.subscriptionId;\r\nvar processSequenceId = taskList[__ActiveTask__.Task].batchTask.processSequenceId;\r\nvar invoiceNumber = GetAttribute('InvoiceNumber');\r\nvar vendorNum = GetAttribute('VENDOR_NUM');\r\n\r\nconsole.log({\r\n    taskId: taskId,\r\n    documentId: documentId,\r\n    subscriptionId: subscriptionId,\r\n    processSequenceId: processSequenceId\r\n});\r\n\r\n// Dropdownfeld für Mandant\r\nGetSqlResult('SELECT * FROM CC_COMPANIES')\r\n    .then(result => {\r\n        const companyNumIndex = result.Headers.indexOf('COMPANY_NUM');\r\n        const nameIndex = result.Headers.indexOf('NAME');\r\n\r\n        // Wert = COMPANY_NUM (für die Lieferanten-Abfragen), Anzeige = Name\r\n        const selectValues = result.Rows.map(row => [row.Cells[companyNumIndex], row.Cells[nameIndex]]);\r\n        SetAttributeSelection('DEBITOR_NAME', selectValues);\r\n\r\n        // Erkannten Mandanten nicht überschreiben, nur als Fallback den ersten nehmen\r\n        const companyNum = GetAttribute('DEBITOR_NUM') || selectValues[0]?.[0];\r\n        if (!companyNum) return;\r\n\r\n        const row = result.Rows.find(r => r.Cells[companyNumIndex] === companyNum);\r\n        if (!row) return;\r\n\r\n        const h = result.Headers;\r\n        const cell = name => row.Cells[h.indexOf(name)];\r\n\r\n        SetAttribute('DEBITOR_NUM', companyNum);\r\n        SetAttribute('DEBITOR_NAME', companyNum);\r\n        SetAttribute('STR', cell('STR'));\r\n        SetAttribute('ZIP', cell('ZIP'));\r\n        SetAttribute('CITY', cell('CITY'));\r\n        SetAttribute('debitorMapping', `${cell('ERPTENANT_ID')}-${cell('COMPANY_ID')}`);\r\n    })\r\n    .catch(console.error);\r\n\r\n\r\n\r\nlet IsDuplicate = GetAttribute(\"IsDuplicate\");\r\nif (IsDuplicate) {\r\n    showDuplicateWarning()\r\n}\r\n\r\n\r\nfunction showDuplicateWarning() {\r\n    // Definition der Fehlerdaten\r\n    var customValidation = [\r\n        {\r\n            \"errorGroupId\": \"CustomValidation\",\r\n            \"errorGroup\": \"Dublettenprüfung\",\r\n            \"result\": false,\r\n            \"errorMessages\": [\r\n                {\r\n                    \"message\": `Die Rechnung vom Lieferanten ${vendorNum} mit der Rechnungsnummer ${invoiceNumber} wurde bereits verarbeitet.`,\r\n                    \"attributesConcerned\": [\"InvoiceNumber\", \"VENDOR_NUM\"]\r\n                }\r\n            ]\r\n        }\r\n    ];\r\n    // Die Daten in das Live-Objekt taskList schreiben\r\n    if (taskList[taskId]) {\r\n        taskList[taskId].documentModels.forEach(function (doc) {\r\n            if (doc.documentNumber === documentId) {\r\n                doc.validationResults = customValidation;\r\n                if (typeof ElementAddFlag === 'function') {\r\n                    ElementAddFlag(taskId + \"_\" + documentId, \"Rejected\");\r\n                }\r\n            }\r\n        });\r\n    }\r\n\r\n    __ValidationErrors__ = customValidation;\r\n    showDocumentInformation();\r\n}\r\n\r\n\r\n\r\n// Lupe im Feld: löst STRG + F9 im Feld aus.\r\n(function () {\r\n    const FIELD_IDS = [\"VENDOR_NUM\"]; // weitere Felder hier ergänzen\r\n    const ICON_NAME = \"ccCtrlF9Icon\";\r\n\r\n    FIELD_IDS.forEach(function (id) { waitForField(id, 0); });\r\n\r\n    // Wartet, bis das Feld im DOM ist (max. 10 s)\r\n    function waitForField(id, attempt) {\r\n        const input = document.getElementById(id);\r\n        if (input) {\r\n            addIcon(input, attempt);\r\n        } else if (attempt < 50) {\r\n            setTimeout(function () { waitForField(id, attempt + 1); }, 200);\r\n        } else {\r\n            console.warn(\"[Lupe] Feld nicht gefunden: \" + id);\r\n        }\r\n    }\r\n\r\n    function addIcon(input, attempt) {\r\n        const label = input.closest(\"label\") || input.parentElement;\r\n        if (label.querySelector('[name=\"' + ICON_NAME + '\"]')) return; // nur einmal\r\n\r\n        const icon = document.createElement(\"i\");\r\n        icon.setAttribute(\"name\", ICON_NAME);\r\n        icon.className = \"material-icons\"; // nur für das Lupen-Zeichen\r\n        icon.textContent = \"search\";\r\n        icon.title = \"Suche (STRG + F9)\";\r\n        icon.setAttribute(\"role\", \"button\");\r\n        icon.setAttribute(\"tabindex\", \"0\");\r\n        // Aussehen direkt am Symbol, damit das CSS des Webindex es nicht ausblendet\r\n        icon.style.cssText =\r\n            \"display:inline-flex !important; align-items:center; align-self:center;\" +\r\n            \"position:relative; z-index:2; cursor:pointer; padding:0 4px;\" +\r\n            \"font-size:22px; color:rgba(0,0,0,.54); user-select:none;\";\r\n\r\n        // Fokus im Feld lassen, sonst startet onblur die Hintergrundabfrage (BackgroundQuery)\r\n        icon.addEventListener(\"mousedown\", function (e) { e.preventDefault(); });\r\n        icon.addEventListener(\"click\", function (e) {\r\n            e.preventDefault();\r\n            e.stopPropagation();\r\n            pressCtrlF9(input);\r\n        });\r\n        icon.addEventListener(\"keydown\", function (e) {\r\n            if (e.key === \"Enter\" || e.key === \" \") {\r\n                e.preventDefault();\r\n                pressCtrlF9(input);\r\n            }\r\n        });\r\n\r\n        // Direkt hinter dem Eingabefeld einfügen\r\n        input.insertAdjacentElement(\"afterend\", icon);\r\n        console.log(\"[Lupe] eingefügt in \" + input.id + \" nach \" + (attempt * 200) + \" ms\");\r\n    }\r\n\r\n    function pressCtrlF9(target) {\r\n        target.focus(); // setzt über onfocus das aktive Feld (changeActiveInput)\r\n        [\"keydown\", \"keyup\"].forEach(function (type) {\r\n            const event = new KeyboardEvent(type, {\r\n                key: \"F9\", code: \"F9\", ctrlKey: true, bubbles: true, cancelable: true\r\n            });\r\n            // Ältere Tasten-Handler lesen keyCode/which; das lässt sich im Konstruktor nicht setzen\r\n            Object.defineProperty(event, \"keyCode\", { get: function () { return 120; } });\r\n            Object.defineProperty(event, \"which\", { get: function () { return 120; } });\r\n            target.dispatchEvent(event);\r\n        });\r\n        console.log(\"[Lupe] STRG + F9 ausgelöst in \" + target.id);\r\n        TriggerAttributeQuery(\"VENDOR_NUM\");\r\n    }\r\n})();\r\n\r\n//Todo: TermofPayment und TermofPayment2 über sql raussuchen und befüllen\r\n// TriggerAttributeQuery('TermOfPayment');\r\n// TriggerAttributeQuery('TermOfPayment2');\r\n\r\n// let vendTermOfPayment = GetAttribute('VENDOR_PAYMENT_TERM')\r\n// let docTermOfPayment1 = GetAttribute('TermOfPayment')\r\n\r\n// if (vendTermOfPayment != docTermOfPayment1) {\r\n//     SetTextColor('TermOfPayment', '#eb3734')\r\n// }\r\n\r\n\r\n"
 			}],
 			"TemplateDefinition": {
 				"TemplateId": "VENDOR_NUM",
@@ -11044,19 +10981,6 @@ createHTML: (html) => {
 						"SingleValueEntityName": null,
 						"SemanticType": 0,
 						"SignificantCharacters": "[A-Za-z0-9]",
-						"DefaultValue": "",
-						"CreateFulltextIndex": false
-					},
-					{
-						"ColumnName": "VENDOR_PAYMENT_TERMS_CODE",
-						"Description": null,
-						"ColumnType": 1,
-						"MaxLength": 1024,
-						"CreateIndex": false,
-						"TryIdentifyPattern": false,
-						"SingleValueEntityName": null,
-						"SemanticType": 0,
-						"SignificantCharacters": null,
 						"DefaultValue": "",
 						"CreateFulltextIndex": false
 					},
@@ -15484,6 +15408,9 @@ createHTML: (html) => {
 				text: "API-Key wird geprüft…"
 			};
 			try {
+				await validateApiKey(BASE_URI, apiKey).catch((error) => {
+					throw new Error(/status: 401/.test(getErrorMessage(error)) ? "ungültig oder abgelaufen." : getErrorMessage(error));
+				});
 				await getRepositoryId(apiKey);
 				const firstLoad = config.groupsLoadedFor !== apiKey;
 				await initGroupSelection(apiKey);
