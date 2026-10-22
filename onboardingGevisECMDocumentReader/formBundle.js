@@ -14176,7 +14176,7 @@ createHTML: (html) => {
 		if (!/^[\w-]+$/.test(environment)) throw new Error("Bitte eine gültige ERP-Umgebung (z.B. „Production“, ohne Leer- und Sonderzeichen) in der Konfiguration eintragen.");
 		return environment;
 	}
-	function stveoCompanyTable(company, environment, timestamp) {
+	function stveoCompanyTable(company, environment) {
 		const rows = [
 			[
 				"PartitionKey",
@@ -14191,7 +14191,7 @@ createHTML: (html) => {
 			[
 				"TimeStamp",
 				"Datetime",
-				timestamp
+				""
 			],
 			[
 				"AadTenantId",
@@ -14211,7 +14211,7 @@ createHTML: (html) => {
 			[
 				"Description",
 				"String",
-				company.NAME
+				`${getTenantName()} - ${company.NAME}`
 			]
 		];
 		const cell = "border:1px solid #999;padding:4px 8px;text-align:left";
@@ -14223,8 +14223,7 @@ createHTML: (html) => {
 	}
 	function stveoMailHtml(companies) {
 		const environment = stveoEnvironment();
-		const timestamp = (/* @__PURE__ */ new Date()).toISOString();
-		const tables = companies.map((company) => stveoCompanyTable(company, environment, timestamp)).join("");
+		const tables = companies.map((company) => stveoCompanyTable(company, environment)).join("");
 		return `<html><body style="font-family:Calibri,Arial,sans-serif;font-size:11pt"><p>Moin,</p><p>kannst du mir bitte noch folgende anlegen?</p><p><a href="${escapeHtml(STVEO_STORAGE_LINK.url)}">${escapeHtml(STVEO_STORAGE_LINK.text)}</a></p>${tables}<p>Danke dir!</p></body></html>`;
 	}
 	function stveoMailEml(companies) {
@@ -14331,14 +14330,19 @@ createHTML: (html) => {
 			return;
 		}
 	}
-	var documentReaderSubscriptionId = "";
-	async function findDocumentReaderSubscriptionId(apiKey) {
-		if (documentReaderSubscriptionId) return documentReaderSubscriptionId;
+	var documentReaderSubscriptionId;
+	function findDocumentReaderSubscriptionId(apiKey) {
+		documentReaderSubscriptionId ??= lookupDocumentReaderSubscriptionId(apiKey).catch((error) => {
+			documentReaderSubscriptionId = void 0;
+			throw error;
+		});
+		return documentReaderSubscriptionId;
+	}
+	async function lookupDocumentReaderSubscriptionId(apiKey) {
 		const fromApps = await getApps(BASE_URI$1, apiKey).then((r) => r.body.widgets?.find((w) => w.id === "classcon-documentreader/indexing")?.target_uri?.split("/").pop()).catch(() => void 0);
 		const fromFeatures = fromApps ? void 0 : await getDocumentReaderFeatures(BASE_URI$1, apiKey).then((r) => r.body.features?.find((f) => f.url?.includes("classcon-documentreader"))?.url?.split("/").pop()).catch(() => void 0);
 		const subscriptionId = fromApps || fromFeatures;
 		if (!subscriptionId) throw new Error("Subscription-ID des Rechnungslesers nicht gefunden - ist der Rechnungsleser im Mandanten gebucht?");
-		documentReaderSubscriptionId = subscriptionId;
 		return subscriptionId;
 	}
 	async function initGroupSelection(apiKey) {
@@ -15316,12 +15320,17 @@ createHTML: (html) => {
 			});
 		}
 	}
+	var MAX_PARALLEL_CHECKS = 6;
 	async function checkAll() {
 		view.message = {
 			kind: "info",
 			text: "Status wird geprüft…"
 		};
-		for (const step of activeSteps()) await checkStep(step);
+		const queue = [...activeSteps()];
+		const worker = async () => {
+			for (let step = queue.shift(); step; step = queue.shift()) await checkStep(step);
+		};
+		await Promise.all(Array.from({ length: Math.min(MAX_PARALLEL_CHECKS, queue.length) }, worker));
 		const counts = activeSteps().map(statusOf);
 		const open = counts.filter((state) => state === "missing").length;
 		const existing = counts.filter((state) => state === "exists").length;

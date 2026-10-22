@@ -4800,6 +4800,44 @@ createHTML: (html) => {
 		});
 	}
 	//#endregion
+	//#region ../../helper/classcon-documentreader/getFeatures.ts
+	/**
+	* Liefert die Features (Kacheln) des Rechnungslesers - analog zu
+	* classconorderconfirmations/getFeatures. Die URL eines Features endet auf
+	* die Subscription-ID.
+	*
+	* @param baseUri - The base URI of the API.
+	* @param token - Optional bearer token; ohne Token wird die Browser-Session genutzt.
+	*/
+	async function getDocumentReaderFeatures(baseUri, token) {
+		return await performHttpRequest(`${baseUri}/classcon-documentreader/getFeatures`, {
+			method: "GET",
+			headers: {
+				...token ? { "Authorization": `Bearer ${token}` } : {},
+				"Accept": "application/json",
+				"Content-Type": "application/json",
+				"Accept-Language": "de-DE"
+			}
+		});
+	}
+	//#endregion
+	//#region ../../helper/classcon-documentreader/masterFile.ts
+	/**
+	* Stand der Stammdaten-Tabellen (letzter Upload, Zeilenzahl) - wie die
+	* Stammdaten-Seite: GET /classcon-documentreader/MasterFile/GetMasterDataStatus?subscriptionId=<id>
+	* über die Browser-Session.
+	*/
+	async function getMasterDataStatus(baseUri, subscriptionId) {
+		return (await performHttpRequest(`${baseUri}/classcon-documentreader/MasterFile/GetMasterDataStatus?subscriptionId=${encodeURIComponent(subscriptionId)}`, {
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				"X-Requested-With": "XMLHttpRequest"
+			},
+			credentials: "same-origin"
+		})).body;
+	}
+	//#endregion
 	//#region src/forms/api.ts
 	var BASE_URI = window.location.origin;
 	var APP = "classcon-documentreader";
@@ -4853,6 +4891,16 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 		const result = await query(`SELECT COUNT_BIG(*) AS Count FROM ${quoteIdentifier(table.schema)}.${quoteIdentifier(table.name)};`);
 		return Number(result.rows[0]?.[0] ?? 0);
 	}
+	async function fetchSubscriptionId() {
+		const subscriptionId = ((await getDocumentReaderFeatures(BASE_URI)).body.features ?? []).find((f) => f.url?.includes(APP))?.url?.split("/").pop();
+		if (!subscriptionId) throw new Error("Subscription-ID des Rechnungslesers nicht gefunden.");
+		return subscriptionId;
+	}
+	/** Stand der Stammdaten (letzter Upload) je Tabellenname, Schlüssel groß geschrieben. */
+	async function fetchMasterDataStatus() {
+		const status = await getMasterDataStatus(BASE_URI, await fetchSubscriptionId());
+		return Object.fromEntries((status.masterDataTableStatusViewModels ?? []).map((table) => [table.tableName.toUpperCase(), table]));
+	}
 	//#endregion
 	//#region src/forms/viewerState.svelte.ts
 	var MAX_ROWS = 5e3;
@@ -4871,6 +4919,19 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 	});
 	function getErrorMessage(error) {
 		return error instanceof Error ? error.message : String(error);
+	}
+	/** Zeitpunkt des letzten Uploads, z.B. "22.10.2026 10:36"; undefined = noch nie hochgeladen. */
+	function formatUploadDate(status) {
+		if (!status?.lastUpdate) return status?.lastUpdateString || void 0;
+		const date = new Date(status.lastUpdate);
+		if (Number.isNaN(date.getTime())) return status.lastUpdateString || void 0;
+		return date.toLocaleString("de-DE", {
+			day: "2-digit",
+			month: "2-digit",
+			year: "numeric",
+			hour: "2-digit",
+			minute: "2-digit"
+		});
 	}
 	function columnKind(sqlType) {
 		if (sqlType === "bit") return "boolean";
@@ -4966,6 +5027,13 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 		}
 		set tableFilter(value) {
 			set(this.#tableFilter, value, true);
+		}
+		#uploadStatus;
+		get uploadStatus() {
+			return get(this.#uploadStatus);
+		}
+		set uploadStatus(value) {
+			set(this.#uploadStatus, value, true);
 		}
 		#current;
 		get current() {
@@ -5084,6 +5152,7 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 			this.#tablesStatus = /* @__PURE__ */ state("loading");
 			this.#tablesError = /* @__PURE__ */ state("");
 			this.#tableFilter = /* @__PURE__ */ state("");
+			this.#uploadStatus = /* @__PURE__ */ state(proxy({}));
 			this.#current = /* @__PURE__ */ state();
 			this.#rowsStatus = /* @__PURE__ */ state("loading");
 			this.#rowsError = /* @__PURE__ */ state("");
@@ -5152,6 +5221,17 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 				this.tablesStatus = "error";
 			}
 		}
+		/** Letzter Upload je Stammdaten-Tabelle - Fehler nur protokollieren, die Ansicht geht auch ohne. */
+		async loadUploadStatus() {
+			try {
+				this.uploadStatus = await fetchMasterDataStatus();
+			} catch (error) {
+				getLogger().warn(`Upload-Stand der Stammdaten nicht ermittelbar: ${getErrorMessage(error)}`);
+			}
+		}
+		statusOf(table) {
+			return table ? this.uploadStatus[table.name.toUpperCase()] : void 0;
+		}
 		async selectTable(table) {
 			this.current = table;
 			await this.reloadRows();
@@ -5160,6 +5240,7 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 			const table = this.current;
 			if (!table) return;
 			this.rowsStatus = "loading";
+			this.loadUploadStatus();
 			this.search = "";
 			this.sort = void 0;
 			this.totalCount = void 0;
@@ -5216,32 +5297,34 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 	var root = /* @__PURE__ */ from_html(`<div class="p-3 text-muted small">Lade Tabellen...</div>`);
 	var root_1 = /* @__PURE__ */ from_html(`<div class="p-3 text-danger small"> <button type="button" class="btn btn-link btn-sm p-0 d-block">Erneut versuchen</button></div>`);
 	var root_2 = /* @__PURE__ */ from_html(`<span class="badge text-bg-light border ms-1">View</span>`);
-	var root_3 = /* @__PURE__ */ from_html(`<button type="button"> <!></button>`);
-	var root_4 = /* @__PURE__ */ from_html(`<div class="px-3 pt-2 pb-1 text-muted text-uppercase schema svelte-1jio28y"> </div> <!>`, 1);
-	var root_5 = /* @__PURE__ */ from_html(`<div class="p-3 text-muted small">Keine Tabellen gefunden.</div>`);
-	var root_6 = /* @__PURE__ */ from_html(`<p class="text-muted">Bitte links eine Tabelle auswählen.</p>`);
-	var root_7 = /* @__PURE__ */ from_html(`<small class="text-muted fw-normal fs-6"> </small>`);
-	var root_8 = /* @__PURE__ */ from_html(`<input type="search" class="form-control form-control-sm search svelte-1jio28y" placeholder="Alle Spalten durchsuchen..."/> <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap">CSV exportieren</button>`, 1);
-	var root_9 = /* @__PURE__ */ from_html(`<div class="text-muted p-2">Lade Einträge...</div>`);
-	var root_10 = /* @__PURE__ */ from_html(`<div class="alert alert-danger m-2"> </div>`);
-	var root_11 = /* @__PURE__ */ from_html(`<p class="text-muted">Keine Einträge vorhanden.</p>`);
-	var root_12 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-link btn-sm p-0"> </button>`);
-	var root_13 = /* @__PURE__ */ from_html(`<div class="d-flex align-items-center gap-2 small text-muted mb-2 flex-shrink-0"> <!></div>`);
-	var root_14 = /* @__PURE__ */ from_html(`<span class="ms-1"> </span>`);
-	var root_15 = /* @__PURE__ */ from_html(`<th class="text-nowrap sortable svelte-1jio28y"> <!></th>`);
-	var root_16 = /* @__PURE__ */ from_html(`<select class="form-select form-select-sm"><option>Alle</option><option>Ja (true)</option><option>Nein (false)</option><option>leer</option></select>`);
-	var root_17 = /* @__PURE__ */ from_html(`<div class="d-flex flex-column gap-1"><input type="date" class="form-control form-control-sm" title="von (einschließlich)"/> <input type="date" class="form-control form-control-sm" title="bis (einschließlich)"/></div>`);
-	var root_18 = /* @__PURE__ */ from_html(`<input type="search" class="form-control form-control-sm" placeholder="Filter, * = beliebig" title="Ohne *: enthält den Text. Mit *: ganzer Wert passt zum Muster, z.B. Müller*, *GmbH, DE*01"/>`);
-	var root_19 = /* @__PURE__ */ from_html(`<th class="fw-normal svelte-1jio28y"><!></th>`);
-	var root_20 = /* @__PURE__ */ from_html(`<span class="text-muted">—</span>`);
-	var root_21 = /* @__PURE__ */ from_html(`<td class="svelte-1jio28y"><!></td>`);
-	var root_22 = /* @__PURE__ */ from_html(`<tr></tr>`);
-	var root_23 = /* @__PURE__ */ from_html(`<!> <div class="overflow-auto flex-grow-1 border"><table class="table table-sm table-bordered table-hover align-middle small mb-0"><thead class="table-dark svelte-1jio28y"><tr></tr><tr class="filters svelte-1jio28y"></tr></thead><tbody></tbody></table></div>`, 1);
-	var root_24 = /* @__PURE__ */ from_html(`<div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom flex-shrink-0"><h5 class="mb-0 text-truncate"> <!></h5> <div class="ms-auto d-flex align-items-center gap-2"><!> <button type="button" class="btn btn-sm btn-outline-primary text-nowrap">Neu laden</button></div></div> <!>`, 1);
-	var root_25 = /* @__PURE__ */ from_html(`<div class="d-flex h-100 overflow-hidden"><div class="sidebar border-end d-flex flex-column overflow-hidden svelte-1jio28y"><div class="p-2 bg-secondary text-white fw-semibold small flex-shrink-0">Tabellen</div> <div class="p-2 border-bottom flex-shrink-0"><input type="search" class="form-control form-control-sm" placeholder="Tabelle suchen..."/></div> <div class="overflow-y-auto flex-grow-1"><!></div></div> <div class="flex-grow-1 d-flex flex-column overflow-hidden p-3"><!></div></div>`);
+	var root_3 = /* @__PURE__ */ from_html(`<span> </span>`);
+	var root_4 = /* @__PURE__ */ from_html(`<button type="button"> <!> <!></button>`);
+	var root_5 = /* @__PURE__ */ from_html(`<div class="px-3 pt-2 pb-1 text-muted text-uppercase schema svelte-1jio28y"> </div> <!>`, 1);
+	var root_6 = /* @__PURE__ */ from_html(`<div class="p-3 text-muted small">Keine Tabellen gefunden.</div>`);
+	var root_7 = /* @__PURE__ */ from_html(`<p class="text-muted">Bitte links eine Tabelle auswählen.</p>`);
+	var root_8 = /* @__PURE__ */ from_html(`<small class="text-muted fw-normal fs-6"> </small>`);
+	var root_9 = /* @__PURE__ */ from_html(`<span> <!></span>`);
+	var root_10 = /* @__PURE__ */ from_html(`<input type="search" class="form-control form-control-sm search svelte-1jio28y" placeholder="Alle Spalten durchsuchen..."/> <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap">CSV exportieren</button>`, 1);
+	var root_11 = /* @__PURE__ */ from_html(`<div class="text-muted p-2">Lade Einträge...</div>`);
+	var root_12 = /* @__PURE__ */ from_html(`<div class="alert alert-danger m-2"> </div>`);
+	var root_13 = /* @__PURE__ */ from_html(`<p class="text-muted">Keine Einträge vorhanden.</p>`);
+	var root_14 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-link btn-sm p-0"> </button>`);
+	var root_15 = /* @__PURE__ */ from_html(`<div class="d-flex align-items-center gap-2 small text-muted mb-2 flex-shrink-0"> <!></div>`);
+	var root_16 = /* @__PURE__ */ from_html(`<span class="ms-1"> </span>`);
+	var root_17 = /* @__PURE__ */ from_html(`<th class="text-nowrap sortable svelte-1jio28y"> <!></th>`);
+	var root_18 = /* @__PURE__ */ from_html(`<select class="form-select form-select-sm"><option>Alle</option><option>Ja (true)</option><option>Nein (false)</option><option>leer</option></select>`);
+	var root_19 = /* @__PURE__ */ from_html(`<div class="d-flex flex-column gap-1"><input type="date" class="form-control form-control-sm" title="von (einschließlich)"/> <input type="date" class="form-control form-control-sm" title="bis (einschließlich)"/></div>`);
+	var root_20 = /* @__PURE__ */ from_html(`<input type="search" class="form-control form-control-sm" placeholder="Filter, * = beliebig" title="Ohne *: enthält den Text. Mit *: ganzer Wert passt zum Muster, z.B. Müller*, *GmbH, DE*01"/>`);
+	var root_21 = /* @__PURE__ */ from_html(`<th class="fw-normal svelte-1jio28y"><!></th>`);
+	var root_22 = /* @__PURE__ */ from_html(`<span class="text-muted">—</span>`);
+	var root_23 = /* @__PURE__ */ from_html(`<td class="svelte-1jio28y"><!></td>`);
+	var root_24 = /* @__PURE__ */ from_html(`<tr></tr>`);
+	var root_25 = /* @__PURE__ */ from_html(`<!> <div class="overflow-auto flex-grow-1 border"><table class="table table-sm table-bordered table-hover align-middle small mb-0"><thead class="table-dark svelte-1jio28y"><tr></tr><tr class="filters svelte-1jio28y"></tr></thead><tbody></tbody></table></div>`, 1);
+	var root_26 = /* @__PURE__ */ from_html(`<div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom flex-shrink-0"><h5 class="mb-0 text-truncate"> <!></h5> <!> <div class="ms-auto d-flex align-items-center gap-2"><!> <button type="button" class="btn btn-sm btn-outline-primary text-nowrap">Neu laden</button></div></div> <!>`, 1);
+	var root_27 = /* @__PURE__ */ from_html(`<div class="d-flex h-100 overflow-hidden"><div class="sidebar border-end d-flex flex-column overflow-hidden svelte-1jio28y"><div class="p-2 bg-secondary text-white fw-semibold small flex-shrink-0">Tabellen</div> <div class="p-2 border-bottom flex-shrink-0"><input type="search" class="form-control form-control-sm" placeholder="Tabelle suchen..."/></div> <div class="overflow-y-auto flex-grow-1"><!></div></div> <div class="flex-grow-1 d-flex flex-column overflow-hidden p-3"><!></div></div>`);
 	var $$css = {
 		hash: "svelte-1jio28y",
-		code: ".sidebar.svelte-1jio28y {width:20%;min-width:200px;}.schema.svelte-1jio28y {font-size:0.7rem;font-weight:600;letter-spacing:0.04em;}.table-entry.svelte-1jio28y {font-size:0.8rem;}.search.svelte-1jio28y {min-width:220px;max-width:320px;}thead.svelte-1jio28y {position:sticky;top:0;z-index:1;}.sortable.svelte-1jio28y {cursor:pointer;user-select:none;}.filters.svelte-1jio28y th:where(.svelte-1jio28y) {min-width:140px;}td.svelte-1jio28y {white-space:pre-wrap;}"
+		code: ".sidebar.svelte-1jio28y {width:20%;min-width:200px;}.schema.svelte-1jio28y {font-size:0.7rem;font-weight:600;letter-spacing:0.04em;}.table-entry.svelte-1jio28y {font-size:0.8rem;}.upload-date.svelte-1jio28y {font-size:0.7rem;}.search.svelte-1jio28y {min-width:220px;max-width:320px;}thead.svelte-1jio28y {position:sticky;top:0;z-index:1;}.sortable.svelte-1jio28y {cursor:pointer;user-select:none;}.filters.svelte-1jio28y th:where(.svelte-1jio28y) {min-width:140px;}td.svelte-1jio28y {white-space:pre-wrap;}"
 	};
 	function App($$anchor, $$props) {
 		push($$props, true);
@@ -5261,7 +5344,8 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 			const total = viewer().totalCount === void 0 ? `mehr als ${MAX_ROWS}` : viewer().totalCount.toLocaleString("de-DE");
 			return `erste ${MAX_ROWS.toLocaleString("de-DE")} von ${total} Zeilen`;
 		});
-		var div = root_25();
+		const currentStatus = /* @__PURE__ */ user_derived(() => viewer().statusOf(viewer().current));
+		var div = root_27();
 		var div_1 = child(div);
 		var div_2 = sibling(child(div_1), 2);
 		var input = child(div_2);
@@ -5284,12 +5368,13 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 		var alternate = ($$anchor) => {
 			var fragment = comment();
 			each(first_child(fragment), 17, () => viewer().tableGroups, (group) => group.schema, ($$anchor, group) => {
-				var fragment_1 = root_4();
+				var fragment_1 = root_5();
 				var div_6 = first_child(fragment_1);
 				var text_1 = only_child(div_6, true);
 				each(sibling(div_6, 2), 17, () => get(group).tables, (table) => table.name, ($$anchor, table) => {
 					const active = /* @__PURE__ */ user_derived(() => viewer().current?.schema === get(table).schema && viewer().current?.name === get(table).name);
-					var button_1 = root_3();
+					const uploaded = /* @__PURE__ */ user_derived(() => formatUploadDate(viewer().statusOf(get(table))));
+					var button_1 = root_4();
 					let classes;
 					var text_2 = child(button_1, true);
 					var node_3 = sibling(text_2);
@@ -5298,6 +5383,20 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 					};
 					if_block(node_3, ($$render) => {
 						if (get(table).type === "VIEW") $$render(consequent_2);
+					});
+					var node_4 = sibling(node_3, 2);
+					var consequent_3 = ($$anchor) => {
+						var span_1 = root_3();
+						let classes_1;
+						var text_3 = only_child(span_1);
+						template_effect(() => {
+							classes_1 = set_class(span_1, 1, "d-block upload-date svelte-1jio28y", null, classes_1, { "text-muted": !get(active) });
+							set_text(text_3, `hochgeladen ${get(uploaded) ?? ""}`);
+						});
+						append($$anchor, span_1);
+					};
+					if_block(node_4, ($$render) => {
+						if (get(uploaded)) $$render(consequent_3);
 					});
 					reset(button_1);
 					template_effect(() => {
@@ -5315,7 +5414,7 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 				template_effect(() => set_text(text_1, get(group).schema));
 				append($$anchor, fragment_1);
 			}, ($$anchor) => {
-				append($$anchor, root_5());
+				append($$anchor, root_6());
 			});
 			append($$anchor, fragment);
 		};
@@ -5327,30 +5426,53 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 		reset(div_3);
 		reset(div_1);
 		var div_8 = sibling(div_1, 2);
-		var node_4 = child(div_8);
-		var consequent_3 = ($$anchor) => {
-			append($$anchor, root_6());
+		var node_5 = child(div_8);
+		var consequent_4 = ($$anchor) => {
+			append($$anchor, root_7());
 		};
 		var alternate_4 = ($$anchor) => {
-			var fragment_2 = root_24();
+			var fragment_2 = root_26();
 			var div_9 = first_child(fragment_2);
 			var h5 = child(div_9);
-			var text_3 = child(h5);
-			var node_5 = sibling(text_3);
-			var consequent_4 = ($$anchor) => {
-				var small = root_7();
-				var text_4 = only_child(small, true);
-				template_effect(() => set_text(text_4, get(rowInfo)));
+			var text_4 = child(h5);
+			var node_6 = sibling(text_4);
+			var consequent_5 = ($$anchor) => {
+				var small = root_8();
+				var text_5 = only_child(small, true);
+				template_effect(() => set_text(text_5, get(rowInfo)));
 				append($$anchor, small);
 			};
-			if_block(node_5, ($$render) => {
-				if (viewer().rowsStatus === "loaded") $$render(consequent_4);
+			if_block(node_6, ($$render) => {
+				if (viewer().rowsStatus === "loaded") $$render(consequent_5);
 			});
 			reset(h5);
-			var div_10 = sibling(h5, 2);
-			var node_6 = child(div_10);
-			var consequent_5 = ($$anchor) => {
-				var fragment_3 = root_8();
+			var node_7 = sibling(h5, 2);
+			var consequent_7 = ($$anchor) => {
+				const uploaded = /* @__PURE__ */ user_derived(() => formatUploadDate(get(currentStatus)));
+				var span_2 = root_9();
+				var text_6 = child(span_2, true);
+				var node_8 = sibling(text_6);
+				var consequent_6 = ($$anchor) => {
+					append($$anchor, text("⚠"));
+				};
+				if_block(node_8, ($$render) => {
+					if (get(currentStatus).rowCountMismatch) $$render(consequent_6);
+				});
+				reset(span_2);
+				template_effect(() => {
+					set_class(span_2, 1, `badge text-nowrap ${get(uploaded) ? "text-bg-light border" : "text-bg-warning"}`);
+					set_attribute(span_2, "title", get(currentStatus).rowCountMismatch ? `Zeilenzahl weicht ab: ${get(currentStatus).rowCount} statt erwartet ${get(currentStatus).expectedRowCount}` : void 0);
+					set_text(text_6, get(uploaded) ? `Hochgeladen am ${get(uploaded)}` : "Noch nicht hochgeladen");
+				});
+				append($$anchor, span_2);
+			};
+			if_block(node_7, ($$render) => {
+				if (get(currentStatus)) $$render(consequent_7);
+			});
+			var div_10 = sibling(node_7, 2);
+			var node_9 = child(div_10);
+			var consequent_8 = ($$anchor) => {
+				var fragment_3 = root_10();
 				var input_1 = first_child(fragment_3);
 				remove_input_defaults(input_1);
 				var button_2 = sibling(input_1, 2);
@@ -5358,68 +5480,68 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 				delegated("click", button_2, downloadCsv);
 				append($$anchor, fragment_3);
 			};
-			if_block(node_6, ($$render) => {
-				if (viewer().rowsStatus === "loaded" && viewer().rows.length > 0) $$render(consequent_5);
+			if_block(node_9, ($$render) => {
+				if (viewer().rowsStatus === "loaded" && viewer().rows.length > 0) $$render(consequent_8);
 			});
-			var button_3 = sibling(node_6, 2);
+			var button_3 = sibling(node_9, 2);
 			reset(div_10);
 			reset(div_9);
-			var node_7 = sibling(div_9, 2);
-			var consequent_6 = ($$anchor) => {
-				append($$anchor, root_9());
-			};
-			var consequent_7 = ($$anchor) => {
-				var div_12 = root_10();
-				var text_5 = only_child(div_12);
-				template_effect(() => set_text(text_5, `Fehler beim Laden: ${viewer().rowsError ?? ""}`));
-				append($$anchor, div_12);
-			};
-			var consequent_8 = ($$anchor) => {
+			var node_10 = sibling(div_9, 2);
+			var consequent_9 = ($$anchor) => {
 				append($$anchor, root_11());
 			};
+			var consequent_10 = ($$anchor) => {
+				var div_12 = root_12();
+				var text_8 = only_child(div_12);
+				template_effect(() => set_text(text_8, `Fehler beim Laden: ${viewer().rowsError ?? ""}`));
+				append($$anchor, div_12);
+			};
+			var consequent_11 = ($$anchor) => {
+				append($$anchor, root_13());
+			};
 			var alternate_3 = ($$anchor) => {
-				var fragment_4 = root_23();
-				var node_8 = first_child(fragment_4);
-				var consequent_10 = ($$anchor) => {
-					var div_13 = root_13();
-					var text_6 = child(div_13);
-					var node_9 = sibling(text_6);
-					var consequent_9 = ($$anchor) => {
-						var button_4 = root_12();
-						var text_7 = only_child(button_4);
-						template_effect(() => set_text(text_7, `${viewer().activeFilterCount === 1 ? "Spaltenfilter" : `${viewer().activeFilterCount} Spaltenfilter`} zurücksetzen`));
+				var fragment_4 = root_25();
+				var node_11 = first_child(fragment_4);
+				var consequent_13 = ($$anchor) => {
+					var div_13 = root_15();
+					var text_9 = child(div_13);
+					var node_12 = sibling(text_9);
+					var consequent_12 = ($$anchor) => {
+						var button_4 = root_14();
+						var text_10 = only_child(button_4);
+						template_effect(() => set_text(text_10, `${viewer().activeFilterCount === 1 ? "Spaltenfilter" : `${viewer().activeFilterCount} Spaltenfilter`} zurücksetzen`));
 						delegated("click", button_4, () => viewer().clearFilters());
 						append($$anchor, button_4);
 					};
-					if_block(node_9, ($$render) => {
-						if (viewer().activeFilterCount > 0) $$render(consequent_9);
+					if_block(node_12, ($$render) => {
+						if (viewer().activeFilterCount > 0) $$render(consequent_12);
 					});
 					reset(div_13);
-					template_effect(() => set_text(text_6, `${viewer().visibleIndices.length ?? ""} Treffer `));
+					template_effect(() => set_text(text_9, `${viewer().visibleIndices.length ?? ""} Treffer `));
 					append($$anchor, div_13);
 				};
-				if_block(node_8, ($$render) => {
-					if (viewer().search || viewer().activeFilterCount > 0) $$render(consequent_10);
+				if_block(node_11, ($$render) => {
+					if (viewer().search || viewer().activeFilterCount > 0) $$render(consequent_13);
 				});
-				var div_14 = sibling(node_8, 2);
+				var div_14 = sibling(node_11, 2);
 				var table_1 = child(div_14);
 				var thead = child(table_1);
 				var tr = child(thead);
 				each(tr, 21, () => viewer().columns, index, ($$anchor, column, c) => {
-					var th = root_15();
-					var text_8 = child(th, true);
-					var node_10 = sibling(text_8);
-					var consequent_11 = ($$anchor) => {
-						var span_1 = root_14();
-						var text_9 = only_child(span_1, true);
-						template_effect(() => set_text(text_9, viewer().sort.descending ? "▼" : "▲"));
-						append($$anchor, span_1);
+					var th = root_17();
+					var text_11 = child(th, true);
+					var node_13 = sibling(text_11);
+					var consequent_14 = ($$anchor) => {
+						var span_3 = root_16();
+						var text_12 = only_child(span_3, true);
+						template_effect(() => set_text(text_12, viewer().sort.descending ? "▼" : "▲"));
+						append($$anchor, span_3);
 					};
-					if_block(node_10, ($$render) => {
-						if (viewer().sort?.column === c) $$render(consequent_11);
+					if_block(node_13, ($$render) => {
+						if (viewer().sort?.column === c) $$render(consequent_14);
 					});
 					reset(th);
-					template_effect(() => set_text(text_8, get(column)));
+					template_effect(() => set_text(text_11, get(column)));
 					delegated("click", th, () => viewer().toggleSort(c));
 					append($$anchor, th);
 				});
@@ -5427,10 +5549,10 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 				var tr_1 = sibling(tr);
 				each(tr_1, 21, () => viewer().filters, index, ($$anchor, filter, c) => {
 					const kind = /* @__PURE__ */ user_derived(() => viewer().columnKinds[c]);
-					var th_1 = root_19();
-					var node_11 = child(th_1);
-					var consequent_12 = ($$anchor) => {
-						var select = root_16();
+					var th_1 = root_21();
+					var node_14 = child(th_1);
+					var consequent_15 = ($$anchor) => {
+						var select = root_18();
 						var option = child(select);
 						option.value = option.__value = "";
 						var option_1 = sibling(option);
@@ -5445,8 +5567,8 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 						bind_select_value(select, () => get(filter).bool, ($$value) => get(filter).bool = $$value);
 						append($$anchor, select);
 					};
-					var consequent_13 = ($$anchor) => {
-						var div_15 = root_17();
+					var consequent_16 = ($$anchor) => {
+						var div_15 = root_19();
 						var input_2 = child(div_15);
 						remove_input_defaults(input_2);
 						var input_3 = sibling(input_2, 2);
@@ -5461,15 +5583,15 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 						append($$anchor, div_15);
 					};
 					var alternate_1 = ($$anchor) => {
-						var input_4 = root_18();
+						var input_4 = root_20();
 						remove_input_defaults(input_4);
 						template_effect(() => set_attribute(input_4, "aria-label", `Filter ${viewer().columns[c] ?? ""}`));
 						bind_value(input_4, () => get(filter).text, ($$value) => get(filter).text = $$value);
 						append($$anchor, input_4);
 					};
-					if_block(node_11, ($$render) => {
-						if (get(kind) === "boolean") $$render(consequent_12);
-						else if (get(kind) === "date") $$render(consequent_13, 1);
+					if_block(node_14, ($$render) => {
+						if (get(kind) === "boolean") $$render(consequent_15);
+						else if (get(kind) === "date") $$render(consequent_16, 1);
 						else $$render(alternate_1, -1);
 					});
 					reset(th_1);
@@ -5479,20 +5601,20 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 				reset(thead);
 				var tbody = sibling(thead);
 				each(tbody, 20, () => viewer().visibleIndices, (i) => i, ($$anchor, i) => {
-					var tr_2 = root_22();
+					var tr_2 = root_24();
 					each(tr_2, 21, () => viewer().rows[i], index, ($$anchor, cell) => {
-						var td = root_21();
-						var node_12 = child(td);
-						var consequent_14 = ($$anchor) => {
-							append($$anchor, root_20());
+						var td = root_23();
+						var node_15 = child(td);
+						var consequent_17 = ($$anchor) => {
+							append($$anchor, root_22());
 						};
 						var alternate_2 = ($$anchor) => {
-							var text_10 = text();
-							template_effect(() => set_text(text_10, get(cell)));
-							append($$anchor, text_10);
+							var text_13 = text();
+							template_effect(() => set_text(text_13, get(cell)));
+							append($$anchor, text_13);
 						};
-						if_block(node_12, ($$render) => {
-							if (get(cell) === null) $$render(consequent_14);
+						if_block(node_15, ($$render) => {
+							if (get(cell) === null) $$render(consequent_17);
 							else $$render(alternate_2, -1);
 						});
 						reset(td);
@@ -5506,21 +5628,21 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 				reset(div_14);
 				append($$anchor, fragment_4);
 			};
-			if_block(node_7, ($$render) => {
-				if (viewer().rowsStatus === "loading") $$render(consequent_6);
-				else if (viewer().rowsStatus === "error") $$render(consequent_7, 1);
-				else if (viewer().rows.length === 0) $$render(consequent_8, 2);
+			if_block(node_10, ($$render) => {
+				if (viewer().rowsStatus === "loading") $$render(consequent_9);
+				else if (viewer().rowsStatus === "error") $$render(consequent_10, 1);
+				else if (viewer().rows.length === 0) $$render(consequent_11, 2);
 				else $$render(alternate_3, -1);
 			});
 			template_effect(() => {
-				set_text(text_3, `${viewer().current.name ?? ""} `);
+				set_text(text_4, `${viewer().current.name ?? ""} `);
 				button_3.disabled = viewer().rowsStatus === "loading";
 			});
 			delegated("click", button_3, () => viewer().reloadRows());
 			append($$anchor, fragment_2);
 		};
-		if_block(node_4, ($$render) => {
-			if (!viewer().current) $$render(consequent_3);
+		if_block(node_5, ($$render) => {
+			if (!viewer().current) $$render(consequent_4);
 			else $$render(alternate_4, -1);
 		});
 		reset(div_8);
@@ -5564,6 +5686,7 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;`);
 			props: { viewer }
 		});
 		viewer.loadTables();
+		viewer.loadUploadStatus();
 	})();
 	//#endregion
 })();
