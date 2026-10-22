@@ -5023,14 +5023,14 @@ createHTML: (html) => {
 			placeholder: "Straße Hausnr."
 		},
 		{
-			key: "ZIP",
-			label: "PLZ",
-			placeholder: "PLZ"
-		},
-		{
 			key: "CITY",
 			label: "Ort",
 			placeholder: "Ort"
+		},
+		{
+			key: "ZIP",
+			label: "PLZ",
+			placeholder: "PLZ"
 		},
 		{
 			key: "COUNTRY",
@@ -5066,7 +5066,8 @@ createHTML: (html) => {
 		veo: {
 			gwsNo: "",
 			connectionString: "",
-			queueName: `sbq-scan-in-${SUBDOMAIN}`
+			queueName: `sbq-scan-in-${SUBDOMAIN}`,
+			erpEnvironment: "Production"
 		},
 		sftp: {
 			host: "mt-sftp.gws.ms",
@@ -14162,6 +14163,86 @@ createHTML: (html) => {
 	function companiesCsv(list) {
 		return buildMasterFileCsv(COMPANY_COLUMNS.map((column) => column.key), list.map((company) => COMPANY_COLUMNS.map((column) => company[column.key] ?? "")));
 	}
+	var STVEO_MAIL_SUBJECT = "Anlage stveoprod";
+	var STVEO_STORAGE_LINK = {
+		text: "stveoservicesprod - Microsoft Azure",
+		url: "https://portal.azure.com/#@warenwirtschaftssysteme.onmicrosoft.com/resource/subscriptions/c71a3f71-5c9e-4739-a874-ad866dadc7d1/resourceGroups/rg-veo-services-prod/providers/Microsoft.Storage/storageAccounts/stveoservicesprod"
+	};
+	function stveoCompanies() {
+		return filledCompanies().filter((company) => company.ERPTENANT_ID && company.COMPANY_ID);
+	}
+	function stveoEnvironment() {
+		const environment = config.veo.erpEnvironment.trim();
+		if (!/^[\w-]+$/.test(environment)) throw new Error("Bitte eine gültige ERP-Umgebung (z.B. „Production“, ohne Leer- und Sonderzeichen) in der Konfiguration eintragen.");
+		return environment;
+	}
+	function stveoCompanyTable(company, environment, timestamp) {
+		const rows = [
+			[
+				"PartitionKey",
+				"String",
+				`${company.ERPTENANT_ID}-${company.COMPANY_ID}`
+			],
+			[
+				"RowKey",
+				"String",
+				"incoming"
+			],
+			[
+				"TimeStamp",
+				"Datetime",
+				timestamp
+			],
+			[
+				"AadTenantId",
+				"String",
+				company.ERPTENANT_ID
+			],
+			[
+				"Url",
+				"String",
+				`https://api.businesscentral.dynamics.com/v2.0/${environment}/api/gws/dtf/v1.0/companies(${company.COMPANY_ID})/incomingData?$schemaversion=1.0`
+			],
+			[
+				"IsOnPrem",
+				"Boolean",
+				"false"
+			],
+			[
+				"Description",
+				"String",
+				company.NAME
+			]
+		];
+		const cell = "border:1px solid #999;padding:4px 8px;text-align:left";
+		return `<table style="border-collapse:collapse;margin-bottom:16px"><thead><tr>${[
+			"Eigenschaftsname",
+			"Typ",
+			"Wert"
+		].map((label) => `<th style="${cell}">${label}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((value) => `<td style="${cell}">${escapeHtml(value)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+	}
+	function stveoMailHtml(companies) {
+		const environment = stveoEnvironment();
+		const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+		const tables = companies.map((company) => stveoCompanyTable(company, environment, timestamp)).join("");
+		return `<html><body style="font-family:Calibri,Arial,sans-serif;font-size:11pt"><p>Moin,</p><p>kannst du mir bitte noch folgende anlegen?</p><p><a href="${escapeHtml(STVEO_STORAGE_LINK.url)}">${escapeHtml(STVEO_STORAGE_LINK.text)}</a></p>${tables}<p>Danke dir!</p></body></html>`;
+	}
+	function stveoMailEml(companies) {
+		const bytes = new TextEncoder().encode(stveoMailHtml(companies));
+		let binary = "";
+		for (const byte of bytes) binary += String.fromCharCode(byte);
+		const base64 = btoa(binary).replace(/.{76}/g, "$&\r\n");
+		const eml = [
+			"X-Unsent: 1",
+			`Subject: ${STVEO_MAIL_SUBJECT}`,
+			"MIME-Version: 1.0",
+			"Content-Type: text/html; charset=UTF-8",
+			"Content-Transfer-Encoding: base64",
+			"",
+			base64
+		].join("\r\n");
+		return new Blob([eml], { type: "message/rfc822" });
+	}
 	async function isEndpointConfigured(apiKey, name) {
 		return (await getConfiguredEndpointServices(BASE_URI$1, apiKey, await findDocumentReaderSubscriptionId(apiKey))).includes(name);
 	}
@@ -15062,6 +15143,26 @@ createHTML: (html) => {
 			}
 		},
 		{
+			id: "stveoMail",
+			title: "E-Mail: Anlage stveoservicesprod",
+			erp: ["veo"],
+			skipReason: () => stveoCompanies().length ? void 0 : "Keine Mandanten mit ERP-Mandant-ID und Company-ID erfasst.",
+			description: `Bereitet die E-Mail „${STVEO_MAIL_SUBJECT}“ vor (Download als .eml, öffnet sich in Outlook als Entwurf): Link zum Storage Account stveoservicesprod und je Mandant eine Tabelle mit PartitionKey (ERP-Mandant-ID + Company-ID), RowKey, TimeStamp, AadTenantId, Url (mit der ERP-Umgebung aus der Konfiguration), IsOnPrem und Description.`,
+			async check() {
+				const skipped = filledCompanies().length - stveoCompanies().length;
+				return {
+					state: "manual",
+					text: `${stveoCompanies().length} Mandant(en) für die E-Mail, ERP-Umgebung „${config.veo.erpEnvironment.trim()}“${skipped ? ` - ${skipped} ohne ERP-Mandant-ID/Company-ID werden ausgelassen` : ""}.`
+				};
+			},
+			async run() {
+				const companies = stveoCompanies();
+				if (!companies.length) throw new Error("Keine Mandanten mit ERP-Mandant-ID und Company-ID erfasst - bitte in der Konfiguration eintragen.");
+				downloadBlob(stveoMailEml(companies), `${STVEO_MAIL_SUBJECT}.eml`);
+				return `E-Mail mit ${companies.length} Mandant(en) heruntergeladen - in Outlook öffnen und Empfänger eintragen.`;
+			}
+		},
+		{
 			id: "sftpEndpoint",
 			title: "SFTP-Zielsystem gevis R-Linie",
 			erp: ["gevisR"],
@@ -15547,7 +15648,7 @@ createHTML: (html) => {
 	var root_1 = /* @__PURE__ */ from_html(`<option> </option>`);
 	var root_2 = /* @__PURE__ */ from_html(`<div class="block-desc svelte-1sl4uka"> </div>`);
 	var root_3 = /* @__PURE__ */ from_html(`<label><input type="radio" name="onb-erp" class="svelte-1sl4uka"/> <span class="erp-label svelte-1sl4uka"> <span class="erp-desc svelte-1sl4uka"> </span></span></label>`);
-	var root_4 = /* @__PURE__ */ from_html(`<div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">VEO-Anbindung</div> <div class="block-desc svelte-1sl4uka">Leer lassen, um den vorhandenen Endpunkt nicht anzupassen.</div> <div class="grid svelte-1sl4uka"><label class="svelte-1sl4uka">GWS-Nr.<input type="text" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" placeholder="z.B. 12345"/></label> <label class="svelte-1sl4uka">Queue-Name<input type="text" autocomplete="off" class="form-control form-control-sm"/></label> <label class="wide svelte-1sl4uka">Service Bus Connection String<input type="password" autocomplete="off" class="form-control form-control-sm" placeholder="Endpoint=sb://…;SharedAccessKeyName=…;SharedAccessKey=…"/></label></div></div>`);
+	var root_4 = /* @__PURE__ */ from_html(`<div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">VEO-Anbindung</div> <div class="block-desc svelte-1sl4uka">Leer lassen, um den vorhandenen Endpunkt nicht anzupassen.</div> <div class="grid svelte-1sl4uka"><label class="svelte-1sl4uka">GWS-Nr.<input type="text" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" placeholder="z.B. 12345"/></label> <label class="svelte-1sl4uka">Queue-Name<input type="text" autocomplete="off" class="form-control form-control-sm"/></label> <label class="wide svelte-1sl4uka">Service Bus Connection String<input type="password" autocomplete="off" class="form-control form-control-sm" placeholder="Endpoint=sb://…;SharedAccessKeyName=…;SharedAccessKey=…"/></label> <label class="svelte-1sl4uka">ERP-Umgebung<input type="text" autocomplete="off" class="form-control form-control-sm" placeholder="z.B. Production"/></label></div></div>`);
 	var root_5 = /* @__PURE__ */ from_html(`<div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">gevis R-Linie – SFTP-Server</div> <div class="block-desc svelte-1sl4uka">Benutzer und Kennwort leer lassen, um das vorhandene SFTP-Zielsystem nicht anzupassen.</div> <div class="grid svelte-1sl4uka"><label class="svelte-1sl4uka">Host<input type="text" autocomplete="off" class="form-control form-control-sm"/></label> <label class="svelte-1sl4uka">Port<input type="text" inputmode="numeric" autocomplete="off" class="form-control form-control-sm"/></label> <label class="svelte-1sl4uka">Benutzer<input type="text" autocomplete="off" class="form-control form-control-sm"/></label> <label class="svelte-1sl4uka">Kennwort<input type="password" autocomplete="new-password" class="form-control form-control-sm"/></label> <label class="wide svelte-1sl4uka">Verzeichnis<input type="text" autocomplete="off" class="form-control form-control-sm"/></label></div></div>`);
 	var root_6 = /* @__PURE__ */ from_html(`<th class="svelte-1sl4uka"> </th>`);
 	var root_7 = /* @__PURE__ */ from_html(`<td class="svelte-1sl4uka"><input type="text" class="form-control form-control-sm svelte-1sl4uka"/></td>`);
@@ -15717,6 +15818,10 @@ createHTML: (html) => {
 				var input_7 = sibling(child(label_5));
 				remove_input_defaults(input_7);
 				reset(label_5);
+				var label_6 = sibling(label_5, 2);
+				var input_8 = sibling(child(label_6));
+				remove_input_defaults(input_8);
+				reset(label_6);
 				reset(div_13);
 				reset(div_12);
 				delegated("keydown", input_5, preventSubmit);
@@ -15725,6 +15830,8 @@ createHTML: (html) => {
 				bind_value(input_6, () => config.veo.queueName, ($$value) => config.veo.queueName = $$value);
 				delegated("keydown", input_7, preventSubmit);
 				bind_value(input_7, () => config.veo.connectionString, ($$value) => config.veo.connectionString = $$value);
+				delegated("keydown", input_8, preventSubmit);
+				bind_value(input_8, () => config.veo.erpEnvironment, ($$value) => config.veo.erpEnvironment = $$value);
 				append($$anchor, div_12);
 			};
 			if_block(node_4, ($$render) => {
@@ -15734,11 +15841,7 @@ createHTML: (html) => {
 			var consequent_3 = ($$anchor) => {
 				var div_14 = root_5();
 				var div_15 = sibling(child(div_14), 4);
-				var label_6 = child(div_15);
-				var input_8 = sibling(child(label_6));
-				remove_input_defaults(input_8);
-				reset(label_6);
-				var label_7 = sibling(label_6, 2);
+				var label_7 = child(div_15);
 				var input_9 = sibling(child(label_7));
 				remove_input_defaults(input_9);
 				reset(label_7);
@@ -15754,18 +15857,22 @@ createHTML: (html) => {
 				var input_12 = sibling(child(label_10));
 				remove_input_defaults(input_12);
 				reset(label_10);
+				var label_11 = sibling(label_10, 2);
+				var input_13 = sibling(child(label_11));
+				remove_input_defaults(input_13);
+				reset(label_11);
 				reset(div_15);
 				reset(div_14);
-				delegated("keydown", input_8, preventSubmit);
-				bind_value(input_8, () => config.sftp.host, ($$value) => config.sftp.host = $$value);
 				delegated("keydown", input_9, preventSubmit);
-				bind_value(input_9, () => config.sftp.port, ($$value) => config.sftp.port = $$value);
+				bind_value(input_9, () => config.sftp.host, ($$value) => config.sftp.host = $$value);
 				delegated("keydown", input_10, preventSubmit);
-				bind_value(input_10, () => config.sftp.user, ($$value) => config.sftp.user = $$value);
+				bind_value(input_10, () => config.sftp.port, ($$value) => config.sftp.port = $$value);
 				delegated("keydown", input_11, preventSubmit);
-				bind_value(input_11, () => config.sftp.password, ($$value) => config.sftp.password = $$value);
+				bind_value(input_11, () => config.sftp.user, ($$value) => config.sftp.user = $$value);
 				delegated("keydown", input_12, preventSubmit);
-				bind_value(input_12, () => config.sftp.directory, ($$value) => config.sftp.directory = $$value);
+				bind_value(input_12, () => config.sftp.password, ($$value) => config.sftp.password = $$value);
+				delegated("keydown", input_13, preventSubmit);
+				bind_value(input_13, () => config.sftp.directory, ($$value) => config.sftp.directory = $$value);
 				append($$anchor, div_14);
 			};
 			if_block(node_5, ($$render) => {
@@ -15795,15 +15902,15 @@ createHTML: (html) => {
 				var node_7 = child(tr_1);
 				each(node_7, 17, () => COMPANY_COLUMNS, (column) => column.key, ($$anchor, column) => {
 					var td = root_7();
-					var input_13 = child(td);
-					remove_input_defaults(input_13);
+					var input_14 = child(td);
+					remove_input_defaults(input_14);
 					reset(td);
 					template_effect(() => {
-						set_attribute(input_13, "placeholder", get(column).placeholder);
-						set_attribute(input_13, "aria-label", get(column).label);
+						set_attribute(input_14, "placeholder", get(column).placeholder);
+						set_attribute(input_14, "aria-label", get(column).label);
 					});
-					delegated("keydown", input_13, preventSubmit);
-					bind_value(input_13, () => row[get(column).key], ($$value) => row[get(column).key] = $$value);
+					delegated("keydown", input_14, preventSubmit);
+					bind_value(input_14, () => row[get(column).key], ($$value) => row[get(column).key] = $$value);
 					append($$anchor, td);
 				});
 				var button_1 = only_child(sibling(node_7));
