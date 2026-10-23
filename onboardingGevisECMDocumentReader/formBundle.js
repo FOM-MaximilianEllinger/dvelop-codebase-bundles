@@ -8141,7 +8141,7 @@ createHTML: (html) => {
 						"IsResultTransformationEnabled": false
 					},
 					"DInfSaveOption": 0,
-					"DClassifyAlias": "Rechnungstyp",
+					"DClassifyAlias": "",
 					"InboundAlias": null,
 					"LoggingFlag": 0,
 					"InterpretAsMultipleValues": false,
@@ -14021,9 +14021,6 @@ createHTML: (html) => {
 	async function findScriptIdByName(apiKey, name) {
 		return (await findScriptByName(apiKey, name))?.id;
 	}
-	function legacyNameNote(found, name) {
-		return found.name === name ? "" : ` Noch unter altem Namen „${found.name}“ - bitte im Process Studio in „${name}“ umbenennen.`;
-	}
 	function scriptRunUrl(scriptId) {
 		return `${BASE_URI$1}/scripting/script/${scriptId}/run`;
 	}
@@ -14410,8 +14407,7 @@ createHTML: (html) => {
 			title,
 			description: `„${scriptName}“ als Aktion mit Eingabeparameter „${inputDocId}“ - beim Anlegen werden ${variablesText} hinterlegt, bei einem vorhandenen Skript nur Code und Aktion aktualisiert; hinterlegte Werte bleiben unverändert.`,
 			async check(apiKey) {
-				const found = await findScriptByName(apiKey, scriptName);
-				return found ? exists(`Vorhanden - Code und Aktion werden aktualisiert.${legacyNameNote(found, scriptName)}`) : missing("Skript fehlt.");
+				return await findScriptIdByName(apiKey, scriptName) ? exists("Vorhanden - Code und Aktion werden aktualisiert.") : missing("Skript fehlt.");
 			},
 			async run(apiKey) {
 				let scriptId = await findScriptIdByName(apiKey, scriptName);
@@ -14456,8 +14452,7 @@ createHTML: (html) => {
 			title: title ?? `Skript „${scriptName}“`,
 			description,
 			async check(apiKey) {
-				const found = await findScriptByName(apiKey, scriptName);
-				return found ? exists(`Vorhanden - Code wird aktualisiert.${legacyNameNote(found, scriptName)}`) : missing("Skript fehlt.");
+				return await findScriptIdByName(apiKey, scriptName) ? exists("Vorhanden - Code wird aktualisiert.") : missing("Skript fehlt.");
 			},
 			async run(apiKey) {
 				let scriptId = await findScriptIdByName(apiKey, scriptName);
