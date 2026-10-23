@@ -366,20 +366,13 @@ var CONDITION_FIELDS = [
 		label: "Dokumenttyp",
 		type: "select",
 		operators: ["eq", "neq"],
-		options: [
-			{
-				value: "Invoice",
-				label: "Rechnung"
-			},
-			{
-				value: "CreditAdvice",
-				label: "Gutschrift"
-			},
-			{
-				value: "CorrectionOfInvoice",
-				label: "Rechnungskorrektur"
-			}
-		]
+		options: [{
+			value: "Invoice",
+			label: "Rechnung"
+		}, {
+			value: "CreditAdvice",
+			label: "Gutschrift"
+		}]
 	},
 	{
 		id: "orderNumPresent",
