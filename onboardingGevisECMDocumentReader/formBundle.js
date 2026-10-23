@@ -8925,10 +8925,6 @@ createHTML: (html) => {
 									{
 										"ColumnName": "IBAN",
 										"AttributeID": "VENDOR_IBAN"
-									},
-									{
-										"ColumnName": "VENDOR_PAYMENT_TERMS",
-										"AttributeID": "VENDOR_PAYMENT_TERMS"
 									}
 								],
 								"HttpDataSourceId": null,
@@ -9020,10 +9016,6 @@ createHTML: (html) => {
 									{
 										"ColumnName": "IBAN",
 										"AttributeID": "VENDOR_IBAN"
-									},
-									{
-										"ColumnName": "VENDOR_PAYMENT_TERMS",
-										"AttributeID": "VENDOR_PAYMENT_TERMS"
 									}
 								],
 								"HttpDataSourceId": null,
@@ -9111,10 +9103,6 @@ createHTML: (html) => {
 									{
 										"ColumnName": "IBAN",
 										"AttributeID": "VENDOR_IBAN"
-									},
-									{
-										"ColumnName": "VENDOR_PAYMENT_TERMS",
-										"AttributeID": "VENDOR_PAYMENT_TERMS"
 									}
 								],
 								"HttpDataSourceId": null,
@@ -9202,10 +9190,6 @@ createHTML: (html) => {
 									{
 										"ColumnName": "IBAN",
 										"AttributeID": "VENDOR_IBAN"
-									},
-									{
-										"ColumnName": "VENDOR_PAYMENT_TERMS",
-										"AttributeID": "VENDOR_PAYMENT_TERMS"
 									}
 								],
 								"HttpDataSourceId": null,
@@ -9293,10 +9277,6 @@ createHTML: (html) => {
 									{
 										"ColumnName": "IBAN",
 										"AttributeID": "VENDOR_IBAN"
-									},
-									{
-										"ColumnName": "VENDOR_PAYMENT_TERMS",
-										"AttributeID": "VENDOR_PAYMENT_TERMS"
 									}
 								],
 								"HttpDataSourceId": null,
@@ -9384,10 +9364,6 @@ createHTML: (html) => {
 									{
 										"ColumnName": "IBAN",
 										"AttributeID": "VENDOR_IBAN"
-									},
-									{
-										"ColumnName": "VENDOR_PAYMENT_TERMS",
-										"AttributeID": "VENDOR_PAYMENT_TERMS"
 									}
 								],
 								"HttpDataSourceId": null,
@@ -9475,10 +9451,6 @@ createHTML: (html) => {
 									{
 										"ColumnName": "IBAN",
 										"AttributeID": "VENDOR_IBAN"
-									},
-									{
-										"ColumnName": "VENDOR_PAYMENT_TERMS",
-										"AttributeID": "VENDOR_PAYMENT_TERMS"
 									}
 								],
 								"HttpDataSourceId": null,
@@ -9566,10 +9538,6 @@ createHTML: (html) => {
 									{
 										"ColumnName": "IBAN",
 										"AttributeID": "VENDOR_IBAN"
-									},
-									{
-										"ColumnName": "VENDOR_PAYMENT_TERMS",
-										"AttributeID": "VENDOR_PAYMENT_TERMS"
 									}
 								],
 								"HttpDataSourceId": null,
@@ -10730,52 +10698,6 @@ createHTML: (html) => {
 						}
 					],
 					"AttributeStructureDefinitions": []
-				},
-				{
-					"GroupID": 4,
-					"GroupDescription": "Autorouting",
-					"MinifiedView": false,
-					"AttributeDefinitions": [{
-						"AttributeID": "AutoRoutingFlag",
-						"Description": null,
-						"LocalizedDescriptions": {},
-						"AttributeLabel": null,
-						"AttributeIcon": null,
-						"AttributeType": 0,
-						"Required": false,
-						"ReadOnly": false,
-						"DoAlignStart": true,
-						"DefaultValue": null,
-						"Values": [],
-						"ColumnSizePercent": 0,
-						"MinLength": 0,
-						"MaxLength": 0,
-						"SizeDesktop": 4,
-						"SizeTablet": 4,
-						"SizePhone": 4,
-						"Minified": null,
-						"Position": {
-							"verticalPosition": 0,
-							"horizontalPosition": 0
-						},
-						"TabStop": 40,
-						"ValueConversion": null,
-						"Title": null,
-						"Pattern": null,
-						"QueryAttributes": [],
-						"JSSnippets": [],
-						"DataBaseDefinition": {
-							"QueryDefinition": "",
-							"QueryMappings": null,
-							"HttpDataSourceId": null,
-							"IsResultTransformationEnabled": false
-						},
-						"IsTransitive": false,
-						"PositionCounterpart": null,
-						"AutoComplete": true,
-						"AllowNegativeAmount": true
-					}],
-					"AttributeStructureDefinitions": []
 				}
 			],
 			"StructureGroups": [],
@@ -11060,8 +10982,21 @@ createHTML: (html) => {
 						"CreateFulltextIndex": false
 					},
 					{
-						"ColumnName": "VENDOR_PAYMENT_TERMS",
-						"Description": null,
+						"ColumnName": "VENDOR_PHONE_NUMBER",
+						"Description": "vendorphonenumber",
+						"ColumnType": 1,
+						"MaxLength": 100,
+						"CreateIndex": true,
+						"TryIdentifyPattern": false,
+						"SingleValueEntityName": null,
+						"SemanticType": 0,
+						"SignificantCharacters": "[0-9]",
+						"DefaultValue": "",
+						"CreateFulltextIndex": false
+					},
+					{
+						"ColumnName": "VENDOR_PAYMENT_TERMS_CODE",
+						"Description": "vendorpaymenttermscode",
 						"ColumnType": 1,
 						"MaxLength": 1024,
 						"CreateIndex": false,
@@ -15675,7 +15610,7 @@ createHTML: (html) => {
 	var root_6 = /* @__PURE__ */ from_html(`<th class="svelte-1sl4uka"> </th>`);
 	var root_7 = /* @__PURE__ */ from_html(`<td class="svelte-1sl4uka"><input type="text" class="form-control form-control-sm svelte-1sl4uka"/></td>`);
 	var root_8 = /* @__PURE__ */ from_html(`<tr><!><td class="svelte-1sl4uka"><button type="button" class="btn btn-sm btn-link text-danger p-0" title="Zeile entfernen">✕</button></td></tr>`);
-	var root_9 = /* @__PURE__ */ from_html(`<div class="section svelte-1sl4uka"><div class="header svelte-1sl4uka"><div class="title svelte-1sl4uka">Onboarding gevis ECM Rechnungsleser – Konfiguration</div> <div class="hint svelte-1sl4uka">Mandant <strong> </strong> · Schritt 1 von 2</div></div> <div class="body svelte-1sl4uka"><div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">API-Key</div> <div class="block-desc svelte-1sl4uka">Wird auch im Gutschriften-Skript hinterlegt.</div> <div class="key svelte-1sl4uka"><input type="password" autocomplete="off" class="form-control form-control-sm key-input svelte-1sl4uka" placeholder="API-Key eingeben…" aria-label="API-Key"/> <button type="button" class="btn btn-sm btn-outline-secondary svelte-1sl4uka" title="Legt für einen Benutzer einen neuen API-Key an">Neuen API-Key erstellen</button></div></div> <div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">Berechtigungsgruppe</div> <div class="block-desc svelte-1sl4uka">Wird in Stapelprofilen und Postfächern berechtigt.</div> <div class="group-options svelte-1sl4uka"><label class="group-option svelte-1sl4uka"><input type="radio" name="onb-group-mode" value="new"/> <span class="group-label svelte-1sl4uka">Neue Gruppe anlegen:</span> <input type="text" class="form-control form-control-sm group-input svelte-1sl4uka" placeholder="Gruppenname"/></label> <label class="group-option svelte-1sl4uka"><input type="radio" name="onb-group-mode" value="existing"/> <span class="group-label svelte-1sl4uka">Vorhandene Gruppe verwenden:</span> <select class="form-control form-control-sm group-input svelte-1sl4uka"><option>– Gruppe auswählen –</option><!></select></label></div> <!></div> <div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">ERP-Zielsystem</div> <div class="block-desc svelte-1sl4uka">An welches ERP-System übergibt der Rechnungsleser?</div> <div class="erp-options svelte-1sl4uka"></div></div> <!> <!> <div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">Stammdaten: Mandanten</div> <div class="block-desc svelte-1sl4uka">Ergibt <code> </code>. * = Pflichtfeld. Leer lassen, um die Stammdaten nicht anzupassen.
+	var root_9 = /* @__PURE__ */ from_html(`<div class="section svelte-1sl4uka"><div class="header svelte-1sl4uka"><div class="title svelte-1sl4uka">Onboarding gevis ECM Rechnungsleser – Konfiguration</div> <div class="hint svelte-1sl4uka">Mandant <strong> </strong> · Schritt 1 von 2</div></div> <div class="body svelte-1sl4uka"><div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">API-Key</div> <div class="key svelte-1sl4uka"><input type="password" autocomplete="off" class="form-control form-control-sm key-input svelte-1sl4uka" placeholder="API-Key eingeben…" aria-label="API-Key"/> <button type="button" class="btn btn-sm btn-outline-secondary svelte-1sl4uka" title="Legt für einen Benutzer einen neuen API-Key an">Neuen API-Key erstellen</button></div></div> <div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">Berechtigungsgruppe</div> <div class="block-desc svelte-1sl4uka">Wird in Stapelprofilen und Postfächern berechtigt.</div> <div class="group-options svelte-1sl4uka"><label class="group-option svelte-1sl4uka"><input type="radio" name="onb-group-mode" value="new"/> <span class="group-label svelte-1sl4uka">Neue Gruppe anlegen:</span> <input type="text" class="form-control form-control-sm group-input svelte-1sl4uka" placeholder="Gruppenname"/></label> <label class="group-option svelte-1sl4uka"><input type="radio" name="onb-group-mode" value="existing"/> <span class="group-label svelte-1sl4uka">Vorhandene Gruppe verwenden:</span> <select class="form-control form-control-sm group-input svelte-1sl4uka"><option>– Gruppe auswählen –</option><!></select></label></div> <!></div> <div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">ERP-Zielsystem</div> <div class="block-desc svelte-1sl4uka">An welches ERP-System übergibt der Rechnungsleser?</div> <div class="erp-options svelte-1sl4uka"></div></div> <!> <!> <div class="block svelte-1sl4uka"><div class="block-title svelte-1sl4uka">Stammdaten: Mandanten</div> <div class="block-desc svelte-1sl4uka">Ergibt <code> </code>. * = Pflichtfeld. Leer lassen, um die Stammdaten nicht anzupassen.
           Bei <strong>Name</strong> den Namen des Mandanten eintragen, nicht den Anzeigenamen.</div> <div class="company-wrap svelte-1sl4uka"><table class="company-table svelte-1sl4uka"><thead><tr><!><th class="svelte-1sl4uka"></th></tr></thead><tbody></tbody></table></div> <button type="button" class="btn btn-sm btn-outline-secondary mt-2">+ Mandant hinzufügen</button></div> <!> <div class="actions svelte-1sl4uka"><button type="button" class="btn btn-sm btn-primary svelte-1sl4uka">Weiter</button></div></div></div>`);
 	var root_10 = /* @__PURE__ */ from_html(`<span class="status-text svelte-1sl4uka"> </span>`);
 	var root_11 = /* @__PURE__ */ from_html(`<tr><td class="nr svelte-1sl4uka"> </td><td class="svelte-1sl4uka"><div class="step-title svelte-1sl4uka"> </div><div class="step-desc svelte-1sl4uka"> </div></td><td class="status svelte-1sl4uka"><span> </span> <!></td><td class="action svelte-1sl4uka"><button type="button" class="btn btn-sm btn-outline-primary"> </button></td></tr>`);
@@ -15751,7 +15686,7 @@ createHTML: (html) => {
 			reset(div_2);
 			var div_4 = sibling(div_2, 2);
 			var div_5 = child(div_4);
-			var div_6 = sibling(child(div_5), 4);
+			var div_6 = sibling(child(div_5), 2);
 			var input = child(div_6);
 			remove_input_defaults(input);
 			var button = sibling(input, 2);
