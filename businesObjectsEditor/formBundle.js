@@ -4990,7 +4990,7 @@ createHTML: (html) => {
 	var root_29 = /* @__PURE__ */ from_html(`<td><!></td>`);
 	var root_30 = /* @__PURE__ */ from_html(`<tr><td><div class="form-check"><input type="checkbox" class="form-check-input"/></div></td><!></tr>`);
 	var root_31 = /* @__PURE__ */ from_html(`<div class="table-responsive"><table class="table table-sm table-bordered table-hover align-middle"><thead class="table-dark"><tr><th class="check svelte-1jio28y"><div class="form-check"><input type="checkbox" class="form-check-input" title="Alle auswählen"/></div></th><!></tr></thead><tbody></tbody></table></div>`);
-	var root_32 = /* @__PURE__ */ from_html(`<div class="d-flex align-items-center justify-content-between mb-1 gap-2"><h5 class="mb-0"> <small class="text-muted fw-normal fs-6"> </small></h5> <!></div> <div class="d-flex align-items-center gap-2 mt-2 mb-3 pb-2 border-bottom"><button type="button" class="btn btn-sm btn-outline-success">+ Hinzufügen</button> <button type="button" class="btn btn-sm btn-outline-primary"><!> Bearbeiten</button> <button type="button" class="btn btn-sm btn-outline-danger"><!> Löschen</button> <button type="button" class="btn btn-sm btn-outline-secondary ms-auto">CSV importieren</button></div> <!>`, 1);
+	var root_32 = /* @__PURE__ */ from_html(`<div class="d-flex align-items-center justify-content-between mb-1 gap-2"><h5 class="mb-0"> <small class="text-muted fw-normal fs-6"> </small></h5> <!></div> <div class="d-flex align-items-center gap-2 mt-2 mb-3 pb-2 border-bottom"><button type="button" class="btn btn-sm btn-outline-success">+ Hinzufügen</button> <button type="button" class="btn btn-sm btn-outline-primary"><!> Bearbeiten</button> <button type="button" class="btn btn-sm btn-outline-danger"><!> Löschen</button> <button type="button" class="btn btn-sm btn-outline-secondary ms-auto">Tabelle exportieren</button> <button type="button" class="btn btn-sm btn-outline-secondary"> </button> <button type="button" class="btn btn-sm btn-outline-secondary">CSV importieren</button></div> <!>`, 1);
 	var root_33 = /* @__PURE__ */ from_html(`<div class="alert alert-danger mb-3"> </div>`);
 	var root_34 = /* @__PURE__ */ from_html(`<span class="text-muted fw-normal"> </span>`);
 	var root_35 = /* @__PURE__ */ from_html(`<select class="form-select form-select-sm"><option>–</option><option>Ja</option><option>Nein</option></select>`);
@@ -5175,7 +5175,7 @@ createHTML: (html) => {
 				if_block(node_5, ($$render) => {
 					if (dialog().fileName && !dialog().error) $$render(consequent_8);
 				});
-				delegated("click", button, downloadCsv);
+				delegated("click", button, () => downloadCsv());
 				delegated("change", input, onImportFile);
 				append($$anchor, fragment_3);
 			};
@@ -5194,8 +5194,8 @@ createHTML: (html) => {
 		function onKeydown(event) {
 			if (event.key === "Escape") editor().closeDialog();
 		}
-		function downloadCsv() {
-			const { fileName, content } = editor().exportCsv();
+		function downloadCsv(indices) {
+			const { fileName, content } = editor().exportCsv(indices);
 			const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
 			const link = document.createElement("a");
 			link.href = url;
@@ -5327,6 +5327,9 @@ createHTML: (html) => {
 			next();
 			reset(button_5);
 			var button_6 = sibling(button_5, 2);
+			var button_7 = sibling(button_6, 2);
+			var text_16 = only_child(button_7);
+			var button_8 = sibling(button_7, 2);
 			reset(div_22);
 			var node_21 = sibling(div_22, 2);
 			var consequent_16 = ($$anchor) => {
@@ -5345,8 +5348,8 @@ createHTML: (html) => {
 				reset(th_1);
 				each(sibling(th_1), 16, () => editor().allColumns, (column) => column, ($$anchor, column) => {
 					var th_2 = root_10();
-					var text_16 = only_child(th_2, true);
-					template_effect(() => set_text(text_16, column));
+					var text_17 = only_child(th_2, true);
+					template_effect(() => set_text(text_17, column));
 					append($$anchor, th_2);
 				});
 				reset(tr_2);
@@ -5369,9 +5372,9 @@ createHTML: (html) => {
 							append($$anchor, root_28());
 						};
 						var alternate_3 = ($$anchor) => {
-							var text_17 = text();
-							template_effect(($0) => set_text(text_17, $0), [() => String(get(entry)[column])]);
-							append($$anchor, text_17);
+							var text_18 = text();
+							template_effect(($0) => set_text(text_18, $0), [() => String(get(entry)[column])]);
+							append($$anchor, text_18);
 						};
 						if_block(node_24, ($$render) => {
 							if (get(entry)[column] === null || get(entry)[column] === void 0) $$render(consequent_17);
@@ -5404,11 +5407,16 @@ createHTML: (html) => {
 				set_text(text_15, `${editor().entries.length ?? ""} Einträge`);
 				button_4.disabled = editor().selectedIndices.length !== 1;
 				button_5.disabled = editor().selectedIndices.length === 0;
+				button_6.disabled = editor().entries.length === 0;
+				button_7.disabled = editor().selectedIndices.length === 0;
+				set_text(text_16, `Markierte exportieren${editor().selectedIndices.length > 0 ? ` (${editor().selectedIndices.length})` : ""}`);
 			});
 			delegated("click", button_3, () => editor().openAdd());
 			delegated("click", button_4, () => editor().openEdit());
 			delegated("click", button_5, () => editor().openDelete());
-			delegated("click", button_6, () => editor().openImport());
+			delegated("click", button_6, () => downloadCsv());
+			delegated("click", button_7, () => downloadCsv(editor().selectedIndices));
+			delegated("click", button_8, () => editor().openImport());
 			append($$anchor, fragment_8);
 		};
 		if_block(node_17, ($$render) => {
@@ -5430,15 +5438,15 @@ createHTML: (html) => {
 			var div_28 = child(div_27);
 			var div_29 = child(div_28);
 			var h5_1 = child(div_29);
-			var text_18 = only_child(h5_1, true);
-			var button_7 = sibling(h5_1, 2);
+			var text_19 = only_child(h5_1, true);
+			var button_9 = sibling(h5_1, 2);
 			reset(div_29);
 			var div_30 = sibling(div_29, 2);
 			var node_26 = child(div_30);
 			var consequent_18 = ($$anchor) => {
 				var div_31 = root_33();
-				var text_19 = only_child(div_31, true);
-				template_effect(() => set_text(text_19, get(dialog).error));
+				var text_20 = only_child(div_31, true);
+				template_effect(() => set_text(text_20, get(dialog).error));
 				append($$anchor, div_31);
 			};
 			if_block(node_26, ($$render) => {
@@ -5450,12 +5458,12 @@ createHTML: (html) => {
 				each(form, 21, () => get(dialog).fields, (field) => field.name, ($$anchor, field, $$index_9) => {
 					var div_32 = root_38();
 					var label = child(div_32);
-					var text_20 = child(label);
-					var node_28 = sibling(text_20);
+					var text_21 = child(label);
+					var node_28 = sibling(text_21);
 					var consequent_19 = ($$anchor) => {
 						var span_1 = root_34();
-						var text_21 = only_child(span_1);
-						template_effect(() => set_text(text_21, `(${(get(field).type === "list<string>" ? "Liste, mit ; trennen" : get(field).type) ?? ""})`));
+						var text_22 = only_child(span_1);
+						template_effect(() => set_text(text_22, `(${(get(field).type === "list<string>" ? "Liste, mit ; trennen" : get(field).type) ?? ""})`));
 						append($$anchor, span_1);
 					};
 					if_block(node_28, ($$render) => {
@@ -5506,7 +5514,7 @@ createHTML: (html) => {
 					});
 					reset(label);
 					reset(div_32);
-					template_effect(() => set_text(text_20, `${get(field).name ?? ""} `));
+					template_effect(() => set_text(text_21, `${get(field).name ?? ""} `));
 					append($$anchor, div_32);
 				}, ($$anchor) => {
 					append($$anchor, root_39());
@@ -5521,12 +5529,12 @@ createHTML: (html) => {
 			var alternate_7 = ($$anchor) => {
 				var p_7 = root_41();
 				var strong_2 = sibling(child(p_7));
-				var text_22 = only_child(strong_2, true);
-				var text_23 = sibling(strong_2);
+				var text_23 = only_child(strong_2, true);
+				var text_24 = sibling(strong_2);
 				reset(p_7);
 				template_effect(() => {
-					set_text(text_22, get(dialog).count);
-					set_text(text_23, ` ${get(dialog).count === 1 ? "Eintrag" : "Einträge"} wirklich gelöscht werden?`);
+					set_text(text_23, get(dialog).count);
+					set_text(text_24, ` ${get(dialog).count === 1 ? "Eintrag" : "Einträge"} wirklich gelöscht werden?`);
 				});
 				append($$anchor, p_7);
 			};
@@ -5537,21 +5545,21 @@ createHTML: (html) => {
 			});
 			reset(div_30);
 			var div_33 = sibling(div_30, 2);
-			var button_8 = child(div_33);
-			var text_24 = only_child(button_8, true);
-			var node_30 = sibling(button_8, 2);
+			var button_10 = child(div_33);
+			var text_25 = only_child(button_10, true);
+			var node_30 = sibling(button_10, 2);
 			var consequent_25 = ($$anchor) => {
 				var fragment_12 = comment();
 				var node_31 = first_child(fragment_12);
 				var consequent_24 = ($$anchor) => {
-					var button_9 = root_42();
-					var text_25 = only_child(button_9);
+					var button_11 = root_42();
+					var text_26 = only_child(button_11);
 					template_effect(() => {
-						button_9.disabled = get(dialog).busy || get(dialog).rows.length === 0 || get(dialog).problems.length > 0;
-						set_text(text_25, `${get(dialog).rows.length ?? ""} ${get(dialog).rows.length === 1 ? "Zeile" : "Zeilen"} importieren`);
+						button_11.disabled = get(dialog).busy || get(dialog).rows.length === 0 || get(dialog).problems.length > 0;
+						set_text(text_26, `${get(dialog).rows.length ?? ""} ${get(dialog).rows.length === 1 ? "Zeile" : "Zeilen"} importieren`);
 					});
-					delegated("click", button_9, () => editor().runImport());
-					append($$anchor, button_9);
+					delegated("click", button_11, () => editor().runImport());
+					append($$anchor, button_11);
 				};
 				if_block(node_31, ($$render) => {
 					if (!get(dialog).result) $$render(consequent_24);
@@ -5559,16 +5567,16 @@ createHTML: (html) => {
 				append($$anchor, fragment_12);
 			};
 			var consequent_26 = ($$anchor) => {
-				var button_10 = root_43();
-				template_effect(() => button_10.disabled = get(dialog).busy || get(dialog).fields.length === 0);
-				delegated("click", button_10, () => editor().saveDialog());
-				append($$anchor, button_10);
+				var button_12 = root_43();
+				template_effect(() => button_12.disabled = get(dialog).busy || get(dialog).fields.length === 0);
+				delegated("click", button_12, () => editor().saveDialog());
+				append($$anchor, button_12);
 			};
 			var alternate_8 = ($$anchor) => {
-				var button_11 = root_44();
-				template_effect(() => button_11.disabled = get(dialog).busy);
-				delegated("click", button_11, () => editor().confirmDelete());
-				append($$anchor, button_11);
+				var button_13 = root_44();
+				template_effect(() => button_13.disabled = get(dialog).busy);
+				delegated("click", button_13, () => editor().confirmDelete());
+				append($$anchor, button_13);
 			};
 			if_block(node_30, ($$render) => {
 				if (get(dialog).kind === "import") $$render(consequent_25);
@@ -5585,13 +5593,13 @@ createHTML: (html) => {
 					"modal-sm": get(dialog).kind === "delete",
 					"modal-xl": get(dialog).kind === "import"
 				});
-				set_text(text_18, get(dialog).kind === "form" ? get(dialog).title : get(dialog).kind === "import" ? `CSV-Import: ${editor().current?.entity.name}` : "Löschen bestätigen");
-				button_8.disabled = get(dialog).busy;
-				set_text(text_24, get(dialog).kind === "import" && get(dialog).result ? "Schließen" : "Abbrechen");
+				set_text(text_19, get(dialog).kind === "form" ? get(dialog).title : get(dialog).kind === "import" ? `CSV-Import: ${editor().current?.entity.name}` : "Löschen bestätigen");
+				button_10.disabled = get(dialog).busy;
+				set_text(text_25, get(dialog).kind === "import" && get(dialog).result ? "Schließen" : "Abbrechen");
 			});
 			delegated("click", div_26, onBackdropClick);
-			delegated("click", button_7, () => editor().closeDialog());
-			delegated("click", button_8, () => editor().closeDialog());
+			delegated("click", button_9, () => editor().closeDialog());
+			delegated("click", button_10, () => editor().closeDialog());
 			append($$anchor, fragment_10);
 		};
 		if_block(node_25, ($$render) => {
@@ -6146,11 +6154,15 @@ createHTML: (html) => {
 				busy: false
 			};
 		}
-		/** Alle Spalten und aktuellen Einträge als CSV - dient auch als Import-Vorlage. */
-		exportCsv() {
-			const rows = this.entries.map((entry) => this.allColumns.map((c) => toFormValue(entry[c], this.columnTypes[c] ?? "")));
+		/**
+		* Alle Spalten als CSV - ohne Angabe alle Einträge (dient auch als
+		* Import-Vorlage), sonst nur die übergebenen (z. B. markierte).
+		*/
+		exportCsv(indices) {
+			const rows = (indices ? indices.map((i) => this.entries[i]) : this.entries).map((entry) => this.allColumns.map((c) => toFormValue(entry[c], this.columnTypes[c] ?? "")));
+			const baseName = this.current?.entity.pluralName ?? "export";
 			return {
-				fileName: `${this.current?.entity.pluralName ?? "export"}.csv`,
+				fileName: indices ? `${baseName}_Auswahl.csv` : `${baseName}.csv`,
 				content: toCsv(this.allColumns, rows)
 			};
 		}
