@@ -5210,6 +5210,15 @@ createHTML: (html) => {
 		}
 	}
 	//#endregion
+	//#region ../../helper/scripting/scriptIds.ts
+	var SCRIPT_IDS_GLOBAL = "__toolboxScriptIds";
+	/** Liefert die von der Toolbox ins Formular geschriebene Id des Scripts (siehe scriptIdsPrelude). */
+	function getScriptId(scriptName) {
+		const id = globalThis[SCRIPT_IDS_GLOBAL]?.[scriptName];
+		if (typeof id !== "string" || !id) throw new Error(`Die Id von Script "${scriptName}" ist im Formular nicht hinterlegt - bitte Formular und Script über die Toolbox aktualisieren.`);
+		return id;
+	}
+	//#endregion
 	//#region ../../helper/performHttpRequest/performHttpRequest.ts
 	/**
 	* Performs an HTTP request and returns a structured response.
@@ -5272,18 +5281,6 @@ createHTML: (html) => {
 		};
 	}
 	//#endregion
-	//#region ../../helper/scripting/getAllScripts.ts
-	async function getAllScripts(baseUri, token) {
-		return await performHttpRequest(`${baseUri}/scripting/script`, {
-			method: "GET",
-			headers: {
-				Authorization: `Bearer ${token}`,
-				Accept: "application/json",
-				"Content-Type": "application/json"
-			}
-		});
-	}
-	//#endregion
 	//#region ../../helper/scripting/callScriptEndpoint.ts
 	async function callScriptEndpoint(baseUri, scriptId, method, headers, payload) {
 		return await performHttpRequest(`${baseUri}/scripting/script/${scriptId}/run`, {
@@ -5331,18 +5328,16 @@ createHTML: (html) => {
 			this.#term = /* @__PURE__ */ state("");
 		}
 		/**
-		* Sucht die Script-Id per Name (siehe SCRIPT_NAME) und ruft das Script per
-		* callScriptEndpoint auf - über die Browser-Session (window.location.origin)
-		* wie alle anderen dforms/Scripting-Aufrufe der Toolbox-Familie, ein
-		* API-Key ist dafür nicht nötig.
+		* Ruft das Script (Id von der Toolbox ins Formular geschrieben, siehe
+		* getScriptId) per callScriptEndpoint über die Browser-Session auf. Die
+		* Benutzerverwaltung fragt das Script mit seinem eigenen API-Key ab, daher
+		* funktioniert das auch für Benutzer ohne Administratorrechte.
 		*/
 		async load() {
 			this.view = { kind: "loading" };
 			try {
 				const baseUri = window.location.origin;
-				const script = (await getAllScripts(baseUri, "")).body.find((s) => s.name === SCRIPT_NAME);
-				if (!script?.id) throw new Error(`Script "${SCRIPT_NAME}" wurde nicht gefunden - wurde es bereits über die Toolbox angelegt?`);
-				const response = await callScriptEndpoint(baseUri, script.id, "POST", { "Content-Type": "application/json" }, {});
+				const response = await callScriptEndpoint(baseUri, getScriptId(SCRIPT_NAME), "POST", { "Content-Type": "application/json" }, {});
 				if (typeof response.body === "string" || !Array.isArray(response.body?.users) || typeof response.body.paid !== "number") throw new Error(`Unerwartete Antwort von Script "${SCRIPT_NAME}" - bitte das Script über die Toolbox aktualisieren.`);
 				this.view = {
 					kind: "result",

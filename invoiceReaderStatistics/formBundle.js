@@ -4541,6 +4541,15 @@ createHTML: (html) => {
 	//#region node_modules/svelte/src/internal/disclose-version.js
 	if (typeof window !== "undefined") ((window.__svelte ??= {}).v ??= /* @__PURE__ */ new Set()).add("5");
 	//#endregion
+	//#region ../../helper/scripting/scriptIds.ts
+	var SCRIPT_IDS_GLOBAL = "__toolboxScriptIds";
+	/** Liefert die von der Toolbox ins Formular geschriebene Id des Scripts (siehe scriptIdsPrelude). */
+	function getScriptId(scriptName) {
+		const id = globalThis[SCRIPT_IDS_GLOBAL]?.[scriptName];
+		if (typeof id !== "string" || !id) throw new Error(`Die Id von Script "${scriptName}" ist im Formular nicht hinterlegt - bitte Formular und Script über die Toolbox aktualisieren.`);
+		return id;
+	}
+	//#endregion
 	//#region ../../helper/performHttpRequest/performHttpRequest.ts
 	/**
 	* Performs an HTTP request and returns a structured response.
@@ -4601,18 +4610,6 @@ createHTML: (html) => {
 			type: response.type,
 			url: response.url
 		};
-	}
-	//#endregion
-	//#region ../../helper/scripting/getAllScripts.ts
-	async function getAllScripts(baseUri, token) {
-		return await performHttpRequest(`${baseUri}/scripting/script`, {
-			method: "GET",
-			headers: {
-				Authorization: `Bearer ${token}`,
-				Accept: "application/json",
-				"Content-Type": "application/json"
-			}
-		});
 	}
 	//#endregion
 	//#region ../../helper/scripting/callScriptEndpoint.ts
@@ -4980,16 +4977,15 @@ createHTML: (html) => {
 			});
 		}
 		/**
-		* Sucht das Script per Name, ruft es auf (das Script nutzt seinen eigenen
-		* API-Key) und übernimmt das Ergebnis.
+		* Ruft das Script auf (Id von der Toolbox ins Formular geschrieben, siehe
+		* getScriptId - das Script nutzt seinen eigenen API-Key) und übernimmt das
+		* Ergebnis.
 		*/
 		async load() {
 			this.status = "loading";
 			try {
 				const baseUri = window.location.origin;
-				const script = (await getAllScripts(baseUri, "")).body.find((s) => s.name === SCRIPT_NAME);
-				if (!script?.id) throw new Error(`Script "${SCRIPT_NAME}" wurde nicht gefunden - wurde es bereits über die Toolbox angelegt?`);
-				const body = (await callScriptEndpoint(baseUri, script.id, "POST", { "Content-Type": "application/json" }, {})).body;
+				const body = (await callScriptEndpoint(baseUri, getScriptId(SCRIPT_NAME), "POST", { "Content-Type": "application/json" }, {})).body;
 				if (!body || typeof body === "string" || !Array.isArray(body.rows)) throw new Error(body?.error ?? `Unerwartete Antwort von Script "${SCRIPT_NAME}" - bitte das Tool über die Toolbox aktualisieren.`);
 				this.rows = body.rows.map(toDisplayRow).sort((a, b) => byCompany(a.company, b.company) || b.year - a.year || b.monthNumber - a.monthNumber);
 				this.loadedAt = (/* @__PURE__ */ new Date()).toLocaleString("de-DE");

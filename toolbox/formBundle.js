@@ -4874,6 +4874,18 @@ createHTML: (html) => {
 		});
 	}
 	//#endregion
+	//#region ../../helper/scripting/scriptIds.ts
+	var SCRIPT_IDS_GLOBAL = "__toolboxScriptIds";
+	/**
+	* JS-Zeile, die die Toolbox vor das customJs eines Formulars setzt. Damit
+	* kennt das Formular die Ids seiner Scripts, ohne GET /scripting/script
+	* aufrufen zu müssen - das dürfen nur Administratoren, das Formular soll aber
+	* auch für normale Benutzer funktionieren.
+	*/
+	function scriptIdsPrelude(ids) {
+		return `globalThis.${SCRIPT_IDS_GLOBAL} = Object.assign(globalThis.${SCRIPT_IDS_GLOBAL} || {}, ${JSON.stringify(ids).replace(/</g, "\\u003c")});`;
+	}
+	//#endregion
 	//#region src/config/targetForms.ts
 	var targetForms = [
 		{
@@ -9290,7 +9302,8 @@ ${groups}`,
 	async function ensureTargetFormUpToDate(target) {
 		const baseUri = window.location.origin;
 		const [bundle, version] = await Promise.all([loadLatestBundle(target.bundlePath), remoteVersionOf(target.bundlePath)]);
-		const customJsContent = withVersionMarker(bundle, version);
+		const scriptIds = await scriptIdsOf(target);
+		const customJsContent = withVersionMarker(Object.keys(scriptIds).length > 0 ? `${scriptIdsPrelude(scriptIds)}\n${bundle}` : bundle, version);
 		const codeOwnedFormDefinition = target.formDefinitionPath ? JSON.parse(await loadLatestBundle(target.formDefinitionPath)) : void 0;
 		if ((await getAllForms(baseUri, NO_TOKEN)).body.forms.some((f) => f.id === target.formId)) {
 			getLogger().debug(`Formular "${target.name}" existiert bereits, aktualisiere customJs.`);
@@ -9319,6 +9332,17 @@ ${groups}`,
 		await patchForm(baseUri, NO_TOKEN, target.formId, target.name, definition);
 		await newVersion(baseUri, NO_TOKEN, target.formId);
 		return definition;
+	}
+	async function scriptIdsOf(target) {
+		const scripts = scriptsOf(target);
+		if (scripts.length === 0) return {};
+		const allScripts = await getAllScripts(window.location.origin, NO_TOKEN);
+		const ids = {};
+		for (const script of scripts) {
+			const id = allScripts.body.find((s) => s.name === script.name)?.id;
+			if (id) ids[script.name] = id;
+		}
+		return ids;
 	}
 	/**
 	* Analog zu ensureTargetFormUpToDate, aber für Scripts (Process Studio
@@ -9372,6 +9396,7 @@ ${groups}`,
 		};
 		if (createdNow && customerVariables && customerVariables.length > 0) body.customerVariables = customerVariables;
 		await patchScript(baseUri, NO_TOKEN, script.id, versionId, body);
+		return createdNow;
 	}
 	async function rolloutParts(target, parts) {
 		const scripts = parts.flatMap((p) => p.kind === "script" ? [p.script] : []);
@@ -9385,8 +9410,13 @@ ${groups}`,
 				if (!customerVariables) return false;
 			}
 		}
-		if (parts.some((p) => p.kind === "form") && hasFormPart(target)) await ensureTargetFormUpToDate(target);
-		for (const script of scripts) await ensureTargetScriptUpToDate(script, customerVariables?.get(script.name));
+		let scriptCreated = false;
+		for (const script of scripts) scriptCreated = await ensureTargetScriptUpToDate(script, customerVariables?.get(script.name)) || scriptCreated;
+		if (hasFormPart(target)) {
+			const formRequested = parts.some((p) => p.kind === "form");
+			const formNeedsNewIds = scriptCreated && (await getAllForms(window.location.origin, NO_TOKEN)).body.forms.some((f) => f.id === target.formId);
+			if (formRequested || formNeedsNewIds) await ensureTargetFormUpToDate(target);
+		}
 		return true;
 	}
 	async function loadLatestBundle(bundlePath) {

@@ -6025,6 +6025,15 @@ createHTML: (html) => {
 	}
 	delegate(["change", "click"]);
 	//#endregion
+	//#region ../../helper/scripting/scriptIds.ts
+	var SCRIPT_IDS_GLOBAL = "__toolboxScriptIds";
+	/** Liefert die von der Toolbox ins Formular geschriebene Id des Scripts (siehe scriptIdsPrelude). */
+	function getScriptId(scriptName) {
+		const id = globalThis[SCRIPT_IDS_GLOBAL]?.[scriptName];
+		if (typeof id !== "string" || !id) throw new Error(`Die Id von Script "${scriptName}" ist im Formular nicht hinterlegt - bitte Formular und Script über die Toolbox aktualisieren.`);
+		return id;
+	}
+	//#endregion
 	//#region ../../helper/performHttpRequest/performHttpRequest.ts
 	/**
 	* Performs an HTTP request and returns a structured response.
@@ -6085,18 +6094,6 @@ createHTML: (html) => {
 			type: response.type,
 			url: response.url
 		};
-	}
-	//#endregion
-	//#region ../../helper/scripting/getAllScripts.ts
-	async function getAllScripts(baseUri, token) {
-		return await performHttpRequest(`${baseUri}/scripting/script`, {
-			method: "GET",
-			headers: {
-				Authorization: `Bearer ${token}`,
-				Accept: "application/json",
-				"Content-Type": "application/json"
-			}
-		});
 	}
 	//#endregion
 	//#region ../../helper/scripting/callScriptEndpoint.ts
@@ -6320,12 +6317,9 @@ createHTML: (html) => {
 		}
 		async callScript(payload) {
 			const baseUri = window.location.origin;
-			if (!this.scriptId) {
-				this.scriptId = (await getAllScripts(baseUri, "")).body.find((s) => s.name === SCRIPT_NAME)?.id;
-				if (!this.scriptId) throw new Error(`Script "${SCRIPT_NAME}" wurde nicht gefunden - wurde es bereits über die Toolbox angelegt?`);
-			}
+			const scriptId = getScriptId(SCRIPT_NAME);
 			try {
-				const body = (await callScriptEndpoint(baseUri, this.scriptId, "POST", {
+				const body = (await callScriptEndpoint(baseUri, scriptId, "POST", {
 					"Content-Type": "application/json",
 					Accept: "application/json"
 				}, payload)).body;
