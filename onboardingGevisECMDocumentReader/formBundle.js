@@ -14377,7 +14377,7 @@ createHTML: (html) => {
 		return {
 			id: `mailbox-${entry.mailbox}`,
 			title: `Postfach „${entry.mailbox}“`,
-			description: `${entry.mailbox}@${SUBDOMAIN}.emailinbound… → Stapelprofil „${entry.profileName}“, berechtigt wird die Gruppe aus Schritt 1.`,
+			description: `${entry.mailbox}@${SUBDOMAIN}.emailinbound… → Stapelprofil „${entry.profileName}“, die Gruppe aus Schritt 1 wird berechtigt und bei Fehlern benachrichtigt.`,
 			async check(apiKey) {
 				return await findMailbox(apiKey, entry.mailbox) ? exists("Vorhanden - Einstellungen werden aktualisiert.") : missing("Postfach fehlt.");
 			},
@@ -14399,7 +14399,11 @@ createHTML: (html) => {
 					batchnameTemplate: "%Subject%",
 					authorizedInboundGroupIds: unique([adminGroupId, scanGroupId]),
 					authorizedInboundUserIds: existing?.authorizedInboundUserIds ?? [],
-					informOnErrorGroupIds: unique([...existing?.informOnErrorGroupIds ?? [], adminGroupId]),
+					informOnErrorGroupIds: unique([
+						...existing?.informOnErrorGroupIds ?? [],
+						adminGroupId,
+						scanGroupId
+					]),
 					informOnErrorUserIds: existing?.informOnErrorUserIds ?? [],
 					batchProperties: [],
 					documentProperties: []
