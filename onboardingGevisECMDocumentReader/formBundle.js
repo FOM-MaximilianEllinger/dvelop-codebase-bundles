@@ -14420,19 +14420,18 @@ createHTML: (html) => {
 			existing: ((await getMappingContainers(BASE_URI$1, apiKey, repositoryId)).body.containers ?? []).find((c) => c.sourceId === SOURCE_MAPPING.sourceId)
 		};
 	}
-	var SOURCE_MAPPING_RETRY_MS = 3e5;
+	var SOURCE_MAPPING_MAX_ATTEMPTS = 3;
 	var SOURCE_MAPPING_RETRY_INTERVAL_MS = 2e4;
 	async function saveSourceMappingWithRetry(save) {
-		const deadline = Date.now() + SOURCE_MAPPING_RETRY_MS;
-		for (;;) try {
+		for (let attempt = 1;; attempt++) try {
 			await save();
 			return;
 		} catch (error) {
 			const message = getErrorMessage(error);
 			if (!(message.includes("status: 400") && /Quelleigenschaft|source property/i.test(message))) throw error;
-			if (Date.now() + SOURCE_MAPPING_RETRY_INTERVAL_MS > deadline) {
+			if (attempt >= SOURCE_MAPPING_MAX_ATTEMPTS) {
 				const field = /'([^']+)'/.exec(message)?.[1] ?? "?";
-				throw new Error(`Die Quelle des Rechnungslesers kennt das Feld „${field}“ noch nicht (auch nach ${SOURCE_MAPPING_RETRY_MS / 6e4} Minuten). Wurde das Webindex-Layout ersetzt? Schritt später erneut ausführen.`);
+				throw new Error(`Die Quelle des Rechnungslesers kennt das Feld „${field}“ noch nicht (auch nach ${SOURCE_MAPPING_MAX_ATTEMPTS} Versuchen). Wurde das Webindex-Layout ersetzt? Schritt später erneut ausführen.`);
 			}
 			await new Promise((resolve) => setTimeout(resolve, SOURCE_MAPPING_RETRY_INTERVAL_MS));
 		}
@@ -14759,7 +14758,7 @@ createHTML: (html) => {
 		{
 			id: "sourceMapping",
 			title: "Quell-Mapping „Rechnungsleser“",
-			description: `Zuordnung der Rechnungsleser-Felder zu den DMS-Eigenschaften (erstes Repository, Quelle ${SOURCE_MAPPING.sourceId}). Bei einem vorhandenen Mapping werden die Vorlagen-Zuordnungen aktualisiert bzw. ergänzt, weitere Zuordnungen bleiben erhalten. Kennt die Quelle Felder aus dem gerade ersetzten Webindex-Layout noch nicht, wird bis zu ${SOURCE_MAPPING_RETRY_MS / 6e4} Minuten lang erneut versucht.`,
+			description: `Zuordnung der Rechnungsleser-Felder zu den DMS-Eigenschaften (erstes Repository, Quelle ${SOURCE_MAPPING.sourceId}). Bei einem vorhandenen Mapping werden die Vorlagen-Zuordnungen aktualisiert bzw. ergänzt, weitere Zuordnungen bleiben erhalten. Kennt die Quelle Felder aus dem gerade ersetzten Webindex-Layout noch nicht, wird es bis zu ${SOURCE_MAPPING_MAX_ATTEMPTS} Mal versucht und danach abgebrochen.`,
 			async beforeRun(apiKey) {
 				const { existing } = await findSourceMapping(apiKey);
 				if (!existing) return true;
