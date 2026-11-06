@@ -5839,11 +5839,14 @@ createHTML: (html) => {
 		return await performHttpRequest(`${baseUri}/dash/api/tenant-widgets`, {
 			method: "GET",
 			headers: headers$1(token),
-			cache: "no-store"
+			cache: "no-store",
+			credentials: "omit"
 		});
 	}
 	/**
 	* Legt ein mandantenweites Widget auf der Startseite an (wie die Dash-Oberfläche).
+	* Ohne Cookies (credentials "omit"): mit der Browser-Session im Request lehnt
+	* Dash den POST ohne CSRF-Token ab ("CSRF validation failed").
 	*
 	* @param baseUri - Die Basis-URI der d.velop-API.
 	* @param token - Das Autorisierungs-Token für den Zugriff auf die API.
@@ -5853,7 +5856,8 @@ createHTML: (html) => {
 		return await performHttpRequest(`${baseUri}/dash/api/tenant-widgets`, {
 			method: "POST",
 			headers: headers$1(token),
-			body: JSON.stringify(body)
+			body: JSON.stringify(body),
+			credentials: "omit"
 		});
 	}
 	//#endregion
