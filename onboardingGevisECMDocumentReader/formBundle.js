@@ -10723,7 +10723,7 @@ createHTML: (html) => {
 			"StructureGroups": [],
 			"JSSnippets": [{
 				"OnMethod": "documentready",
-				"Code": "if (!GetAttribute('Rechnungstyp')) SetAttribute('Rechnungstyp', 'Warenrechnung');\r\n\r\n\r\n// Aktuellen Task und Dokument-ID ermitteln\r\nvar taskId = __ActiveTask__.Task;\r\nvar documentId = __ActiveTask__.Document;\r\nvar subscriptionId = taskList[__ActiveTask__.Task].batchTask.subscriptionId;\r\nvar processSequenceId = taskList[__ActiveTask__.Task].batchTask.processSequenceId;\r\nvar invoiceNumber = GetAttribute('InvoiceNumber');\r\nvar vendorNum = GetAttribute('VENDOR_NUM');\r\n\r\nconsole.log({\r\n    taskId: taskId,\r\n    documentId: documentId,\r\n    subscriptionId: subscriptionId,\r\n    processSequenceId: processSequenceId\r\n});\r\n\r\n// Dropdownfeld für Mandant\r\nGetSqlResult('SELECT * FROM CC_COMPANIES')\r\n    .then(result => {\r\n        const companyNumIndex = result.Headers.indexOf('COMPANY_NUM');\r\n        const nameIndex = result.Headers.indexOf('NAME');\r\n\r\n        // Wert = COMPANY_NUM (für die Lieferanten-Abfragen), Anzeige = Name\r\n        const selectValues = result.Rows.map(row => [row.Cells[companyNumIndex], row.Cells[nameIndex]]);\r\n        SetAttributeSelection('DEBITOR_NAME', selectValues);\r\n\r\n        // Erkannten Mandanten nicht überschreiben, nur als Fallback den ersten nehmen\r\n        const companyNum = selectValues[0]?.[0];\r\n        if (!companyNum) return;\r\n\r\n        const row = result.Rows.find(r => r.Cells[companyNumIndex] === companyNum);\r\n        if (!row) return;\r\n\r\n        const h = result.Headers;\r\n        const cell = name => row.Cells[h.indexOf(name)];\r\n\r\n        SetAttribute('DEBITOR_NUM', companyNum);\r\n        SetAttribute('DEBITOR_NAME', companyNum);\r\n        SetAttribute('STR', cell('STR'));\r\n        SetAttribute('ZIP', cell('ZIP'));\r\n        SetAttribute('CITY', cell('CITY'));\r\n        SetAttribute('debitorMapping', `${cell('ERPTENANT_ID')}-${cell('COMPANY_ID')}`);\r\n    })\r\n    .catch(console.error);\r\n\r\n\r\n\r\nlet IsDuplicate = GetAttribute(\"IsDuplicate\");\r\nif (String(IsDuplicate).toLowerCase() === \"true\") {\r\n    showDuplicateWarning();\r\n}\r\n\r\n\r\nfunction showDuplicateWarning() {\r\n    // Definition der Fehlerdaten\r\n    var customValidation = [\r\n        {\r\n            \"errorGroupId\": \"CustomValidation\",\r\n            \"errorGroup\": \"Dublettenprüfung\",\r\n            \"result\": false,\r\n            \"errorMessages\": [\r\n                {\r\n                    \"message\": `Die Rechnung vom Lieferanten ${vendorNum} mit der Rechnungsnummer ${invoiceNumber} wurde bereits verarbeitet.`,\r\n                    \"attributesConcerned\": [\"InvoiceNumber\", \"VENDOR_NUM\"]\r\n                }\r\n            ]\r\n        }\r\n    ];\r\n    // Die Daten in das Live-Objekt taskList schreiben\r\n    if (taskList[taskId]) {\r\n        taskList[taskId].documentModels.forEach(function (doc) {\r\n            if (doc.documentNumber === documentId) {\r\n                doc.validationResults = customValidation;\r\n                if (typeof ElementAddFlag === 'function') {\r\n                    ElementAddFlag(taskId + \"_\" + documentId, \"Rejected\");\r\n                }\r\n            }\r\n        });\r\n    }\r\n\r\n    __ValidationErrors__ = customValidation;\r\n    // showDocumentInformation();\r\n}\r\n\r\n\r\n\r\n// Lupe im Feld: löst STRG + F9 im Feld aus.\r\n(function () {\r\n    const FIELD_IDS = [\"VENDOR_NUM\"]; // weitere Felder hier ergänzen\r\n    const ICON_NAME = \"ccCtrlF9Icon\";\r\n\r\n    FIELD_IDS.forEach(function (id) { waitForField(id, 0); });\r\n\r\n    // Wartet, bis das Feld im DOM ist (max. 10 s)\r\n    function waitForField(id, attempt) {\r\n        const input = document.getElementById(id);\r\n        if (input) {\r\n            addIcon(input, attempt);\r\n        } else if (attempt < 50) {\r\n            setTimeout(function () { waitForField(id, attempt + 1); }, 200);\r\n        } else {\r\n            console.warn(\"[Lupe] Feld nicht gefunden: \" + id);\r\n        }\r\n    }\r\n\r\n    function addIcon(input, attempt) {\r\n        const label = input.closest(\"label\") || input.parentElement;\r\n        if (label.querySelector('[name=\"' + ICON_NAME + '\"]')) return; // nur einmal\r\n\r\n        const icon = document.createElement(\"i\");\r\n        icon.setAttribute(\"name\", ICON_NAME);\r\n        icon.className = \"material-icons\"; // nur für das Lupen-Zeichen\r\n        icon.textContent = \"search\";\r\n        icon.title = \"Suche (STRG + F9)\";\r\n        icon.setAttribute(\"role\", \"button\");\r\n        icon.setAttribute(\"tabindex\", \"0\");\r\n        // Aussehen direkt am Symbol, damit das CSS des Webindex es nicht ausblendet\r\n        icon.style.cssText =\r\n            \"display:inline-flex !important; align-items:center; align-self:center;\" +\r\n            \"position:relative; z-index:2; cursor:pointer; padding:0 4px;\" +\r\n            \"font-size:22px; color:rgba(0,0,0,.54); user-select:none;\";\r\n\r\n        // Fokus im Feld lassen, sonst startet onblur die Hintergrundabfrage (BackgroundQuery)\r\n        icon.addEventListener(\"mousedown\", function (e) { e.preventDefault(); });\r\n        icon.addEventListener(\"click\", function (e) {\r\n            e.preventDefault();\r\n            e.stopPropagation();\r\n            pressCtrlF9(input);\r\n        });\r\n        icon.addEventListener(\"keydown\", function (e) {\r\n            if (e.key === \"Enter\" || e.key === \" \") {\r\n                e.preventDefault();\r\n                pressCtrlF9(input);\r\n            }\r\n        });\r\n\r\n        // Direkt hinter dem Eingabefeld einfügen\r\n        input.insertAdjacentElement(\"afterend\", icon);\r\n        console.log(\"[Lupe] eingefügt in \" + input.id + \" nach \" + (attempt * 200) + \" ms\");\r\n    }\r\n\r\n    function pressCtrlF9(target) {\r\n        target.focus(); // setzt über onfocus das aktive Feld (changeActiveInput)\r\n        [\"keydown\", \"keyup\"].forEach(function (type) {\r\n            const event = new KeyboardEvent(type, {\r\n                key: \"F9\", code: \"F9\", ctrlKey: true, bubbles: true, cancelable: true\r\n            });\r\n            // Ältere Tasten-Handler lesen keyCode/which; das lässt sich im Konstruktor nicht setzen\r\n            Object.defineProperty(event, \"keyCode\", { get: function () { return 120; } });\r\n            Object.defineProperty(event, \"which\", { get: function () { return 120; } });\r\n            target.dispatchEvent(event);\r\n        });\r\n        console.log(\"[Lupe] STRG + F9 ausgelöst in \" + target.id);\r\n        TriggerAttributeQuery(\"VENDOR_NUM\");\r\n    }\r\n})();\r\n\r\n// Fragezeichen im Feld: zeigt beim Klick einen Hilfetext an.\r\n(function () {\r\n    const HELP_TEXTS = { // weitere Felder hier ergänzen\r\n        OrderNum: \"Geben Sie eine oder mehrere Bestellnummern ein. Bei mehreren Bestellnummern verwenden Sie ein Semikolon (;) als Trennzeichen.\"\r\n    };\r\n    const ICON_NAME = \"ccHelpIcon\";\r\n\r\n    let popup = null;\r\n    let activeIcon = null;\r\n\r\n    Object.keys(HELP_TEXTS).forEach(function (id) { waitForField(id, 0); });\r\n\r\n    // Wartet, bis das Feld im DOM ist (max. 10 s)\r\n    function waitForField(id, attempt) {\r\n        const input = document.getElementById(id);\r\n        if (input) {\r\n            addIcon(input);\r\n        } else if (attempt < 50) {\r\n            setTimeout(function () { waitForField(id, attempt + 1); }, 200);\r\n        } else {\r\n            console.warn(\"[Hilfe] Feld nicht gefunden: \" + id);\r\n        }\r\n    }\r\n\r\n    function addIcon(input) {\r\n        const label = input.closest(\"label\") || input.parentElement;\r\n        if (label.querySelector('[name=\"' + ICON_NAME + '\"]')) return; // nur einmal\r\n\r\n        const text = HELP_TEXTS[input.id];\r\n        const icon = document.createElement(\"i\");\r\n        icon.setAttribute(\"name\", ICON_NAME);\r\n        icon.className = \"material-icons\"; // nur für das Fragezeichen-Symbol\r\n        icon.textContent = \"help_outline\";\r\n        icon.title = \"Hilfe\";\r\n        icon.setAttribute(\"role\", \"button\");\r\n        icon.setAttribute(\"tabindex\", \"0\");\r\n        // Aussehen direkt am Symbol, damit das CSS des Webindex es nicht ausblendet\r\n        icon.style.cssText =\r\n            \"display:inline-flex !important; align-items:center; align-self:center;\" +\r\n            \"position:relative; z-index:2; cursor:pointer; padding:0 4px;\" +\r\n            \"font-size:22px; color:rgba(0,0,0,.54); user-select:none;\";\r\n\r\n        // Fokus im Feld lassen, sonst startet onblur die Hintergrundabfrage (BackgroundQuery)\r\n        icon.addEventListener(\"mousedown\", function (e) { e.preventDefault(); });\r\n        icon.addEventListener(\"click\", function (e) {\r\n            e.preventDefault();\r\n            e.stopPropagation();\r\n            togglePopup(icon, text);\r\n        });\r\n        icon.addEventListener(\"keydown\", function (e) {\r\n            if (e.key === \"Enter\" || e.key === \" \") {\r\n                e.preventDefault();\r\n                togglePopup(icon, text);\r\n            }\r\n        });\r\n\r\n        // Direkt hinter dem Eingabefeld einfügen\r\n        input.insertAdjacentElement(\"afterend\", icon);\r\n    }\r\n\r\n    function togglePopup(icon, text) {\r\n        const wasOpen = activeIcon === icon;\r\n        closePopup();\r\n        if (!wasOpen) openPopup(icon, text);\r\n    }\r\n\r\n    function openPopup(icon, text) {\r\n        activeIcon = icon;\r\n        popup = document.createElement(\"div\");\r\n        popup.setAttribute(\"role\", \"tooltip\");\r\n        popup.textContent = text;\r\n        popup.style.cssText =\r\n            \"position:fixed; z-index:10000; max-width:320px; padding:8px 12px;\" +\r\n            \"background:#fff; color:rgba(0,0,0,.87); border-radius:4px;\" +\r\n            \"box-shadow:0 2px 8px rgba(0,0,0,.35); font-size:14px; line-height:1.4;\";\r\n        document.body.appendChild(popup);\r\n\r\n        // Unter dem Symbol anzeigen, bei Platzmangel darüber\r\n        const rect = icon.getBoundingClientRect();\r\n        const fitsBelow = rect.bottom + 4 + popup.offsetHeight <= window.innerHeight;\r\n        const maxLeft = window.innerWidth - popup.offsetWidth - 8;\r\n        popup.style.left = Math.max(8, Math.min(rect.left, maxLeft)) + \"px\";\r\n        popup.style.top = (fitsBelow ? rect.bottom + 4 : rect.top - popup.offsetHeight - 4) + \"px\";\r\n\r\n        document.addEventListener(\"click\", onOutsideClick, true);\r\n        document.addEventListener(\"keydown\", onEscape, true);\r\n        window.addEventListener(\"scroll\", closePopup, true);\r\n    }\r\n\r\n    function closePopup() {\r\n        if (!popup) return;\r\n        popup.remove();\r\n        popup = null;\r\n        activeIcon = null;\r\n        document.removeEventListener(\"click\", onOutsideClick, true);\r\n        document.removeEventListener(\"keydown\", onEscape, true);\r\n        window.removeEventListener(\"scroll\", closePopup, true);\r\n    }\r\n\r\n    function onOutsideClick(e) {\r\n        if (e.target !== activeIcon) closePopup();\r\n    }\r\n\r\n    function onEscape(e) {\r\n        if (e.key === \"Escape\") closePopup();\r\n    }\r\n})();\r\n\r\n//Todo: TermofPayment und TermofPayment2 über sql raussuchen und befüllen\r\n// TriggerAttributeQuery('TermOfPayment');\r\n// TriggerAttributeQuery('TermOfPayment2');\r\n\r\n// let vendTermOfPayment = GetAttribute('VENDOR_PAYMENT_TERM')\r\n// let docTermOfPayment1 = GetAttribute('TermOfPayment')\r\n\r\n// if (vendTermOfPayment != docTermOfPayment1) {\r\n//     SetTextColor('TermOfPayment', '#eb3734')\r\n// }\r\n\r\n\r\n"
+				"Code": "if (!GetAttribute('Rechnungstyp')) SetAttribute('Rechnungstyp', 'Warenrechnung');\r\n\r\n\r\n// Aktuellen Task und Dokument-ID ermitteln\r\nvar taskId = __ActiveTask__.Task;\r\nvar documentId = __ActiveTask__.Document;\r\nvar subscriptionId = taskList[__ActiveTask__.Task].batchTask.subscriptionId;\r\nvar processSequenceId = taskList[__ActiveTask__.Task].batchTask.processSequenceId;\r\nvar invoiceNumber = GetAttribute('InvoiceNumber');\r\nvar vendorNum = GetAttribute('VENDOR_NUM');\r\n\r\nconsole.log({\r\n    taskId: taskId,\r\n    documentId: documentId,\r\n    subscriptionId: subscriptionId,\r\n    processSequenceId: processSequenceId\r\n});\r\n\r\n// Dropdownfeld für Mandant\r\nGetSqlResult('SELECT * FROM CC_COMPANIES')\r\n    .then(result => {\r\n        const companyNumIndex = result.Headers.indexOf('COMPANY_NUM');\r\n        const nameIndex = result.Headers.indexOf('NAME');\r\n\r\n        // Wert = COMPANY_NUM (für die Lieferanten-Abfragen), Anzeige = Name\r\n        const selectValues = result.Rows.map(row => [row.Cells[companyNumIndex], row.Cells[nameIndex]]);\r\n        SetAttributeSelection('DEBITOR_NAME', selectValues);\r\n\r\n        // Erkannten Mandanten nicht überschreiben, nur als Fallback den ersten nehmen\r\n        const companyNum = selectValues[0]?.[0];\r\n        if (!companyNum) return;\r\n\r\n        const row = result.Rows.find(r => r.Cells[companyNumIndex] === companyNum);\r\n        if (!row) return;\r\n\r\n        const h = result.Headers;\r\n        const cell = name => row.Cells[h.indexOf(name)];\r\n\r\n        SetAttribute('DEBITOR_NUM', companyNum);\r\n        SetAttribute('DEBITOR_NAME', companyNum);\r\n        SetAttribute('STR', cell('STR'));\r\n        SetAttribute('ZIP', cell('ZIP'));\r\n        SetAttribute('CITY', cell('CITY'));\r\n        SetAttribute('debitorMapping', `${cell('ERPTENANT_ID')}-${cell('COMPANY_ID')}`);\r\n    })\r\n    .catch(console.error);\r\n\r\n\r\n\r\nlet IsDuplicate = GetAttribute(\"IsDuplicate\");\r\nif (String(IsDuplicate).toLowerCase() === \"true\") {\r\n    showDuplicateWarning();\r\n}\r\n\r\n\r\nfunction showDuplicateWarning() {\r\n    // Definition der Fehlerdaten\r\n    var customValidation = [\r\n        {\r\n            \"errorGroupId\": \"CustomValidation\",\r\n            \"errorGroup\": \"Dublettenprüfung\",\r\n            \"result\": false,\r\n            \"errorMessages\": [\r\n                {\r\n                    \"message\": `Die Rechnung vom Lieferanten ${vendorNum} mit der Rechnungsnummer ${invoiceNumber} wurde bereits verarbeitet.`,\r\n                    \"attributesConcerned\": [\"InvoiceNumber\", \"VENDOR_NUM\"]\r\n                }\r\n            ]\r\n        }\r\n    ];\r\n    // Die Daten in das Live-Objekt taskList schreiben\r\n    if (taskList[taskId]) {\r\n        taskList[taskId].documentModels.forEach(function (doc) {\r\n            if (doc.documentNumber === documentId) {\r\n                doc.validationResults = customValidation;\r\n                if (typeof ElementAddFlag === 'function') {\r\n                    ElementAddFlag(taskId + \"_\" + documentId, \"Rejected\");\r\n                }\r\n            }\r\n        });\r\n    }\r\n\r\n    __ValidationErrors__ = customValidation;\r\n    // showDocumentInformation();\r\n}\r\n\r\n\r\n\r\n// Lupe im Feld: löst STRG + F9 im Feld aus.\r\n(function () {\r\n    const FIELD_IDS = [\"VENDOR_NUM\"]; // weitere Felder hier ergänzen\r\n    const ICON_NAME = \"ccCtrlF9Icon\";\r\n\r\n    FIELD_IDS.forEach(function (id) { waitForField(id, 0); });\r\n\r\n    // Wartet, bis das Feld im DOM ist (max. 10 s)\r\n    function waitForField(id, attempt) {\r\n        const input = document.getElementById(id);\r\n        if (input) {\r\n            addIcon(input, attempt);\r\n        } else if (attempt < 50) {\r\n            setTimeout(function () { waitForField(id, attempt + 1); }, 200);\r\n        } else {\r\n            console.warn(\"[Lupe] Feld nicht gefunden: \" + id);\r\n        }\r\n    }\r\n\r\n    function addIcon(input, attempt) {\r\n        const label = input.closest(\"label\") || input.parentElement;\r\n        if (label.querySelector('[name=\"' + ICON_NAME + '\"]')) return; // nur einmal\r\n\r\n        const icon = document.createElement(\"i\");\r\n        icon.setAttribute(\"name\", ICON_NAME);\r\n        icon.className = \"material-icons\"; // nur für das Lupen-Zeichen\r\n        icon.textContent = \"search\";\r\n        icon.title = \"Suche (STRG + F9)\";\r\n        icon.setAttribute(\"role\", \"button\");\r\n        icon.setAttribute(\"tabindex\", \"0\");\r\n        // Aussehen direkt am Symbol, damit das CSS des Webindex es nicht ausblendet\r\n        icon.style.cssText =\r\n            \"display:inline-flex !important; align-items:center; align-self:center;\" +\r\n            \"position:relative; z-index:2; cursor:pointer; padding:0 4px;\" +\r\n            \"font-size:22px; color:rgba(0,0,0,.54); user-select:none;\";\r\n\r\n        // Fokus im Feld lassen, sonst startet onblur die Hintergrundabfrage (BackgroundQuery)\r\n        icon.addEventListener(\"mousedown\", function (e) { e.preventDefault(); });\r\n        icon.addEventListener(\"click\", function (e) {\r\n            e.preventDefault();\r\n            e.stopPropagation();\r\n            pressCtrlF9(input);\r\n        });\r\n        icon.addEventListener(\"keydown\", function (e) {\r\n            if (e.key === \"Enter\" || e.key === \" \") {\r\n                e.preventDefault();\r\n                pressCtrlF9(input);\r\n            }\r\n        });\r\n\r\n        // Direkt hinter dem Eingabefeld einfügen\r\n        input.insertAdjacentElement(\"afterend\", icon);\r\n        console.log(\"[Lupe] eingefügt in \" + input.id + \" nach \" + (attempt * 200) + \" ms\");\r\n    }\r\n\r\n    function pressCtrlF9(target) {\r\n        target.focus(); // setzt über onfocus das aktive Feld (changeActiveInput)\r\n        [\"keydown\", \"keyup\"].forEach(function (type) {\r\n            const event = new KeyboardEvent(type, {\r\n                key: \"F9\", code: \"F9\", ctrlKey: true, bubbles: true, cancelable: true\r\n            });\r\n            // Ältere Tasten-Handler lesen keyCode/which; das lässt sich im Konstruktor nicht setzen\r\n            Object.defineProperty(event, \"keyCode\", { get: function () { return 120; } });\r\n            Object.defineProperty(event, \"which\", { get: function () { return 120; } });\r\n            target.dispatchEvent(event);\r\n        });\r\n        console.log(\"[Lupe] STRG + F9 ausgelöst in \" + target.id);\r\n        TriggerAttributeQuery(\"VENDOR_NUM\");\r\n    }\r\n})();\r\n\r\n// Fragezeichen im Feld: zeigt beim Klick einen Hilfetext an.\r\n(function () {\r\n    const HELP_TEXTS = { // weitere Felder hier ergänzen\r\n        OrderNum: \"Geben Sie eine oder mehrere Bestellnummern ein. Bei mehreren Bestellnummern verwenden Sie ein Semikolon (;) als Trennzeichen.\"\r\n    };\r\n    const ICON_NAME = \"ccHelpIcon\";\r\n\r\n    let popup = null;\r\n    let activeIcon = null;\r\n\r\n    Object.keys(HELP_TEXTS).forEach(function (id) { waitForField(id, 0); });\r\n\r\n    // Wartet, bis das Feld im DOM ist (max. 10 s)\r\n    function waitForField(id, attempt) {\r\n        const input = document.getElementById(id);\r\n        if (input) {\r\n            addIcon(input);\r\n        } else if (attempt < 50) {\r\n            setTimeout(function () { waitForField(id, attempt + 1); }, 200);\r\n        } else {\r\n            console.warn(\"[Hilfe] Feld nicht gefunden: \" + id);\r\n        }\r\n    }\r\n\r\n    function addIcon(input) {\r\n        const label = input.closest(\"label\") || input.parentElement;\r\n        if (label.querySelector('[name=\"' + ICON_NAME + '\"]')) return; // nur einmal\r\n\r\n        const text = HELP_TEXTS[input.id];\r\n        const icon = document.createElement(\"i\");\r\n        icon.setAttribute(\"name\", ICON_NAME);\r\n        icon.className = \"material-icons\"; // nur für das Fragezeichen-Symbol\r\n        icon.textContent = \"help_outline\";\r\n        icon.title = \"Hilfe\";\r\n        icon.setAttribute(\"role\", \"button\");\r\n        icon.setAttribute(\"tabindex\", \"0\");\r\n        // Aussehen direkt am Symbol, damit das CSS des Webindex es nicht ausblendet\r\n        icon.style.cssText =\r\n            \"display:inline-flex !important; align-items:center; align-self:center;\" +\r\n            \"position:relative; z-index:2; cursor:pointer; padding:0 4px;\" +\r\n            \"font-size:22px; color:rgba(0,0,0,.54); user-select:none;\";\r\n\r\n        // Fokus im Feld lassen, sonst startet onblur die Hintergrundabfrage (BackgroundQuery)\r\n        icon.addEventListener(\"mousedown\", function (e) { e.preventDefault(); });\r\n        icon.addEventListener(\"click\", function (e) {\r\n            e.preventDefault();\r\n            e.stopPropagation();\r\n            togglePopup(icon, text);\r\n        });\r\n        icon.addEventListener(\"keydown\", function (e) {\r\n            if (e.key === \"Enter\" || e.key === \" \") {\r\n                e.preventDefault();\r\n                togglePopup(icon, text);\r\n            }\r\n        });\r\n\r\n        // Direkt hinter dem Eingabefeld einfügen\r\n        input.insertAdjacentElement(\"afterend\", icon);\r\n    }\r\n\r\n    function togglePopup(icon, text) {\r\n        const wasOpen = activeIcon === icon;\r\n        closePopup();\r\n        if (!wasOpen) openPopup(icon, text);\r\n    }\r\n\r\n    function openPopup(icon, text) {\r\n        activeIcon = icon;\r\n        popup = document.createElement(\"div\");\r\n        popup.setAttribute(\"role\", \"tooltip\");\r\n        popup.textContent = text;\r\n        popup.style.cssText =\r\n            \"position:fixed; z-index:10000; max-width:320px; padding:8px 12px;\" +\r\n            \"background:#fff; color:rgba(0,0,0,.87); border-radius:4px;\" +\r\n            \"box-shadow:0 2px 8px rgba(0,0,0,.35); font-size:14px; line-height:1.4;\";\r\n        document.body.appendChild(popup);\r\n\r\n        // Unter dem Symbol anzeigen, bei Platzmangel darüber\r\n        const rect = icon.getBoundingClientRect();\r\n        const fitsBelow = rect.bottom + 4 + popup.offsetHeight <= window.innerHeight;\r\n        const maxLeft = window.innerWidth - popup.offsetWidth - 8;\r\n        popup.style.left = Math.max(8, Math.min(rect.left, maxLeft)) + \"px\";\r\n        popup.style.top = (fitsBelow ? rect.bottom + 4 : rect.top - popup.offsetHeight - 4) + \"px\";\r\n\r\n        document.addEventListener(\"click\", onOutsideClick, true);\r\n        document.addEventListener(\"keydown\", onEscape, true);\r\n        window.addEventListener(\"scroll\", closePopup, true);\r\n    }\r\n\r\n    function closePopup() {\r\n        if (!popup) return;\r\n        popup.remove();\r\n        popup = null;\r\n        activeIcon = null;\r\n        document.removeEventListener(\"click\", onOutsideClick, true);\r\n        document.removeEventListener(\"keydown\", onEscape, true);\r\n        window.removeEventListener(\"scroll\", closePopup, true);\r\n    }\r\n\r\n    function onOutsideClick(e) {\r\n        if (e.target !== activeIcon) closePopup();\r\n    }\r\n\r\n    function onEscape(e) {\r\n        if (e.key === \"Escape\") closePopup();\r\n    }\r\n})();\r\n\r\n\r\n\r\n//Todo: TermofPayment und TermofPayment2 über sql raussuchen und befüllen\r\n// TriggerAttributeQuery('TermOfPayment');\r\n// TriggerAttributeQuery('TermOfPayment2');\r\n\r\n// let vendTermOfPayment = GetAttribute('VENDOR_PAYMENT_TERM')\r\n// let docTermOfPayment1 = GetAttribute('TermOfPayment')\r\n\r\n// if (vendTermOfPayment != docTermOfPayment1) {\r\n//     SetTextColor('TermOfPayment', '#eb3734')\r\n// }\r\n\r\n\r\n"
 			}],
 			"TemplateDefinition": {
 				"TemplateId": "VENDOR_NUM",
@@ -15145,6 +15145,7 @@ createHTML: (html) => {
 			id: "stveoMail",
 			title: "E-Mail: Anlage stveoservicesprod",
 			erp: ["veo"],
+			withoutApiKey: true,
 			skipReason: () => stveoCompanies().length ? void 0 : "Keine Mandanten mit ERP-Mandant-ID und Company-ID erfasst.",
 			description: `Bereitet die E-Mail „${STVEO_MAIL_SUBJECT}“ vor (Download als .eml, öffnet sich in Outlook als Entwurf): Link zum Storage Account stveoservicesprod und je Mandant eine Tabelle mit PartitionKey (ERP-Mandant-ID + Company-ID), RowKey, TimeStamp, AadTenantId, Url (mit der ERP-Umgebung aus der Konfiguration), IsOnPrem und Description.`,
 			async check() {
@@ -15210,6 +15211,7 @@ createHTML: (html) => {
 		{
 			id: "trustedApp",
 			title: "Rechnungsleser als vertrauenswürdige App",
+			withoutApiKey: true,
 			description: `Trägt „${DOCUMENT_READER_APP}“ im Identityprovider als vertrauenswürdige App ein (darf im Namen von Benutzern handeln). Läuft mit der Anmeldung des aktuellen Benutzers - dafür sind Administrationsrechte nötig.`,
 			async check() {
 				if (impersonationAdded) return done("In dieser Sitzung eingetragen.");
@@ -15227,6 +15229,8 @@ createHTML: (html) => {
 	//#endregion
 	//#region src/forms/onboardingState.svelte.ts
 	var BASE_URI = window.location.origin;
+	var NO_API_KEY_REASON = "Kein API-Key angegeben - Schritt nicht ausführbar.";
+	var NO_ERP_REASON = "Kein ERP-Zielsystem ausgewählt - Schritt nicht ausführbar.";
 	function unknownStatuses() {
 		return Object.fromEntries(steps.map((step) => [step.id, {
 			state: "unknown",
@@ -15240,9 +15244,10 @@ createHTML: (html) => {
 		busy: false,
 		message: void 0
 	});
-	/** Schritte, die für das gewählte ERP-System gelten. */
+	/** Schritte, die für das gewählte ERP-System gelten. Ohne Auswahl alle - die
+	* ERP-spezifischen werden dann übersprungen (siehe skipReasonOf). */
 	function activeSteps() {
-		return steps.filter((step) => !step.erp || config.erpSystem !== "" && step.erp.includes(config.erpSystem));
+		return steps.filter((step) => !step.erp || config.erpSystem === "" || step.erp.includes(config.erpSystem));
 	}
 	function resetStatuses() {
 		view.statuses = unknownStatuses();
@@ -15252,6 +15257,11 @@ createHTML: (html) => {
 	}
 	function statusOf(step) {
 		return view.statuses[step.id].state;
+	}
+	function skipReasonOf(step) {
+		if (!view.apiKey.trim() && !step.withoutApiKey) return NO_API_KEY_REASON;
+		if (step.erp && config.erpSystem === "") return NO_ERP_REASON;
+		return step.skipReason?.();
 	}
 	/** API-Key geändert: alte Prüfergebnisse gelten nicht mehr. */
 	function setApiKey(value) {
@@ -15293,7 +15303,7 @@ createHTML: (html) => {
 		}
 	}
 	async function checkStep(step) {
-		const skip = step.skipReason?.();
+		const skip = skipReasonOf(step);
 		if (skip) {
 			setStatus(step.id, {
 				state: "skipped",
@@ -15333,10 +15343,10 @@ createHTML: (html) => {
 		const skipped = counts.filter((state) => state === "skipped").length;
 		view.message = errors > 0 ? {
 			kind: "error",
-			text: `${errors} Schritt(e) konnten nicht geprüft werden - ist der API-Key gültig?`
+			text: `${errors} Schritt(e) konnten nicht geprüft werden${view.apiKey.trim() ? " - ist der API-Key gültig?" : "."}`
 		} : {
 			kind: open > 0 ? "info" : "ok",
-			text: `${open} fehlend, ${existing} vorhanden (können aktualisiert werden)${skipped ? `, ${skipped} übersprungen (Konfiguration leer)` : ""}.`
+			text: `${open} fehlend, ${existing} vorhanden (können aktualisiert werden)${skipped ? `, ${skipped} übersprungen (Grund siehe Statusspalte)` : ""}.`
 		};
 	}
 	function checkAllSteps() {
@@ -15369,7 +15379,7 @@ createHTML: (html) => {
 		}
 	}
 	async function runSingle(step) {
-		const skip = step.skipReason?.();
+		const skip = skipReasonOf(step);
 		if (skip) {
 			view.message = {
 				kind: "info",
@@ -15455,23 +15465,7 @@ createHTML: (html) => {
 			};
 		});
 	}
-	async function goToSteps() {
-		const apiKey = view.apiKey.trim();
-		if (!apiKey || config.erpSystem === "") {
-			view.message = {
-				kind: "error",
-				text: "Bitte API-Key eingeben und das ERP-Zielsystem auswählen."
-			};
-			return;
-		}
-		const configError = (config.erpSystem === "veo" && !isVeoConfigEmpty() ? validateVeoConfig() : config.erpSystem === "gevisR" && !isSftpConfigEmpty() ? validateSftpConfig() : void 0) ?? (filledCompanies().length ? validateCompanies() : void 0);
-		if (configError) {
-			view.message = {
-				kind: "error",
-				text: configError
-			};
-			return;
-		}
+	async function validateKeyAndGroup(apiKey) {
 		let valid = false;
 		await withBusy(async () => {
 			view.message = {
@@ -15501,15 +15495,28 @@ createHTML: (html) => {
 				};
 			}
 		});
-		if (!valid) return;
+		if (!valid) return false;
 		const groupError = config.groupMode === "existing" ? config.availableGroups.some((group) => group.id === config.selectedGroupId) ? void 0 : "Bitte eine vorhandene Berechtigungsgruppe auswählen." : config.newGroupName.trim() ? void 0 : "Bitte einen Namen für die neue Berechtigungsgruppe eingeben.";
 		if (groupError) {
 			view.message = {
 				kind: "error",
 				text: groupError
 			};
+			return false;
+		}
+		return true;
+	}
+	async function goToSteps() {
+		const apiKey = view.apiKey.trim();
+		const configError = (config.erpSystem === "veo" && !isVeoConfigEmpty() ? validateVeoConfig() : config.erpSystem === "gevisR" && !isSftpConfigEmpty() ? validateSftpConfig() : void 0) ?? (filledCompanies().length ? validateCompanies() : void 0);
+		if (configError) {
+			view.message = {
+				kind: "error",
+				text: configError
+			};
 			return;
 		}
+		if (apiKey && !await validateKeyAndGroup(apiKey)) return;
 		view.page = "steps";
 		view.message = void 0;
 		resetStatuses();
@@ -15947,7 +15954,7 @@ createHTML: (html) => {
 				select.disabled = !config.availableGroups.length;
 				if (select_value !== (select_value = config.selectedGroupId)) select.value = (select.__value = select_value) ?? "", select_option(select, select_value);
 				set_text(text_6, COMPANY_FILE_NAME);
-				button_3.disabled = view.busy || !get(hasKey) || config.erpSystem === "";
+				button_3.disabled = view.busy;
 			});
 			delegated("input", input, (e) => setApiKey(e.currentTarget.value));
 			delegated("change", input, (e) => {
@@ -15986,7 +15993,7 @@ createHTML: (html) => {
 			var text_10 = only_child(sibling(child(span_3)), true);
 			reset(span_3);
 			var span_4 = sibling(span_3, 2);
-			var text_11 = only_child(sibling(child(span_4)));
+			var text_11 = only_child(sibling(child(span_4)), true);
 			reset(span_4);
 			var button_4 = sibling(span_4, 2);
 			reset(div_23);
@@ -16034,7 +16041,7 @@ createHTML: (html) => {
 					set_text(text_14, get(step).description);
 					set_class(span_5, 1, `badge-state badge-${get(status).state ?? ""}`, "svelte-1sl4uka");
 					set_text(text_15, STATE_LABELS[get(status).state]);
-					button_6.disabled = view.busy || !get(hasKey) || get(status).state === "skipped";
+					button_6.disabled = view.busy || get(status).state === "skipped";
 					set_text(text_17, RUN_LABELS[get(status).state]);
 				});
 				delegated("click", button_6, () => runSingle(get(step)));
@@ -16053,15 +16060,15 @@ createHTML: (html) => {
 				set_text(text_8, SUBDOMAIN);
 				set_text(text_9, $0);
 				set_text(text_10, $1);
-				set_text(text_11, `••••${$2 ?? ""}`);
+				set_text(text_11, $2);
 				button_4.disabled = view.busy;
-				button_5.disabled = view.busy || !get(hasKey);
-				button_7.disabled = view.busy || !get(hasKey);
-				button_8.disabled = view.busy || !get(hasKey);
+				button_5.disabled = view.busy;
+				button_7.disabled = view.busy;
+				button_8.disabled = view.busy;
 			}, [
-				() => erpLabel(config.erpSystem),
+				() => erpLabel(config.erpSystem) || "nicht ausgewählt",
 				() => groupLabel(),
-				() => view.apiKey.trim().slice(-4)
+				() => get(hasKey) ? `••••${view.apiKey.trim().slice(-4)}` : "nicht angegeben"
 			]);
 			delegated("click", button_4, showConfig);
 			delegated("click", button_5, () => checkAllSteps());
