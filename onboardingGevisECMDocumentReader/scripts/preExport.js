@@ -42,9 +42,51 @@ function initLogger(level = LogLevel.INFO, showTimestamp = true) {
 	return loggerInstance;
 }
 //#endregion
+//#region src/scripts/lib/preExportHandler.ts
+var logger = initLogger(LogLevel.INFO);
+var DOCUMENT_TYPE_FIELD = "DocumentType";
+var MAPPING = {
+	Invoice: "2",
+	CreditAdvice: "3",
+	CorrectionOfInvoice: "2"
+};
+var KNOWN_CODES = /* @__PURE__ */ new Set(["2", "3"]);
+/**
+* Handler für den Extension Point: setzt DocumentType auf den ERP-Code und
+* ruft danach optional extend auf. extend bekommt den DocumentType von vor der
+* Umsetzung, weil z.B. die Rechnungskorrektur am Code nicht mehr erkennbar ist.
+*/
+function preExportHandler(extend) {
+	return async (req, res) => {
+		try {
+			const body = parseBody(req);
+			const documentType = String(body[DOCUMENT_TYPE_FIELD] ?? "");
+			const mapped = MAPPING[documentType];
+			if (mapped) body[DOCUMENT_TYPE_FIELD] = mapped;
+			else if (!KNOWN_CODES.has(documentType)) body[DOCUMENT_TYPE_FIELD] = "2";
+			logger.info(`DocumentType "${documentType}" -> "${body[DOCUMENT_TYPE_FIELD]}".`);
+			extend?.(req, body, documentType);
+			res.status(200).set("Content-Type", "application/json").send(JSON.stringify(body));
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			logger.error(`Fehler: ${message}`);
+			res.status(500).set("Content-Type", "application/json").send(JSON.stringify({ error: message }));
+		}
+	};
+}
+function parseBody(req) {
+	try {
+		const body = req.json?.();
+		return body && typeof body === "object" ? body : {};
+	} catch {
+		return {};
+	}
+}
+//#endregion
 //#region src/scripts/preExport.ts
 /**
-* "Rechnungsleser: PreExport": wird vom Rechnungsleser vor dem Export
+* "Rechnungsleser: PreExport" für VEO (gevis R-Linie: preExportGevisR.ts):
+* wird vom Rechnungsleser vor dem Export
 * aufgerufen (Extension Point "IR_Business_BeforeExportHook", Typ
 * ScriptingApp, Profil "PreExportScript" - hinterlegt vom Onboarding-Formular).
 * Bekommt die Attribute des Dokuments als JSON und liefert sie verändert
@@ -57,37 +99,7 @@ function initLogger(level = LogLevel.INFO, showTimestamp = true) {
 * (DocumentType ist dann schon "2"/"3"), greift der Standardfall - der Code
 * bleibt "2" bzw. wird aus "3" zu "2"; daher "3" ausdrücklich beibehalten.
 */
-var logger = initLogger(LogLevel.INFO);
-var DOCUMENT_TYPE_FIELD = "DocumentType";
-var MAPPING = {
-	Invoice: "2",
-	CreditAdvice: "3",
-	CorrectionOfInvoice: "2"
-};
-var KNOWN_CODES = /* @__PURE__ */ new Set(["2", "3"]);
-module.exports = async (req, res) => {
-	try {
-		const body = parseBody(req);
-		const documentType = String(body[DOCUMENT_TYPE_FIELD] ?? "");
-		const mapped = MAPPING[documentType];
-		if (mapped) body[DOCUMENT_TYPE_FIELD] = mapped;
-		else if (!KNOWN_CODES.has(documentType)) body[DOCUMENT_TYPE_FIELD] = "2";
-		logger.info(`DocumentType "${documentType}" -> "${body[DOCUMENT_TYPE_FIELD]}".`);
-		res.status(200).set("Content-Type", "application/json").send(JSON.stringify(body));
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		logger.error(`Fehler: ${message}`);
-		res.status(500).set("Content-Type", "application/json").send(JSON.stringify({ error: message }));
-	}
-};
-function parseBody(req) {
-	try {
-		const body = req.json?.();
-		return body && typeof body === "object" ? body : {};
-	} catch {
-		return {};
-	}
-}
+module.exports = preExportHandler();
 //#endregion
 
 //# sourceMappingURL=preExport.js.map
