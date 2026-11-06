@@ -5820,6 +5820,43 @@ createHTML: (html) => {
 		});
 	}
 	//#endregion
+	//#region ../../helper/dash/tenantWidgets.ts
+	function headers$1(token) {
+		return {
+			"Authorization": `Bearer ${token}`,
+			"Accept": "application/json",
+			"Content-Type": "application/json; charset=utf-8"
+		};
+	}
+	/**
+	* Liest die mandantenweiten Widgets der Startseite. Das Format der Antwort ist
+	* nicht dokumentiert, deshalb bewusst `unknown`.
+	*
+	* @param baseUri - Die Basis-URI der d.velop-API.
+	* @param token - Das Autorisierungs-Token für den Zugriff auf die API.
+	*/
+	async function getTenantWidgets(baseUri, token) {
+		return await performHttpRequest(`${baseUri}/dash/api/tenant-widgets`, {
+			method: "GET",
+			headers: headers$1(token),
+			cache: "no-store"
+		});
+	}
+	/**
+	* Legt ein mandantenweites Widget auf der Startseite an (wie die Dash-Oberfläche).
+	*
+	* @param baseUri - Die Basis-URI der d.velop-API.
+	* @param token - Das Autorisierungs-Token für den Zugriff auf die API.
+	* @param body - Sprache und Inhalt des Widgets.
+	*/
+	async function createTenantWidget(baseUri, token, body) {
+		return await performHttpRequest(`${baseUri}/dash/api/tenant-widgets`, {
+			method: "POST",
+			headers: headers$1(token),
+			body: JSON.stringify(body)
+		});
+	}
+	//#endregion
 	//#region ../../helper/classcon-documentreader/getFeatures.ts
 	/**
 	* Liefert die Features (Kacheln) des Rechnungslesers - analog zu
@@ -14727,6 +14764,15 @@ createHTML: (html) => {
 		if (!tool || tool.type === "script") throw new Error("Werkzeug „invoiceReaderAutoRouting“ fehlt in Toolbox/src/config/targetForms.ts - bitte die Toolbox bauen (generateTargetForms).");
 		return tool;
 	})();
+	var AUTO_ROUTING_WIDGET_ICON = "https://cdn-icons-png.flaticon.com/512/15678/15678776.png";
+	async function hasAutoRoutingWidget(apiKey) {
+		try {
+			const { body } = await getTenantWidgets(BASE_URI$1, apiKey);
+			return typeof body === "object" ? JSON.stringify(body).includes(AUTO_ROUTING_TOOL.formId) : void 0;
+		} catch {
+			return;
+		}
+	}
 	var steps = [
 		{
 			id: "targetGroup",
@@ -15088,6 +15134,47 @@ createHTML: (html) => {
 				};
 				await patchForm(BASE_URI$1, apiKey, AUTO_ROUTING_TOOL.formId, AUTO_ROUTING_TOOL.name, definition);
 				return `${existed ? "Aktualisiert" : "Angelegt"} (Version ${version ?? "?"}).`;
+			}
+		},
+		{
+			id: "autoRoutingWidget",
+			title: `Widget „${AUTO_ROUTING_TOOL.name}“`,
+			description: "Legt auf der Startseite ein mandantenweites Widget an, das das Formular der Dunkelverarbeitung öffnet (für externe Benutzer ausgeblendet). Ein vorhandenes Widget bleibt unverändert.",
+			async check(apiKey) {
+				const found = await hasAutoRoutingWidget(apiKey);
+				if (found === void 0) return {
+					state: "manual",
+					text: "Vorhandene Widgets nicht lesbar - bitte vor dem Anlegen auf der Startseite prüfen."
+				};
+				return found ? done("Vorhanden.") : missing("Widget fehlt.");
+			},
+			async beforeRun(apiKey) {
+				if (await hasAutoRoutingWidget(apiKey) !== void 0) return true;
+				return confirmWarning("Widget trotzdem anlegen?", "Die vorhandenen Widgets konnten nicht gelesen werden. Gibt es das Widget schon, entsteht ein zweites.", "Anlegen");
+			},
+			async run(apiKey) {
+				if (await hasAutoRoutingWidget(apiKey)) return "Bereits vorhanden.";
+				if (!((await getAllForms(BASE_URI$1, apiKey)).body.forms ?? []).some((f) => f.id === AUTO_ROUTING_TOOL.formId)) throw new Error(`Formular „${AUTO_ROUTING_TOOL.name}“ nicht gefunden - bitte zuerst das Werkzeug anlegen.`);
+				await createTenantWidget(BASE_URI$1, apiKey, {
+					id: "",
+					default_language: "de",
+					widget: {
+						title: { de: AUTO_ROUTING_TOOL.name },
+						subtitle: { de: "" },
+						type: "shortcut",
+						icon: {
+							url: AUTO_ROUTING_WIDGET_ICON,
+							background_color: ""
+						},
+						target: { url: `${BASE_URI$1}/dforms/ui/forms/${AUTO_ROUTING_TOOL.formId}/view` },
+						additionalTypes: {
+							list: { content: { url: "" } },
+							iframe: { content: { url: "" } }
+						},
+						hideFromExternalUsers: true
+					}
+				});
+				return "Widget angelegt.";
 			}
 		},
 		{
