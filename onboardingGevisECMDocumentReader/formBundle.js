@@ -5821,6 +5821,7 @@ createHTML: (html) => {
 	}
 	//#endregion
 	//#region ../../helper/dash/tenantWidgets.ts
+	var WIDGET_CONFIG_PAGE = "/dash/config/tenant-widgets";
 	/**
 	* Liest die mandantenweiten Widgets der Startseite über die Browser-Session.
 	* Das Format der Antwort ist nicht dokumentiert, deshalb bewusst `unknown`.
@@ -5838,15 +5839,15 @@ createHTML: (html) => {
 	/**
 	* Legt ein mandantenweites Widget auf der Startseite an - wie die Dash-
 	* Oberfläche über die Browser-Session mit Header "x-csrf-token"; mit API-Key
-	* antwortet Dash 403 "CSRF validation failed". Woher die Oberfläche das Token
-	* nimmt, ist noch nicht bestätigt: versucht wird das Meta-Tag der Dash-Seite,
-	* sonst das Token des Identityproviders.
+	* antwortet Dash 403 "CSRF validation failed". Das Token wird wie beim
+	* Identityprovider aus dem Meta-Tag der Konfigurationsseite gelesen.
 	*
 	* @param baseUri - Die Basis-URI der d.velop-API.
 	* @param body - Sprache und Inhalt des Widgets.
 	*/
 	async function createTenantWidget(baseUri, body) {
-		const token = await csrfFromFetch(baseUri, "/dash/") ?? await getIdentityProviderCsrfToken(baseUri);
+		const token = await csrfFromFetch(baseUri, WIDGET_CONFIG_PAGE) ?? await csrfFromIframe(baseUri, WIDGET_CONFIG_PAGE);
+		if (!token) throw new Error(`CSRF-Token nicht gefunden (meta x-csrf-token auf ${WIDGET_CONFIG_PAGE}).`);
 		return await performHttpRequest(`${baseUri}/dash/api/tenant-widgets`, {
 			method: "POST",
 			headers: {
