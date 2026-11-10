@@ -14776,6 +14776,7 @@ createHTML: (html) => {
 		return tool;
 	})();
 	var AUTO_ROUTING_WIDGET_ICON = "https://cdn-icons-png.flaticon.com/512/15678/15678776.png";
+	var AUTO_ROUTING_WIDGET_COLOR = "#F8FF2A";
 	async function hasAutoRoutingWidget() {
 		try {
 			const { body } = await getTenantWidgets(BASE_URI$1);
@@ -15178,7 +15179,7 @@ createHTML: (html) => {
 						type: "shortcut",
 						icon: {
 							url: AUTO_ROUTING_WIDGET_ICON,
-							background_color: ""
+							background_color: AUTO_ROUTING_WIDGET_COLOR
 						},
 						target: { url: `${BASE_URI$1}/dforms/ui/forms/${AUTO_ROUTING_TOOL.formId}/view` },
 						additionalTypes: {

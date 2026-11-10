@@ -4897,6 +4897,51 @@ createHTML: (html) => {
 			bundlePath: "businesObjectsEditor/formBundle.js"
 		},
 		{
+			type: "script",
+			id: "companialBuchblatt",
+			name: "Companial Buchblatt-Übergabe",
+			description: "Übergibt Belegkopf und -zeilen per SOAP-Webservice an Business Central bei Companial (CreateHeader, CreateLines, CreateBuchblattZeilen).",
+			scripts: [{
+				name: "Companial Buchblatt-Übergabe",
+				description: "Übergibt Belegkopf und -zeilen per SOAP-Webservice an Business Central bei Companial (CreateHeader, CreateLines, CreateBuchblattZeilen).",
+				bundlePath: "companialBuchblatt/scripts/script.js",
+				customerVariables: [
+					{
+						"key": "companialBaseUrl",
+						"label": "Webservice-Basis-URL",
+						"encrypted": false,
+						"description": "SOAP-Basisadresse bis einschließlich /WS, ohne Firmennamen.",
+						"default": "https://t1016463.dynamicstocloud.com:1102/ST-155958/WS"
+					},
+					{
+						"key": "companialCompany",
+						"label": "Firma",
+						"encrypted": false,
+						"description": "Firmenname in Business Central, unkodiert (Leerzeichen erlaubt).",
+						"default": "Hedwigsburger Okermuehle"
+					},
+					{
+						"key": "companialTenant",
+						"label": "Tenant",
+						"encrypted": false,
+						"description": "Wert des Query-Parameters ?tenant=…",
+						"default": "T1016463.dynamicstocloud.com"
+					},
+					{
+						"key": "companialUser",
+						"label": "Benutzername",
+						"encrypted": false,
+						"description": "Business-Central-Benutzer für Basic Auth (Webdienst-Zugriffsschlüssel als Passwort)."
+					},
+					{
+						"key": "companialPassword",
+						"label": "Passwort / Webdienst-Zugriffsschlüssel",
+						"encrypted": true
+					}
+				]
+			}]
+		},
+		{
 			type: "form",
 			id: "deleteDocuments",
 			name: "Dokumente löschen",
