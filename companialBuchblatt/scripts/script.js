@@ -145,14 +145,21 @@ for (const key in process.env) if (key.startsWith("CREDENTIALS_")) {
 //#region src/scripts/script.ts
 /**
 * Companial Buchblatt-Übergabe: legt in Business Central (gehostet bei
-* Companial) über drei veröffentlichte SOAP-Codeunits einen Beleg an:
+* Companial) über drei veröffentlichte Codeunits einen Beleg an:
 *   1. CreateHeader            - Belegkopf
 *   2. CreateLines             - je Zeile ein Aufruf
 *   3. CreateBuchblattZeilen   - erzeugt aus pID die Buchblattzeilen
 *
 * Aufruf per POST mit { header, lines } (Felder siehe HeaderData/LineData,
 * alle Werte als Text). Ohne Body werden die Beispieldaten unten verwendet.
-* Antwort: { id, header, lines[], buchblatt } mit den return_values aus BC.
+* Antwort: { id, companies, header, lines[], buchblatt } mit den Rückgabewerten aus BC.
+*
+* Transport: OData V4 "Unbound Actions" über Port 1103 (JSON). SOAP über Port
+* 1102 ist bei Companial von außen nicht erreichbar. Jede als Webdienst
+* veröffentlichte Codeunit-Methode ist dort als <Servicename>_<Methode>
+* aufrufbar, die gevis-Logik bleibt also unverändert.
+* Vor den Aufrufen prüft das Script per GET /Company, ob die Instanz das
+* Entra-Token akzeptiert und die Firma existiert.
 *
 * Anmeldung: OAuth 2.0 Client-Credentials gegen Microsoft Entra ID mit einer
 * App-Registrierung, die in BC auf der Seite "Microsoft Entra-Anwendungen"
@@ -165,9 +172,10 @@ for (const key in process.env) if (key.startsWith("CREDENTIALS_")) {
 *    bei Companial erfragen und in der Script-Variable companialScope setzen.
 *  - Text-Formate für Datum/Betrag (dd.MM.yyyy / Komma?) mit der AL-Seite
 *    abstimmen - die Beispieldaten sind nur eine Annahme.
-*  - Servicename vs. Methodenname: Die URLs enthalten je Prozedur einen
-*    eigenen Servicenamen. Angenommen ist Methode == Servicename. Falls die
-*    WSDL etwas anderes zeigt, SERVICES unten anpassen.
+*  - Servicename vs. Methodenname: Angenommen ist Methode == Servicename,
+*    also z.B. CreateHeader_CreateHeader. Falls BC "No HTTP resource" o.ä.
+*    meldet, die tatsächlichen Namen über GET .../ODataV4/$metadata prüfen
+*    und SERVICES unten anpassen.
 */
 var logger = getLogger();
 var config = { mode: process.platform === "linux" ? "production" : "development" };
@@ -186,6 +194,7 @@ var SERVICES = {
 	}
 };
 var DEFAULT_SCOPE = "https://api.businesscentral.dynamics.com/.default";
+var DEFAULT_ODATA_URL = "https://t1016463.dynamicstocloud.com:1103/ST-155958/ODataV4";
 var SAMPLE_ID = "DV-TEST-0001";
 var SAMPLE_DMS_NO = "P000012345";
 var SAMPLE_HEADER = {
@@ -239,7 +248,7 @@ if (config.mode === "production") module.exports = async (req, res) => {
 else (async () => {
 	initLogger(LogLevel.DEBUG);
 	const devVars = {
-		companialBaseUrl: process.env.COMPANIAL_BASE_URL ?? "https://t1016463.dynamicstocloud.com:1102/ST-155958/WS",
+		companialODataUrl: process.env.COMPANIAL_ODATA_URL ?? DEFAULT_ODATA_URL,
 		companialCompany: process.env.COMPANIAL_COMPANY ?? "Hedwigsburger Okermuehle",
 		companialTenant: process.env.COMPANIAL_TENANT ?? "T1016463.dynamicstocloud.com",
 		entraTenantId: process.env.COMPANIAL_ENTRA_TENANT_ID,
@@ -258,6 +267,9 @@ async function main(getVar, body, res) {
 		const header = body.header ?? SAMPLE_HEADER;
 		const lines = body.lines ?? SAMPLE_LINES;
 		if (!header.pID) throw new Error("header.pID fehlt.");
+		const companies = await getCompanies(settings);
+		logger.info(`Verbindung OK, Firmen: ${companies.join(", ")}`);
+		if (!companies.includes(settings.company)) throw new Error(`Firma "${settings.company}" nicht gefunden. Vorhanden: ${companies.join(", ")}`);
 		const headerResult = await callCodeunit(settings, SERVICES.header, header);
 		logger.info(`CreateHeader ${header.pID}: ${headerResult}`);
 		const lineResults = [];
@@ -274,6 +286,7 @@ async function main(getVar, body, res) {
 		logger.info(`CreateBuchblattZeilen ${header.pID}: ${buchblattResult}`);
 		const result = {
 			id: header.pID,
+			companies,
 			header: headerResult,
 			lines: lineResults,
 			buchblatt: buchblattResult
@@ -285,35 +298,44 @@ async function main(getVar, body, res) {
 		if (res) res.status(500).set("Content-Type", "application/json").send(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
 	}
 }
+async function getCompanies(settings) {
+	return ((await odataRequest(settings, "GET", `${settings.odataUrl}/Company?tenant=${encodeURIComponent(settings.tenant)}`, "Company"))?.value ?? []).map((c) => String(c.Name ?? c.name ?? ""));
+}
 async function callCodeunit(settings, target, params) {
-	const namespace = `urn:microsoft-dynamics-schemas/codeunit/${target.service}`;
-	const url = `${settings.baseUrl.replace(/\/+$/, "")}/${encodeURIComponent(settings.company)}/Codeunit/${encodeURIComponent(target.service)}?tenant=${encodeURIComponent(settings.tenant)}`;
-	const paramXml = Object.entries(params).map(([key, value]) => `<tns:${key}>${escapeXml(String(value ?? ""))}</tns:${key}>`).join("");
-	const envelope = `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="${namespace}"><soap:Body><tns:${target.method}>${paramXml}</tns:${target.method}></soap:Body></soap:Envelope>`;
-	logger.debug(`[SOAP] POST ${url} | ${envelope}`);
+	const action = `${target.service}_${target.method}`;
+	const data = await odataRequest(settings, "POST", `${settings.odataUrl}/${encodeURIComponent(action)}?company=${encodeURIComponent(settings.company)}&tenant=${encodeURIComponent(settings.tenant)}`, action, params);
+	return data?.value === void 0 ? "" : String(data.value);
+}
+async function odataRequest(settings, method, url, label, body) {
+	logger.debug(`[OData] ${method} ${url}${body ? ` | ${JSON.stringify(body)}` : ""}`);
 	const token = await getAccessToken(settings);
 	let response;
 	try {
 		response = await fetch(url, {
-			method: "POST",
+			method,
 			headers: {
-				"Content-Type": "text/xml; charset=utf-8",
-				SOAPAction: `"${namespace}:${target.method}"`,
+				Accept: "application/json",
+				...body ? { "Content-Type": "application/json" } : {},
 				Authorization: `Bearer ${token}`
 			},
-			body: envelope
+			body: body ? JSON.stringify(body) : void 0
 		});
 	} catch (err) {
 		const cause = err?.cause;
-		throw new Error(`${target.service}: Netzwerkfehler ${err.message}${cause ? ` (${cause.code ?? cause})` : ""}`);
+		throw new Error(`${label}: Netzwerkfehler ${err.message}${cause ? ` (${cause.code ?? cause})` : ""}`);
 	}
 	const text = await response.text();
-	logger.debug(`[SOAP] ${response.status} ${target.service} | ${text}`);
+	logger.debug(`[OData] ${response.status} ${label} | ${text.slice(0, 2e3)}`);
+	let data = void 0;
+	try {
+		data = text ? JSON.parse(text) : void 0;
+	} catch {}
 	if (!response.ok) {
-		const fault = extractTag(text, "faultstring");
-		throw new Error(`${target.service}: HTTP ${response.status} ${fault ?? text.slice(0, 500)}`);
+		const message = data?.error?.message ?? text.slice(0, 500);
+		const hint = response.status === 401 ? ` (Token abgelehnt - Scope prüfen oder Entra-Anwendung in BC nicht aktiviert/berechtigt; WWW-Authenticate: ${response.headers.get("www-authenticate") ?? "-"})` : "";
+		throw new Error(`${label}: HTTP ${response.status} ${message}${hint}`);
 	}
-	return extractTag(text, "return_value") ?? "";
+	return data;
 }
 var cachedToken;
 async function getAccessToken(settings) {
@@ -347,19 +369,9 @@ async function getAccessToken(settings) {
 	logger.debug(`[OAuth] Token erhalten, gültig ${data.expires_in ?? "?"} s`);
 	return cachedToken.token;
 }
-function extractTag(xml, tag) {
-	const match = xml.match(new RegExp(`<(?:\\w+:)?${tag}[^>]*>([\\s\\S]*?)</(?:\\w+:)?${tag}>`));
-	return match ? unescapeXml(match[1]) : void 0;
-}
-function escapeXml(value) {
-	return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
-}
-function unescapeXml(value) {
-	return value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&apos;/g, "'").replace(/&amp;/g, "&");
-}
 function readSettings(getVar) {
 	const settings = {
-		baseUrl: String(getVar("companialBaseUrl") ?? "").trim(),
+		odataUrl: readODataUrl(getVar),
 		company: String(getVar("companialCompany") ?? "").trim(),
 		tenant: String(getVar("companialTenant") ?? "").trim(),
 		entraTenantId: stripBraces(String(getVar("entraTenantId") ?? "")),
@@ -370,6 +382,11 @@ function readSettings(getVar) {
 	const missing = Object.entries(settings).filter(([, v]) => !v).map(([k]) => k);
 	if (missing.length) throw new Error(`Script-Variablen fehlen: ${missing.join(", ")}`);
 	return settings;
+}
+function readODataUrl(getVar) {
+	const value = String(getVar("companialODataUrl") ?? "").trim();
+	if (!value) logger.warn(`Script-Variable companialODataUrl fehlt, verwende ${DEFAULT_ODATA_URL}`);
+	return (value || DEFAULT_ODATA_URL).replace(/\/+$/, "");
 }
 function stripBraces(value) {
 	return value.trim().replace(/^\{(.*)\}$/, "$1").trim();
