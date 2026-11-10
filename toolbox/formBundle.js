@@ -4928,15 +4928,29 @@ createHTML: (html) => {
 						"default": "T1016463.dynamicstocloud.com"
 					},
 					{
-						"key": "companialUser",
-						"label": "Benutzername",
+						"key": "entraTenantId",
+						"label": "Entra-Tenant-ID",
 						"encrypted": false,
-						"description": "Business-Central-Benutzer für Basic Auth (Webdienst-Zugriffsschlüssel als Passwort)."
+						"description": "Microsoft-Entra-Tenant-ID (GUID oder Domain), in dem die App-Registrierung liegt."
 					},
 					{
-						"key": "companialPassword",
-						"label": "Passwort / Webdienst-Zugriffsschlüssel",
-						"encrypted": true
+						"key": "clientId",
+						"label": "Client-ID",
+						"encrypted": false,
+						"description": "Anwendungs-ID der App-Registrierung - muss in BC auf der Seite \"Microsoft Entra-Anwendungen\" angelegt und aktiviert sein."
+					},
+					{
+						"key": "clientSecret",
+						"label": "Client-Secret",
+						"encrypted": true,
+						"description": "Geheimer Clientschlüssel der App-Registrierung."
+					},
+					{
+						"key": "companialScope",
+						"label": "Scope",
+						"encrypted": false,
+						"description": "OAuth-Scope der BC-Instanz (bei Companial erfragen).",
+						"default": "https://api.businesscentral.dynamics.com/.default"
 					}
 				]
 			}]

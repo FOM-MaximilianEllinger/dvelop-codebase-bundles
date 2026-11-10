@@ -154,9 +154,15 @@ for (const key in process.env) if (key.startsWith("CREDENTIALS_")) {
 * alle Werte als Text). Ohne Body werden die Beispieldaten unten verwendet.
 * Antwort: { id, header, lines[], buchblatt } mit den return_values aus BC.
 *
+* Anmeldung: OAuth 2.0 Client-Credentials gegen Microsoft Entra ID mit einer
+* App-Registrierung, die in BC auf der Seite "Microsoft Entra-Anwendungen"
+* (Karte mit Client-ID, Status "Aktiviert", Berechtigungssätzen) angelegt ist.
+* Das Token bleibt nur im Speicher der laufenden Script-Instanz.
+*
 * Offene Punkte (Stand 10.11.2026):
-*  - Auth: aktuell Basic Auth. Companial läuft voraussichtlich über OAuth -
-*    mit R-Linie/Technik klären, dann buildAuthHeader() anpassen.
+*  - Scope/Audience: Für eine bei Companial gehostete Instanz kann der Scope
+*    von der SaaS-Vorgabe abweichen (App-ID-URI der Instanz + "/.default") -
+*    bei Companial erfragen und in der Script-Variable companialScope setzen.
 *  - Text-Formate für Datum/Betrag (dd.MM.yyyy / Komma?) mit der AL-Seite
 *    abstimmen - die Beispieldaten sind nur eine Annahme.
 *  - Servicename vs. Methodenname: Die URLs enthalten je Prozedur einen
@@ -179,6 +185,7 @@ var SERVICES = {
 		method: "CreateBuchblattZeilen"
 	}
 };
+var DEFAULT_SCOPE = "https://api.businesscentral.dynamics.com/.default";
 var SAMPLE_ID = "DV-TEST-0001";
 var SAMPLE_DMS_NO = "P000012345";
 var SAMPLE_HEADER = {
@@ -235,8 +242,10 @@ else (async () => {
 		companialBaseUrl: process.env.COMPANIAL_BASE_URL ?? "https://t1016463.dynamicstocloud.com:1102/ST-155958/WS",
 		companialCompany: process.env.COMPANIAL_COMPANY ?? "Hedwigsburger Okermuehle",
 		companialTenant: process.env.COMPANIAL_TENANT ?? "T1016463.dynamicstocloud.com",
-		companialUser: process.env.COMPANIAL_USER,
-		companialPassword: process.env.COMPANIAL_PASSWORD
+		entraTenantId: process.env.COMPANIAL_ENTRA_TENANT_ID,
+		clientId: process.env.COMPANIAL_CLIENT_ID,
+		clientSecret: process.env.COMPANIAL_CLIENT_SECRET,
+		companialScope: process.env.COMPANIAL_SCOPE
 	};
 	await main((key) => devVars[key], {}, null);
 })().catch((err) => {
@@ -289,7 +298,7 @@ async function callCodeunit(settings, target, params) {
 			headers: {
 				"Content-Type": "text/xml; charset=utf-8",
 				SOAPAction: `"${namespace}:${target.method}"`,
-				Authorization: buildAuthHeader(settings)
+				Authorization: `Bearer ${await getAccessToken(settings)}`
 			},
 			body: envelope
 		});
@@ -305,8 +314,30 @@ async function callCodeunit(settings, target, params) {
 	}
 	return extractTag(text, "return_value") ?? "";
 }
-function buildAuthHeader(settings) {
-	return `Basic ${Buffer.from(`${settings.user}:${settings.password}`).toString("base64")}`;
+var cachedToken;
+async function getAccessToken(settings) {
+	const key = `${settings.entraTenantId}|${settings.clientId}|${settings.scope}`;
+	if (cachedToken && cachedToken.key === key && cachedToken.expiresAt - 6e4 > Date.now()) return cachedToken.token;
+	const url = `https://login.microsoftonline.com/${encodeURIComponent(settings.entraTenantId)}/oauth2/v2.0/token`;
+	logger.debug(`[OAuth] Token anfordern für Client ${settings.clientId}, Scope ${settings.scope}`);
+	const response = await fetch(url, {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			grant_type: "client_credentials",
+			client_id: settings.clientId,
+			client_secret: settings.clientSecret,
+			scope: settings.scope
+		})
+	});
+	const data = await response.json().catch(() => ({}));
+	if (!response.ok || !data.access_token) throw new Error(`Token-Abruf fehlgeschlagen: HTTP ${response.status} ${data.error ?? ""} ${data.error_description ?? ""}`.trim());
+	cachedToken = {
+		key,
+		token: data.access_token,
+		expiresAt: Date.now() + Number(data.expires_in ?? 3600) * 1e3
+	};
+	return cachedToken.token;
 }
 function extractTag(xml, tag) {
 	const match = xml.match(new RegExp(`<(?:\\w+:)?${tag}[^>]*>([\\s\\S]*?)</(?:\\w+:)?${tag}>`));
@@ -323,8 +354,10 @@ function readSettings(getVar) {
 		baseUrl: String(getVar("companialBaseUrl") ?? "").trim(),
 		company: String(getVar("companialCompany") ?? "").trim(),
 		tenant: String(getVar("companialTenant") ?? "").trim(),
-		user: String(getVar("companialUser") ?? "").trim(),
-		password: String(getVar("companialPassword") ?? "")
+		entraTenantId: String(getVar("entraTenantId") ?? "").trim(),
+		clientId: String(getVar("clientId") ?? "").trim(),
+		clientSecret: String(getVar("clientSecret") ?? ""),
+		scope: String(getVar("companialScope") ?? "").trim() || DEFAULT_SCOPE
 	};
 	const missing = Object.entries(settings).filter(([, v]) => !v).map(([k]) => k);
 	if (missing.length) throw new Error(`Script-Variablen fehlen: ${missing.join(", ")}`);
