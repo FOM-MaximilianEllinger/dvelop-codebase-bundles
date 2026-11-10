@@ -291,6 +291,7 @@ async function callCodeunit(settings, target, params) {
 	const paramXml = Object.entries(params).map(([key, value]) => `<tns:${key}>${escapeXml(String(value ?? ""))}</tns:${key}>`).join("");
 	const envelope = `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="${namespace}"><soap:Body><tns:${target.method}>${paramXml}</tns:${target.method}></soap:Body></soap:Envelope>`;
 	logger.debug(`[SOAP] POST ${url} | ${envelope}`);
+	const token = await getAccessToken(settings);
 	let response;
 	try {
 		response = await fetch(url, {
@@ -298,7 +299,7 @@ async function callCodeunit(settings, target, params) {
 			headers: {
 				"Content-Type": "text/xml; charset=utf-8",
 				SOAPAction: `"${namespace}:${target.method}"`,
-				Authorization: `Bearer ${await getAccessToken(settings)}`
+				Authorization: `Bearer ${token}`
 			},
 			body: envelope
 		});
@@ -320,16 +321,22 @@ async function getAccessToken(settings) {
 	if (cachedToken && cachedToken.key === key && cachedToken.expiresAt - 6e4 > Date.now()) return cachedToken.token;
 	const url = `https://login.microsoftonline.com/${encodeURIComponent(settings.entraTenantId)}/oauth2/v2.0/token`;
 	logger.debug(`[OAuth] Token anfordern für Client ${settings.clientId}, Scope ${settings.scope}`);
-	const response = await fetch(url, {
-		method: "POST",
-		headers: { "Content-Type": "application/x-www-form-urlencoded" },
-		body: new URLSearchParams({
-			grant_type: "client_credentials",
-			client_id: settings.clientId,
-			client_secret: settings.clientSecret,
-			scope: settings.scope
-		})
-	});
+	let response;
+	try {
+		response = await fetch(url, {
+			method: "POST",
+			headers: { "Content-Type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				grant_type: "client_credentials",
+				client_id: settings.clientId,
+				client_secret: settings.clientSecret,
+				scope: settings.scope
+			})
+		});
+	} catch (err) {
+		const cause = err?.cause;
+		throw new Error(`Token-Abruf: Netzwerkfehler ${err.message}${cause ? ` (${cause.code ?? cause})` : ""}`);
+	}
 	const data = await response.json().catch(() => ({}));
 	if (!response.ok || !data.access_token) throw new Error(`Token-Abruf fehlgeschlagen: HTTP ${response.status} ${data.error ?? ""} ${data.error_description ?? ""}`.trim());
 	cachedToken = {
@@ -337,6 +344,7 @@ async function getAccessToken(settings) {
 		token: data.access_token,
 		expiresAt: Date.now() + Number(data.expires_in ?? 3600) * 1e3
 	};
+	logger.debug(`[OAuth] Token erhalten, gültig ${data.expires_in ?? "?"} s`);
 	return cachedToken.token;
 }
 function extractTag(xml, tag) {
@@ -354,14 +362,17 @@ function readSettings(getVar) {
 		baseUrl: String(getVar("companialBaseUrl") ?? "").trim(),
 		company: String(getVar("companialCompany") ?? "").trim(),
 		tenant: String(getVar("companialTenant") ?? "").trim(),
-		entraTenantId: String(getVar("entraTenantId") ?? "").trim(),
-		clientId: String(getVar("clientId") ?? "").trim(),
+		entraTenantId: stripBraces(String(getVar("entraTenantId") ?? "")),
+		clientId: stripBraces(String(getVar("clientId") ?? "")),
 		clientSecret: String(getVar("clientSecret") ?? ""),
 		scope: String(getVar("companialScope") ?? "").trim() || DEFAULT_SCOPE
 	};
 	const missing = Object.entries(settings).filter(([, v]) => !v).map(([k]) => k);
 	if (missing.length) throw new Error(`Script-Variablen fehlen: ${missing.join(", ")}`);
 	return settings;
+}
+function stripBraces(value) {
+	return value.trim().replace(/^\{(.*)\}$/, "$1").trim();
 }
 function parseBody(req) {
 	try {
