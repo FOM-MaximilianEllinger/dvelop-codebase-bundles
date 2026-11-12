@@ -13640,6 +13640,65 @@ createHTML: (html) => {
 			bundlePath: "businesObjectsEditor/formBundle.js"
 		},
 		{
+			type: "script",
+			id: "companialBuchblatt",
+			name: "Companial Buchblatt-Übergabe",
+			description: "Übergibt Belegkopf und -zeilen per OData V4 an Business Central bei Companial (CreateHeader, CreateLines, CreateBuchblattZeilen).",
+			scripts: [{
+				name: "Companial Buchblatt-Übergabe",
+				description: "Übergibt Belegkopf und -zeilen per OData V4 an Business Central bei Companial (CreateHeader, CreateLines, CreateBuchblattZeilen).",
+				bundlePath: "companialBuchblatt/scripts/script.js",
+				customerVariables: [
+					{
+						"key": "companialODataUrl",
+						"label": "OData-V4-URL",
+						"encrypted": false,
+						"description": "OData-V4-Basisadresse der BC-Instanz bis einschließlich /ODataV4, ohne Firmennamen.",
+						"default": "https://t1016463.dynamicstocloud.com:1103/ST-155958/ODataV4"
+					},
+					{
+						"key": "companialCompany",
+						"label": "Firma",
+						"encrypted": false,
+						"description": "Firmenname in Business Central, unkodiert (Leerzeichen erlaubt).",
+						"default": "Hedwigsburger Okermuehle"
+					},
+					{
+						"key": "companialTenant",
+						"label": "Tenant",
+						"encrypted": false,
+						"description": "Wert des Query-Parameters ?tenant=…",
+						"default": "T1016463.dynamicstocloud.com"
+					},
+					{
+						"key": "entraTenantId",
+						"label": "Entra-Tenant-ID",
+						"encrypted": false,
+						"description": "Microsoft-Entra-Tenant-ID (GUID oder Domain), in dem die App-Registrierung liegt."
+					},
+					{
+						"key": "clientId",
+						"label": "Client-ID",
+						"encrypted": false,
+						"description": "Anwendungs-ID der App-Registrierung - muss in BC auf der Seite \"Microsoft Entra-Anwendungen\" angelegt und aktiviert sein."
+					},
+					{
+						"key": "clientSecret",
+						"label": "Client-Secret",
+						"encrypted": true,
+						"description": "Geheimer Clientschlüssel der App-Registrierung."
+					},
+					{
+						"key": "companialScope",
+						"label": "Scope",
+						"encrypted": false,
+						"description": "OAuth-Scope der BC-Instanz (bei Companial erfragen).",
+						"default": "https://api.businesscentral.dynamics.com/.default"
+					}
+				]
+			}]
+		},
+		{
 			type: "form",
 			id: "deleteDocuments",
 			name: "Dokumente löschen",
@@ -13768,6 +13827,82 @@ createHTML: (html) => {
 			formId: "2c3e00b6-8e00-4a27-9a9e-2b5dee133ca7",
 			bundlePath: "processAdministration/formBundle.js",
 			formDefinitionPath: "processAdministration/form.json"
+		},
+		{
+			type: "script",
+			id: "stopWorkflowAfterBooking",
+			name: "Workflow nach Buchung stoppen",
+			description: "Beendet den laufenden Workflow eines Belegs, sobald dieser gebucht wurde.",
+			scripts: [{
+				name: "Workflow nach Buchung stoppen",
+				description: "Beendet den laufenden Workflow eines Belegs, sobald dieser gebucht wurde.",
+				bundlePath: "stopWorkflowAfterBooking/scripts/script.js",
+				customerVariables: [
+					{
+						"key": "baseUri",
+						"label": "Base-URI",
+						"encrypted": false,
+						"default": "{origin}"
+					},
+					{
+						"key": "apiKey",
+						"label": "API-Key",
+						"encrypted": true
+					},
+					{
+						"key": "processId",
+						"label": "Prozess-ID",
+						"encrypted": false,
+						"description": "ID des Workflows, dessen aktive Instanzen geprüft werden.",
+						"default": "gws_goodsInvoice"
+					},
+					{
+						"key": "bookedPropertyId",
+						"label": "Eigenschafts-ID \"Gebucht\"",
+						"encrypted": false,
+						"description": "ID bzw. GUID der DMS-Eigenschaft, die nach der Buchung befüllt ist. Ist sie gefüllt, wird der Workflow abgebrochen."
+					}
+				]
+			}, {
+				name: "Notiz: Kein Sachposten gefunden",
+				description: "Beendet den laufenden Workflow eines Belegs, sobald dieser gebucht wurde.",
+				bundlePath: "stopWorkflowAfterBooking/scripts/commentNoLedgerEntry.js",
+				customerVariables: [
+					{
+						"key": "baseUri",
+						"label": "Base-URI",
+						"encrypted": false,
+						"default": "{origin}"
+					},
+					{
+						"key": "apiKey",
+						"label": "API-Key",
+						"encrypted": true
+					},
+					{
+						"key": "repositoryId",
+						"label": "Repository-ID",
+						"encrypted": false,
+						"description": "ID des DMS-Repositorys, in dem das Dokument liegt.",
+						"default": "db901975-8a12-5986-8995-a9f5723edd9b"
+					},
+					{
+						"key": "comment",
+						"label": "Notiztext",
+						"encrypted": false,
+						"default": "Kein Sachposten zur DMS-Nummer gefunden."
+					}
+				]
+			}],
+			processes: [{
+				id: "workflow-beendigung-nach-buchung",
+				name: "Workflow Beendigung nach Buchung",
+				bundlePath: "stopWorkflowAfterBooking/processes/workflow-beendigung-nach-buchung.bpmn",
+				actions: {
+					"Activity_0ztutl5-SendTask-0": "Workflow nach Buchung stoppen",
+					"Activity_1xlwdhm-SendTask-0": "Notiz: Kein Sachposten gefunden"
+				}
+			}]
 		},
 		{
 			type: "combined",

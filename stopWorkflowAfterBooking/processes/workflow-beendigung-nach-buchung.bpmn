@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="definitions_workflow-beendigung-nach-buchung" targetNamespace="http://bpmn.io/schema/bpmn" exporter="d.velop process modeler" exporterVersion="1.8.5.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.15.0">
+  <bpmn:process id="workflow-beendigung-nach-buchung" name="Workflow Beendigung nach Buchung" isExecutable="true">
+    <bpmn:extensionElements>
+      <camunda:properties>
+        <camunda:property name="service:/process/services/actions:in:actionId" value="String" />
+        <camunda:property name="service:/process/services/actions:in:actionPayload" value="InternalObject" />
+        <camunda:property name="service:/process/services/actions:out:status" value="Number" />
+        <camunda:property name="service:/process/services/actions:out:actionOutput" value="InternalObject" />
+        <camunda:property name="variable:docIds" value="[String]" />
+        <camunda:property name="variable:docId" value="String" />
+      </camunda:properties>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="StartEvent_1">
+      <bpmn:outgoing>Flow_0t4q7i6</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:endEvent id="Event_1ox17uk">
+      <bpmn:incoming>Flow_06q0vjk</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_0t4q7i6" sourceRef="StartEvent_1" targetRef="Activity_0ewzwyu" />
+    <bpmn:subProcess id="Activity_0ewzwyu" name="Workflows beenden">
+      <bpmn:documentation>#action</bpmn:documentation>
+      <bpmn:incoming>Flow_0t4q7i6</bpmn:incoming>
+      <bpmn:outgoing>Flow_1whmiv5</bpmn:outgoing>
+      <bpmn:startEvent id="Activity_0ztutl5-StartEvent-0" name="Workflows beenden (Start)" />
+      <bpmn:sequenceFlow id="Activity_0ztutl5-SequenceFlow-0" sourceRef="Activity_0ztutl5-StartEvent-0" targetRef="Activity_0ztutl5-SendTask-0" />
+      <bpmn:sendTask id="Activity_0ztutl5-SendTask-0" name="Workflows beenden (Request)" camunda:asyncBefore="true" camunda:delegateExpression="${asyncService}">
+        <bpmn:extensionElements>
+          <camunda:inputOutput>
+            <camunda:inputParameter name="service.uri">/process/services/actions</camunda:inputParameter>
+            <camunda:inputParameter name="actionId">scripting_f6ab4c4d-d9c1-40cd-a0e4-3ec63e1db2b3-bb00e7a5-f151-4395-ac02-cd01016ab75e</camunda:inputParameter>
+          </camunda:inputOutput>
+        </bpmn:extensionElements>
+      </bpmn:sendTask>
+      <bpmn:sequenceFlow id="Activity_0ztutl5-SequenceFlow-1" sourceRef="Activity_0ztutl5-SendTask-0" targetRef="Activity_0ztutl5-ReceiveTask-0" />
+      <bpmn:receiveTask id="Activity_0ztutl5-ReceiveTask-0" name="Workflows beenden (Response)" camunda:asyncAfter="true" />
+      <bpmn:sequenceFlow id="Activity_0ztutl5-SequenceFlow-2" sourceRef="Activity_0ztutl5-ReceiveTask-0" targetRef="Activity_0ztutl5-EndEvent-0" />
+      <bpmn:endEvent id="Activity_0ztutl5-EndEvent-0" name="Workflows beenden (End)" />
+    </bpmn:subProcess>
+    <bpmn:subProcess id="Activity_1ug8hcy">
+      <bpmn:incoming>Flow_1whmiv5</bpmn:incoming>
+      <bpmn:outgoing>Flow_06q0vjk</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics camunda:collection="${variables.get(&#39;docIds&#39;)}" camunda:elementVariable="docId" />
+      <bpmn:startEvent id="Event_0wx939p">
+        <bpmn:outgoing>Flow_0hzlslk</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:sequenceFlow id="Flow_0hzlslk" sourceRef="Event_0wx939p" targetRef="Activity_1drx45i" />
+      <bpmn:endEvent id="Event_1qy7r4l">
+        <bpmn:incoming>Flow_07g43of</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_07g43of" sourceRef="Activity_1drx45i" targetRef="Event_1qy7r4l" />
+      <bpmn:subProcess id="Activity_1drx45i" name="Notiz anbringen">
+        <bpmn:documentation>#action</bpmn:documentation>
+        <bpmn:incoming>Flow_0hzlslk</bpmn:incoming>
+        <bpmn:outgoing>Flow_07g43of</bpmn:outgoing>
+        <bpmn:startEvent id="Activity_1xlwdhm-StartEvent-0" name="Notiz anbringen (Start)" />
+        <bpmn:sequenceFlow id="Activity_1xlwdhm-SequenceFlow-0" sourceRef="Activity_1xlwdhm-StartEvent-0" targetRef="Activity_1xlwdhm-SendTask-0" />
+        <bpmn:sendTask id="Activity_1xlwdhm-SendTask-0" name="Notiz anbringen (Request)" camunda:asyncBefore="true" camunda:delegateExpression="${asyncService}">
+          <bpmn:extensionElements>
+            <camunda:inputOutput>
+              <camunda:inputParameter name="service.uri">/process/services/actions</camunda:inputParameter>
+              <camunda:inputParameter name="actionId">scripting_0201780f-311c-401c-92d3-892b389fdaae-1fd73127-7b63-497e-a041-f5e7aaa025ab</camunda:inputParameter>
+              <camunda:inputParameter name="actionPayload[$.docId]">${variables.get('docId')}</camunda:inputParameter>
+            </camunda:inputOutput>
+          </bpmn:extensionElements>
+        </bpmn:sendTask>
+        <bpmn:sequenceFlow id="Activity_1xlwdhm-SequenceFlow-1" sourceRef="Activity_1xlwdhm-SendTask-0" targetRef="Activity_1xlwdhm-ReceiveTask-0" />
+        <bpmn:receiveTask id="Activity_1xlwdhm-ReceiveTask-0" name="Notiz anbringen (Response)" camunda:asyncAfter="true" />
+        <bpmn:sequenceFlow id="Activity_1xlwdhm-SequenceFlow-2" sourceRef="Activity_1xlwdhm-ReceiveTask-0" targetRef="Activity_1xlwdhm-EndEvent-0" />
+        <bpmn:endEvent id="Activity_1xlwdhm-EndEvent-0" name="Notiz anbringen (End)" />
+      </bpmn:subProcess>
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="Flow_1whmiv5" sourceRef="Activity_0ewzwyu" targetRef="Activity_1ug8hcy" />
+    <bpmn:sequenceFlow id="Flow_06q0vjk" sourceRef="Activity_1ug8hcy" targetRef="Event_1ox17uk" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="workflow-beendigung-nach-buchung">
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_1">
+        <dc:Bounds x="200" y="100" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1ox17uk_di" bpmnElement="Event_1ox17uk">
+        <dc:Bounds x="852" y="100" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0ztutl5_di" bpmnElement="Activity_0ewzwyu">
+        <dc:Bounds x="280" y="78" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1ug8hcy_di" bpmnElement="Activity_1ug8hcy" isExpanded="true">
+        <dc:Bounds x="440" y="18" width="350" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0wx939p_di" bpmnElement="Event_0wx939p">
+        <dc:Bounds x="480" y="100" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1qy7r4l_di" bpmnElement="Event_1qy7r4l">
+        <dc:Bounds x="722" y="100" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1xlwdhm_di" bpmnElement="Activity_1drx45i">
+        <dc:Bounds x="570" y="78" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_0hzlslk_di" bpmnElement="Flow_0hzlslk">
+        <di:waypoint x="516" y="118" />
+        <di:waypoint x="570" y="118" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07g43of_di" bpmnElement="Flow_07g43of">
+        <di:waypoint x="670" y="118" />
+        <di:waypoint x="722" y="118" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0t4q7i6_di" bpmnElement="Flow_0t4q7i6">
+        <di:waypoint x="236" y="118" />
+        <di:waypoint x="280" y="118" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1whmiv5_di" bpmnElement="Flow_1whmiv5">
+        <di:waypoint x="380" y="118" />
+        <di:waypoint x="440" y="118" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06q0vjk_di" bpmnElement="Flow_06q0vjk">
+        <di:waypoint x="790" y="118" />
+        <di:waypoint x="852" y="118" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_0ejws71">
+    <bpmndi:BPMNPlane id="BPMNPlane_1yvso39" bpmnElement="Activity_0ewzwyu" />
+  </bpmndi:BPMNDiagram>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_0z3mrjk">
+    <bpmndi:BPMNPlane id="BPMNPlane_052thkz" bpmnElement="Activity_1drx45i" />
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -4886,6 +4886,63 @@ createHTML: (html) => {
 		return `globalThis.${SCRIPT_IDS_GLOBAL} = Object.assign(globalThis.${SCRIPT_IDS_GLOBAL} || {}, ${JSON.stringify(ids).replace(/</g, "\\u003c")});`;
 	}
 	//#endregion
+	//#region ../../helper/processstudio/processComponents.ts
+	function jsonHeaders(token) {
+		return {
+			...token ? { Authorization: `Bearer ${token}` } : {},
+			Accept: "application/json",
+			"Content-Type": "application/json"
+		};
+	}
+	/**
+	* Lässt Process Studio eine Komponente (z.B. BPMN-Inhalt) auflösen/prüfen -
+	* wie der Import in der Oberfläche vor dem Deployment:
+	* POST /processstudio/components/resolve mit { type, content }.
+	*/
+	async function resolveComponent(baseUri, token, type, content) {
+		return await performHttpRequest(`${baseUri}/processstudio/components/resolve`, {
+			method: "POST",
+			headers: jsonHeaders(token),
+			body: JSON.stringify({
+				type,
+				content
+			})
+		});
+	}
+	/**
+	* Prüft, ob eine Komponente schon existiert:
+	* POST /processstudio/components/exists mit { id, name, type }.
+	* Die Antwort wird tolerant ausgewertet (true bzw. { exists: true }).
+	*/
+	async function componentExists(baseUri, token, id, name, type) {
+		const body = (await performHttpRequest(`${baseUri}/processstudio/components/exists`, {
+			method: "POST",
+			headers: jsonHeaders(token),
+			body: JSON.stringify({
+				id,
+				name,
+				type
+			})
+		})).body;
+		if (typeof body === "boolean") return body;
+		if (typeof body === "string") return body.trim().toLowerCase() === "true";
+		return body?.exists === true || body?.idExists === true || body?.nameExists === true;
+	}
+	/**
+	* Deployt einen BPMN-Prozess (neue Version, falls er schon existiert):
+	* POST /processstudio/components/process/deployment mit { type: "process", content }.
+	*/
+	async function deployProcess(baseUri, token, content) {
+		return await performHttpRequest(`${baseUri}/processstudio/components/process/deployment`, {
+			method: "POST",
+			headers: jsonHeaders(token),
+			body: JSON.stringify({
+				type: "process",
+				content
+			})
+		});
+	}
+	//#endregion
 	//#region src/config/targetForms.ts
 	var targetForms = [
 		{
@@ -5084,6 +5141,82 @@ createHTML: (html) => {
 			formId: "2c3e00b6-8e00-4a27-9a9e-2b5dee133ca7",
 			bundlePath: "processAdministration/formBundle.js",
 			formDefinitionPath: "processAdministration/form.json"
+		},
+		{
+			type: "script",
+			id: "stopWorkflowAfterBooking",
+			name: "Workflow nach Buchung stoppen",
+			description: "Beendet den laufenden Workflow eines Belegs, sobald dieser gebucht wurde.",
+			scripts: [{
+				name: "Workflow nach Buchung stoppen",
+				description: "Beendet den laufenden Workflow eines Belegs, sobald dieser gebucht wurde.",
+				bundlePath: "stopWorkflowAfterBooking/scripts/script.js",
+				customerVariables: [
+					{
+						"key": "baseUri",
+						"label": "Base-URI",
+						"encrypted": false,
+						"default": "{origin}"
+					},
+					{
+						"key": "apiKey",
+						"label": "API-Key",
+						"encrypted": true
+					},
+					{
+						"key": "processId",
+						"label": "Prozess-ID",
+						"encrypted": false,
+						"description": "ID des Workflows, dessen aktive Instanzen geprüft werden.",
+						"default": "gws_goodsInvoice"
+					},
+					{
+						"key": "bookedPropertyId",
+						"label": "Eigenschafts-ID \"Gebucht\"",
+						"encrypted": false,
+						"description": "ID bzw. GUID der DMS-Eigenschaft, die nach der Buchung befüllt ist. Ist sie gefüllt, wird der Workflow abgebrochen."
+					}
+				]
+			}, {
+				name: "Notiz: Kein Sachposten gefunden",
+				description: "Beendet den laufenden Workflow eines Belegs, sobald dieser gebucht wurde.",
+				bundlePath: "stopWorkflowAfterBooking/scripts/commentNoLedgerEntry.js",
+				customerVariables: [
+					{
+						"key": "baseUri",
+						"label": "Base-URI",
+						"encrypted": false,
+						"default": "{origin}"
+					},
+					{
+						"key": "apiKey",
+						"label": "API-Key",
+						"encrypted": true
+					},
+					{
+						"key": "repositoryId",
+						"label": "Repository-ID",
+						"encrypted": false,
+						"description": "ID des DMS-Repositorys, in dem das Dokument liegt.",
+						"default": "db901975-8a12-5986-8995-a9f5723edd9b"
+					},
+					{
+						"key": "comment",
+						"label": "Notiztext",
+						"encrypted": false,
+						"default": "Kein Sachposten zur DMS-Nummer gefunden."
+					}
+				]
+			}],
+			processes: [{
+				id: "workflow-beendigung-nach-buchung",
+				name: "Workflow Beendigung nach Buchung",
+				bundlePath: "stopWorkflowAfterBooking/processes/workflow-beendigung-nach-buchung.bpmn",
+				actions: {
+					"Activity_0ztutl5-SendTask-0": "Workflow nach Buchung stoppen",
+					"Activity_1xlwdhm-SendTask-0": "Notiz: Kein Sachposten gefunden"
+				}
+			}]
 		},
 		{
 			type: "combined",
@@ -9123,6 +9256,9 @@ createHTML: (html) => {
 	function scriptsOf(target) {
 		return target.type === "form" ? [] : target.scripts;
 	}
+	function processesOf(target) {
+		return target.processes ?? [];
+	}
 	function toolParts(target) {
 		const parts = hasFormPart(target) ? [{
 			kind: "form",
@@ -9133,14 +9269,29 @@ createHTML: (html) => {
 			key: `script-${index}`,
 			script
 		}));
+		processesOf(target).forEach((process, index) => parts.push({
+			kind: "process",
+			key: `process-${index}`,
+			process
+		}));
 		return parts;
 	}
+	function partName(part) {
+		if (part.kind === "form") return "Formular";
+		if (part.kind === "script") return `Script "${part.script.name}"`;
+		return `Prozess "${part.process.name}"`;
+	}
+	function countLabel(count, singular, plural) {
+		return count === 1 ? singular : count > 1 ? `${count} ${plural}` : "";
+	}
 	function describeRollout(target, parts, verb) {
-		if (parts.length < toolParts(target).length) return `${parts.map((p) => p.kind === "form" ? "Formular" : `Script "${p.script.name}"`).join(" und ")} von "${target.name}" wurde${parts.length > 1 ? "n" : ""} ${verb}.`;
-		const scriptCount = scriptsOf(target).length;
-		const labels = [hasFormPart(target) ? "Formular" : "", scriptCount === 1 ? "Script" : scriptCount > 1 ? `${scriptCount} Scripts` : ""].filter((p) => p !== "");
-		if (labels.length === 1 && scriptCount <= 1) return `"${target.name}" wurde ${verb}.`;
-		return `${labels.join(" und ")} von "${target.name}" wurden ${verb}.`;
+		if (parts.length < toolParts(target).length) return `${parts.map(partName).join(" und ")} von "${target.name}" wurde${parts.length > 1 ? "n" : ""} ${verb}.`;
+		if (parts.length === 1) return `"${target.name}" wurde ${verb}.`;
+		return `${[
+			hasFormPart(target) ? "Formular" : "",
+			countLabel(scriptsOf(target).length, "Script", "Scripts"),
+			countLabel(processesOf(target).length, "Prozess", "Prozesse")
+		].filter((p) => p !== "").join(" und ")} von "${target.name}" wurden ${verb}.`;
 	}
 	function resolveDefault(spec) {
 		return (spec.default ?? "").replace(/\{origin\}/g, window.location.origin);
@@ -9252,9 +9403,24 @@ ${groups}`,
 			return { error: getErrorMessage(error) };
 		}
 	}
+	async function checkProcessPart(targetProcess) {
+		try {
+			const [exists, remote] = await Promise.all([componentExists(window.location.origin, NO_TOKEN, targetProcess.id, targetProcess.name, "process"), remoteVersionOf(targetProcess.bundlePath)]);
+			return exists ? {
+				unversioned: true,
+				remote
+			} : {
+				missing: true,
+				remote
+			};
+		} catch (error) {
+			return { error: getErrorMessage(error) };
+		}
+	}
 	function isPartOutdated(status) {
 		if (status.error) return false;
 		if (status.missing) return true;
+		if (status.unversioned) return false;
 		if (status.remote === void 0) return false;
 		return status.installed === void 0 || status.remote > status.installed;
 	}
@@ -9266,6 +9432,10 @@ ${groups}`,
 		if (status.missing) return {
 			text: `fehlt${status.remote !== void 0 ? ` – Version ${status.remote} verfügbar` : ""}`,
 			css: "tbx-status-outdated"
+		};
+		if (status.unversioned) return {
+			text: "vorhanden – kann neu deployt werden",
+			css: "tbx-status-ok"
 		};
 		if (status.installed === void 0) return {
 			text: `Version unbekannt${status.remote !== void 0 ? ` – Version ${status.remote} verfügbar` : ""}`,
@@ -9317,7 +9487,7 @@ ${groups}`,
 	async function loadToolLists() {
 		const baseUri = window.location.origin;
 		const [allForms, allScripts] = await Promise.all([getAllForms(baseUri, NO_TOKEN), getAllScripts(baseUri, NO_TOKEN)]);
-		const partExists = (t, part) => part.kind === "form" ? hasFormPart(t) && allForms.body.forms.some((f) => f.id === t.formId) : allScripts.body.some((s) => s.name === part.script.name);
+		const partExists = (t, part) => part.kind === "form" ? hasFormPart(t) && allForms.body.forms.some((f) => f.id === t.formId) : part.kind === "script" ? allScripts.body.some((s) => s.name === part.script.name) : false;
 		const isAlreadyLoaded = (t) => toolParts(t).some((part) => partExists(t, part));
 		const available = targetForms.filter((t) => !isAlreadyLoaded(t));
 		const loadedTargets = targetForms.filter(isAlreadyLoaded);
@@ -9329,7 +9499,7 @@ ${groups}`,
 		};
 	}
 	async function checkToolParts(target, loadScripts) {
-		const statuses = await Promise.all(toolParts(target).map(async (part) => [part.key, part.kind === "script" ? await checkScriptPart(part.script, loadScripts) : hasFormPart(target) ? await checkFormPart(target) : { error: "Kein Formular konfiguriert." }]));
+		const statuses = await Promise.all(toolParts(target).map(async (part) => [part.key, part.kind === "script" ? await checkScriptPart(part.script, loadScripts) : part.kind === "process" ? await checkProcessPart(part.process) : hasFormPart(target) ? await checkFormPart(target) : { error: "Kein Formular konfiguriert." }]));
 		return Object.fromEntries(statuses);
 	}
 	async function formViewUrl(target) {
@@ -9476,7 +9646,46 @@ ${groups}`,
 			const formNeedsNewIds = scriptCreated && (await getAllForms(window.location.origin, NO_TOKEN)).body.forms.some((f) => f.id === target.formId);
 			if (formRequested || formNeedsNewIds) await ensureTargetFormUpToDate(target);
 		}
+		for (const part of parts) if (part.kind === "process") await deployTargetProcess(part.process);
 		return true;
+	}
+	/**
+	* Lädt das BPMN aus dem Artefakt-Repo, setzt in jedem Send-Task aus
+	* targetProcess.actions die Aktions-Id des zugehörigen Scripts in DIESEM
+	* Mandanten ein (im BPMN steht die Id aus dem Mandanten, in dem es modelliert
+	* wurde) und deployt es - wie der Import in Process Studio erst per resolve,
+	* dann per deployment. Existiert der Prozess schon, entsteht eine neue
+	* Version. Vorbild: bpmnForTenant in
+	* projects/Toolbox_OnboardingGevisECMDocumentReader/src/forms/steps.ts.
+	*/
+	async function deployTargetProcess(targetProcess) {
+		const baseUri = window.location.origin;
+		let content = await loadLatestBundle(targetProcess.bundlePath);
+		const allScripts = await getAllScripts(baseUri, NO_TOKEN);
+		for (const [sendTaskId, scriptName] of Object.entries(targetProcess.actions)) {
+			const actionId = await actionIdOfScript(baseUri, allScripts.body, scriptName);
+			content = replaceActionId(content, sendTaskId, actionId);
+			getLogger().debug(`Prozess "${targetProcess.name}": ${sendTaskId} -> ${actionId}`);
+		}
+		await resolveComponent(baseUri, NO_TOKEN, "process", content);
+		await deployProcess(baseUri, NO_TOKEN, content);
+	}
+	async function actionIdOfScript(baseUri, allScripts, scriptName) {
+		const scriptId = allScripts.find((s) => s.name === scriptName)?.id;
+		if (!scriptId) throw new Error(`Script "${scriptName}" nicht gefunden - bitte zuerst das Script anlegen.`);
+		const version = (await getScriptVersion(baseUri, NO_TOKEN, scriptId)).body[0];
+		if (!version?.id) throw new Error(`Für Script "${scriptName}" wurde keine Version gefunden.`);
+		if (!version.actionEnabled) throw new Error(`Script "${scriptName}" ist noch keine Aktion - bitte das Script über die Toolbox aktualisieren.`);
+		return `scripting_${version.action?.id ?? `${scriptId}-${version.id}`}`;
+	}
+	function replaceActionId(bpmn, sendTaskId, actionId) {
+		const escapedId = sendTaskId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		const match = new RegExp(`<bpmn:sendTask\\b[^>]*\\bid="${escapedId}"[\\s\\S]*?</bpmn:sendTask>`).exec(bpmn);
+		if (!match) throw new Error(`Send-Task "${sendTaskId}" nicht im BPMN gefunden.`);
+		const actionParam = /(<camunda:inputParameter name="actionId">)[^<]*(<\/camunda:inputParameter>)/;
+		if (!actionParam.test(match[0])) throw new Error(`Send-Task "${sendTaskId}" hat keinen actionId-Parameter.`);
+		const replaced = match[0].replace(actionParam, `$1${actionId}$2`);
+		return bpmn.slice(0, match.index) + replaced + bpmn.slice(match.index + match[0].length);
 	}
 	async function loadLatestBundle(bundlePath) {
 		return await fetchPublishedFile(bundlePath);
@@ -9485,7 +9694,7 @@ ${groups}`,
 	//#region src/forms/Toolbox.svelte
 	var badges = ($$anchor, target = noop) => {
 		const scriptCount = /* @__PURE__ */ user_derived(() => scriptsOf(target()).length);
-		var fragment = root_3();
+		var fragment = root_4();
 		var node = first_child(fragment);
 		var consequent = ($$anchor) => {
 			append($$anchor, root());
@@ -9510,77 +9719,89 @@ ${groups}`,
 		if_block(node_2, ($$render) => {
 			if (target().type !== "form") $$render(consequent_2);
 		});
+		var node_3 = sibling(node_2, 2);
+		var consequent_3 = ($$anchor) => {
+			var span_3 = root_3();
+			var text_1 = only_child(span_3, true);
+			template_effect(($0) => set_text(text_1, $0), [() => processesOf(target()).length > 1 ? `${processesOf(target()).length} Prozesse` : "Prozess"]);
+			append($$anchor, span_3);
+		};
+		var d = /* @__PURE__ */ user_derived(() => processesOf(target()).length > 0);
+		if_block(node_3, ($$render) => {
+			if (get(d)) $$render(consequent_3);
+		});
 		append($$anchor, fragment);
 	};
 	var toolCard = ($$anchor, target = noop, actions = noop, parts = noop) => {
-		var div = root_7();
+		var div = root_8();
 		var div_1 = child(div);
 		var div_2 = child(div_1);
-		var span_3 = child(div_2);
-		var text_1 = only_child(span_3, true);
-		var node_3 = sibling(span_3);
-		badges(node_3, target);
-		var node_4 = sibling(node_3, 2);
-		var consequent_3 = ($$anchor) => {
-			var div_3 = root_4();
-			var text_2 = only_child(div_3, true);
-			template_effect(() => set_text(text_2, target().description));
+		var span_4 = child(div_2);
+		var text_2 = only_child(span_4, true);
+		var node_4 = sibling(span_4);
+		badges(node_4, target);
+		var node_5 = sibling(node_4, 2);
+		var consequent_4 = ($$anchor) => {
+			var div_3 = root_5();
+			var text_3 = only_child(div_3, true);
+			template_effect(() => set_text(text_3, target().description));
 			append($$anchor, div_3);
 		};
-		if_block(node_4, ($$render) => {
-			if (target().description) $$render(consequent_3);
+		if_block(node_5, ($$render) => {
+			if (target().description) $$render(consequent_4);
 		});
 		reset(div_2);
-		var node_5 = sibling(div_2, 2);
-		var consequent_4 = ($$anchor) => {
-			var div_4 = root_5();
+		var node_6 = sibling(div_2, 2);
+		var consequent_5 = ($$anchor) => {
+			var div_4 = root_6();
 			snippet(child(div_4), actions);
 			reset(div_4);
 			append($$anchor, div_4);
 		};
-		if_block(node_5, ($$render) => {
-			if (actions()) $$render(consequent_4);
+		if_block(node_6, ($$render) => {
+			if (actions()) $$render(consequent_5);
 		});
 		reset(div_1);
-		var node_7 = sibling(div_1, 2);
-		var consequent_5 = ($$anchor) => {
-			var ul = root_6();
+		var node_8 = sibling(div_1, 2);
+		var consequent_6 = ($$anchor) => {
+			var ul = root_7();
 			let classes;
 			snippet(child(ul), parts);
 			reset(ul);
 			template_effect(() => classes = set_class(ul, 1, "tbx-parts svelte-elr56e", null, classes, { "tbx-parts-combined": target().type === "combined" }));
 			append($$anchor, ul);
 		};
-		if_block(node_7, ($$render) => {
-			if (parts()) $$render(consequent_5);
+		if_block(node_8, ($$render) => {
+			if (parts()) $$render(consequent_6);
 		});
 		reset(div);
-		template_effect(() => set_text(text_1, target().name));
+		template_effect(() => set_text(text_2, target().name));
 		append($$anchor, div);
 	};
 	var root = /* @__PURE__ */ from_html(`<span class="tbx-badge tbx-badge-form svelte-elr56e">Formular</span>`);
 	var root_1 = /* @__PURE__ */ from_html(`<span class="tbx-badge-link svelte-elr56e">+</span>`);
 	var root_2 = /* @__PURE__ */ from_html(`<span class="tbx-badge tbx-badge-script svelte-elr56e"> </span>`);
-	var root_3 = /* @__PURE__ */ from_html(`<!> <!> <!>`, 1);
-	var root_4 = /* @__PURE__ */ from_html(`<div class="tbx-tool-desc svelte-elr56e"> </div>`);
-	var root_5 = /* @__PURE__ */ from_html(`<div class="tbx-actions svelte-elr56e"><!></div>`);
-	var root_6 = /* @__PURE__ */ from_html(`<ul><!></ul>`);
-	var root_7 = /* @__PURE__ */ from_html(`<div class="tbx-tool svelte-elr56e"><div class="tbx-tool-header svelte-elr56e"><div class="tbx-tool-info svelte-elr56e"><span class="tbx-tool-name svelte-elr56e"> </span><!> <!></div> <!></div> <!></div>`);
-	var root_8 = /* @__PURE__ */ from_html(`<div class="tbx-empty svelte-elr56e">Werkzeuge werden geladen…</div>`);
-	var root_9 = /* @__PURE__ */ from_html(`<div class="tbx-empty svelte-elr56e">Alle verfügbaren Werkzeuge sind bereits installiert.</div>`);
-	var root_10 = /* @__PURE__ */ from_html(`<option> </option>`);
-	var root_11 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-sm btn-outline-secondary"> </button>`);
-	var root_12 = /* @__PURE__ */ from_html(`<li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e"> </span> <span class="tbx-part-status tbx-status-unknown svelte-elr56e"> </span> <!></li>`);
-	var root_13 = /* @__PURE__ */ from_html(`<select class="form-control form-control-sm"></select> <!>`, 1);
-	var root_14 = /* @__PURE__ */ from_html(`<div class="tbx-status-error svelte-elr56e"> </div>`);
-	var root_15 = /* @__PURE__ */ from_html(`<div class="tbx-empty svelte-elr56e">Noch keine Werkzeuge installiert.</div>`);
-	var root_16 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-sm btn-outline-secondary">Öffnen</button>`);
-	var root_17 = /* @__PURE__ */ from_html(`<!> <button type="button" class="btn btn-sm btn-primary"> </button>`, 1);
-	var root_18 = /* @__PURE__ */ from_html(`<li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e"> </span> <span> </span> <!></li>`);
-	var root_19 = /* @__PURE__ */ from_html(`<div class="tbx-root svelte-elr56e"><div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Toolbox</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><ul class="tbx-parts svelte-elr56e"><li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e">Formular</span><span> </span></li></ul></div></div> <div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Werkzeug hinzufügen</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><!></div></div> <div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Installierte Werkzeuge</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary" title="Bringt alle installierten Werkzeuge mit neuerer Version auf den aktuellen Stand"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><!></div></div></div>`);
+	var root_3 = /* @__PURE__ */ from_html(`<span class="tbx-badge tbx-badge-process svelte-elr56e"> </span>`);
+	var root_4 = /* @__PURE__ */ from_html(`<!> <!> <!> <!>`, 1);
+	var root_5 = /* @__PURE__ */ from_html(`<div class="tbx-tool-desc svelte-elr56e"> </div>`);
+	var root_6 = /* @__PURE__ */ from_html(`<div class="tbx-actions svelte-elr56e"><!></div>`);
+	var root_7 = /* @__PURE__ */ from_html(`<ul><!></ul>`);
+	var root_8 = /* @__PURE__ */ from_html(`<div class="tbx-tool svelte-elr56e"><div class="tbx-tool-header svelte-elr56e"><div class="tbx-tool-info svelte-elr56e"><span class="tbx-tool-name svelte-elr56e"> </span><!> <!></div> <!></div> <!></div>`);
+	var root_9 = /* @__PURE__ */ from_html(`<div class="tbx-empty svelte-elr56e">Werkzeuge werden geladen…</div>`);
+	var root_10 = /* @__PURE__ */ from_html(`<div class="tbx-empty svelte-elr56e">Alle verfügbaren Werkzeuge sind bereits installiert.</div>`);
+	var root_11 = /* @__PURE__ */ from_html(`<option> </option>`);
+	var root_12 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-sm btn-outline-secondary"> </button>`);
+	var root_13 = /* @__PURE__ */ from_html(`<li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e"> </span> <span class="tbx-part-status tbx-status-unknown svelte-elr56e"> </span> <!></li>`);
+	var root_14 = /* @__PURE__ */ from_html(`<select class="form-control form-control-sm"></select> <!>`, 1);
+	var root_15 = /* @__PURE__ */ from_html(`<div class="tbx-status-error svelte-elr56e"> </div>`);
+	var root_16 = /* @__PURE__ */ from_html(`<div class="tbx-empty svelte-elr56e">Noch keine Werkzeuge installiert.</div>`);
+	var root_17 = /* @__PURE__ */ from_html(`<button type="button" class="btn btn-sm btn-outline-secondary">Öffnen</button>`);
+	var root_18 = /* @__PURE__ */ from_html(`<!> <button type="button" class="btn btn-sm btn-primary"> </button>`, 1);
+	var root_19 = /* @__PURE__ */ from_html(`<li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e"> </span> <span> </span> <!></li>`);
+	var root_20 = /* @__PURE__ */ from_html(`<div class="tbx-root svelte-elr56e"><div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Toolbox</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><ul class="tbx-parts svelte-elr56e"><li class="svelte-elr56e"><span class="tbx-part-label svelte-elr56e">Formular</span><span> </span></li></ul></div></div> <div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Werkzeug hinzufügen</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><!></div></div> <div class="tbx-section svelte-elr56e"><div class="tbx-section-header svelte-elr56e"><span class="tbx-section-title svelte-elr56e">Installierte Werkzeuge</span> <div class="tbx-actions svelte-elr56e"><button type="button" class="btn btn-sm btn-primary" title="Bringt alle installierten Werkzeuge mit neuerer Version auf den aktuellen Stand"> </button></div></div> <div class="tbx-section-body svelte-elr56e"><!></div></div></div>`);
 	var $$css = {
 		hash: "svelte-elr56e",
-		code: ".tbx-root.svelte-elr56e {display:flex;flex-direction:column;gap:16px;}.tbx-section.svelte-elr56e {border:1px solid #dee2e6;border-radius:6px;background:#fff;}.tbx-section-header.svelte-elr56e {display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid #dee2e6;background:#f8f9fa;border-radius:6px 6px 0 0;}.tbx-section-title.svelte-elr56e {font-weight:600;font-size:1.05em;}.tbx-section-body.svelte-elr56e {padding:12px;display:flex;flex-direction:column;gap:10px;}.tbx-actions.svelte-elr56e {display:flex;gap:6px;flex-shrink:0;}.tbx-empty.svelte-elr56e {color:#6c757d;font-style:italic;}.tbx-tool.svelte-elr56e {border:1px solid #dee2e6;border-radius:6px;padding:10px 12px;background:#fff;}\n  /* Kein Umbruch: Die Buttons bleiben immer rechts oben, lange Beschreibungen brechen links um. */.tbx-tool-header.svelte-elr56e {display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}.tbx-tool-info.svelte-elr56e {flex:0 0 70%;min-width:0;}.tbx-tool-header.svelte-elr56e > .tbx-actions:where(.svelte-elr56e) {flex:0 0 calc(30% - 12px);justify-content:flex-end;flex-wrap:wrap;}.tbx-tool-name.svelte-elr56e {font-weight:600;font-size:1.05em;}.tbx-tool-desc.svelte-elr56e {color:#6c757d;font-size:0.9em;margin-top:4px;}.tbx-badge.svelte-elr56e {display:inline-block;font-size:0.75em;font-weight:600;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;}.tbx-badge-form.svelte-elr56e {background:#e7f1ff;color:#0b5ed7;}.tbx-badge-script.svelte-elr56e {background:#fff3cd;color:#997404;}.tbx-badge-link.svelte-elr56e {color:#6c757d;font-size:0.8em;margin-left:4px;vertical-align:middle;}.tbx-parts.svelte-elr56e {list-style:none;margin:8px 0 0;padding:0;font-size:0.9em;}.tbx-section-body.svelte-elr56e > .tbx-parts:where(.svelte-elr56e) {margin-top:0;}.tbx-parts.svelte-elr56e li:where(.svelte-elr56e) {padding:3px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}.tbx-parts-combined.svelte-elr56e {border-left:3px solid #adb5bd;padding-left:10px;}.tbx-part-label.svelte-elr56e {display:inline-block;min-width:80px;font-weight:600;}.tbx-part-status.svelte-elr56e {flex:1 1 auto;}.tbx-status-ok.svelte-elr56e {color:#198754;}.tbx-status-outdated.svelte-elr56e {color:#b35c00;}.tbx-status-unknown.svelte-elr56e {color:#6c757d;}.tbx-status-error.svelte-elr56e {color:#dc3545;}"
+		code: ".tbx-root.svelte-elr56e {display:flex;flex-direction:column;gap:16px;}.tbx-section.svelte-elr56e {border:1px solid #dee2e6;border-radius:6px;background:#fff;}.tbx-section-header.svelte-elr56e {display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid #dee2e6;background:#f8f9fa;border-radius:6px 6px 0 0;}.tbx-section-title.svelte-elr56e {font-weight:600;font-size:1.05em;}.tbx-section-body.svelte-elr56e {padding:12px;display:flex;flex-direction:column;gap:10px;}.tbx-actions.svelte-elr56e {display:flex;gap:6px;flex-shrink:0;}.tbx-empty.svelte-elr56e {color:#6c757d;font-style:italic;}.tbx-tool.svelte-elr56e {border:1px solid #dee2e6;border-radius:6px;padding:10px 12px;background:#fff;}\n  /* Kein Umbruch: Die Buttons bleiben immer rechts oben, lange Beschreibungen brechen links um. */.tbx-tool-header.svelte-elr56e {display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}.tbx-tool-info.svelte-elr56e {flex:0 0 70%;min-width:0;}.tbx-tool-header.svelte-elr56e > .tbx-actions:where(.svelte-elr56e) {flex:0 0 calc(30% - 12px);justify-content:flex-end;flex-wrap:wrap;}.tbx-tool-name.svelte-elr56e {font-weight:600;font-size:1.05em;}.tbx-tool-desc.svelte-elr56e {color:#6c757d;font-size:0.9em;margin-top:4px;}.tbx-badge.svelte-elr56e {display:inline-block;font-size:0.75em;font-weight:600;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;}.tbx-badge-form.svelte-elr56e {background:#e7f1ff;color:#0b5ed7;}.tbx-badge-script.svelte-elr56e {background:#fff3cd;color:#997404;}.tbx-badge-process.svelte-elr56e {background:#e8f5e9;color:#1e7b34;}.tbx-badge-link.svelte-elr56e {color:#6c757d;font-size:0.8em;margin-left:4px;vertical-align:middle;}.tbx-parts.svelte-elr56e {list-style:none;margin:8px 0 0;padding:0;font-size:0.9em;}.tbx-section-body.svelte-elr56e > .tbx-parts:where(.svelte-elr56e) {margin-top:0;}.tbx-parts.svelte-elr56e li:where(.svelte-elr56e) {padding:3px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}.tbx-parts-combined.svelte-elr56e {border-left:3px solid #adb5bd;padding-left:10px;}.tbx-part-label.svelte-elr56e {display:inline-block;min-width:80px;font-weight:600;}.tbx-part-status.svelte-elr56e {flex:1 1 auto;}.tbx-status-ok.svelte-elr56e {color:#198754;}.tbx-status-outdated.svelte-elr56e {color:#b35c00;}.tbx-status-unknown.svelte-elr56e {color:#6c757d;}.tbx-status-error.svelte-elr56e {color:#dc3545;}"
 	};
 	function Toolbox($$anchor, $$props) {
 		push($$props, true);
@@ -9589,6 +9810,7 @@ ${groups}`,
 		const CHECKING_LABEL = "Prüfe…";
 		function partLabel(target, part) {
 			if (part.kind === "form") return "Formular";
+			if (part.kind === "process") return `Prozess: ${part.process.name}`;
 			return `${target.type === "combined" ? "↳ " : ""}Script${scriptsOf(target).length > 1 || part.script.name !== target.name ? `: ${part.script.name}` : ""}`;
 		}
 		function hasSeveralParts(target) {
@@ -9629,6 +9851,10 @@ ${groups}`,
 				label: CHECKING_LABEL,
 				disabled: true
 			};
+			if (status.unversioned && !status.error) return {
+				label: "Neu deployen",
+				disabled: false
+			};
 			if (!(Boolean(status.error) || isPartOutdated(status))) return {
 				label: "Aktuell",
 				disabled: true
@@ -9651,19 +9877,19 @@ ${groups}`,
 		const toolboxButton = /* @__PURE__ */ user_derived(() => updateButton([state().toolboxStatus]));
 		const updateAllLabel = /* @__PURE__ */ user_derived(() => !state().outdatedTools ? CHECKING_LABEL : state().outdatedTools.length === 0 ? "Alle aktuell" : `Alle Werkzeuge aktualisieren (${state().outdatedTools.length})`);
 		const toolboxLine = /* @__PURE__ */ user_derived(() => statusLine(state().toolboxStatus));
-		var div_5 = root_19();
+		var div_5 = root_20();
 		var div_6 = child(div_5);
 		var div_7 = child(div_6);
 		var div_8 = sibling(child(div_7), 2);
 		var button_1 = child(div_8);
-		var text_3 = only_child(button_1, true);
+		var text_4 = only_child(button_1, true);
 		reset(div_8);
 		reset(div_7);
 		var div_9 = sibling(div_7, 2);
 		var ul_1 = child(div_9);
 		var li = child(ul_1);
-		var span_4 = sibling(child(li));
-		var text_4 = only_child(span_4, true);
+		var span_5 = sibling(child(li));
+		var text_5 = only_child(span_5, true);
 		reset(li);
 		reset(ul_1);
 		reset(div_9);
@@ -9672,61 +9898,61 @@ ${groups}`,
 		var div_11 = child(div_10);
 		var div_12 = sibling(child(div_11), 2);
 		var button_2 = child(div_12);
-		var text_5 = only_child(button_2, true);
+		var text_6 = only_child(button_2, true);
 		reset(div_12);
 		reset(div_11);
 		var div_13 = sibling(div_11, 2);
-		var node_9 = child(div_13);
-		var consequent_6 = ($$anchor) => {
-			append($$anchor, root_8());
-		};
+		var node_10 = child(div_13);
 		var consequent_7 = ($$anchor) => {
 			append($$anchor, root_9());
 		};
+		var consequent_8 = ($$anchor) => {
+			append($$anchor, root_10());
+		};
 		var alternate = ($$anchor) => {
-			var fragment_1 = root_13();
+			var fragment_1 = root_14();
 			var select = first_child(fragment_1);
 			each(select, 21, () => state().available, (target) => target.id, ($$anchor, target) => {
-				var option = root_10();
-				var text_6 = only_child(option, true);
+				var option = root_11();
+				var text_7 = only_child(option, true);
 				var option_value = {};
 				template_effect(() => {
-					set_text(text_6, get(target).name);
+					set_text(text_7, get(target).name);
 					if (option_value !== (option_value = get(target).id)) option.value = (option.__value = option_value) ?? "";
 				});
 				append($$anchor, option);
 			});
 			reset(select);
 			init_select(select);
-			var node_10 = sibling(select, 2);
-			var consequent_9 = ($$anchor) => {
+			var node_11 = sibling(select, 2);
+			var consequent_10 = ($$anchor) => {
 				const previewParts = ($$anchor) => {
 					var fragment_2 = comment();
 					each(first_child(fragment_2), 17, () => toolParts(get(target)), (part) => part.key, ($$anchor, part) => {
 						const specs = /* @__PURE__ */ user_derived(() => get(part).kind === "script" ? get(part).script.customerVariables : []);
-						var li_1 = root_12();
-						var span_5 = child(li_1);
-						var text_7 = only_child(span_5, true);
-						var span_6 = sibling(span_5, 2);
+						var li_1 = root_13();
+						var span_6 = child(li_1);
 						var text_8 = only_child(span_6, true);
-						var node_12 = sibling(span_6, 2);
-						var consequent_8 = ($$anchor) => {
-							var button_3 = root_11();
-							var text_9 = only_child(button_3, true);
+						var span_7 = sibling(span_6, 2);
+						var text_9 = only_child(span_7, true);
+						var node_13 = sibling(span_7, 2);
+						var consequent_9 = ($$anchor) => {
+							var button_3 = root_12();
+							var text_10 = only_child(button_3, true);
 							template_effect(($0, $1) => {
 								button_3.disabled = $0;
-								set_text(text_9, $1);
+								set_text(text_10, $1);
 							}, [() => locked("available"), () => busyLabel(`${get(target).id}:${get(part).key}`, "Anlegen")]);
 							delegated("click", button_3, () => state().rollout("available", `${get(target).id}:${get(part).key}`, get(target), [get(part)], "angelegt"));
 							append($$anchor, button_3);
 						};
-						if_block(node_12, ($$render) => {
-							if (get(several)) $$render(consequent_8);
+						if_block(node_13, ($$render) => {
+							if (get(several)) $$render(consequent_9);
 						});
 						reset(li_1);
 						template_effect(($0, $1) => {
-							set_text(text_7, $0);
-							set_text(text_8, $1);
+							set_text(text_8, $0);
+							set_text(text_9, $1);
 						}, [() => partLabel(get(target), get(part)), () => get(specs).length > 0 ? `fragt beim Anlegen ab: ${get(specs).map((s) => s.label).join(", ")}` : "keine Eingaben nötig"]);
 						append($$anchor, li_1);
 					});
@@ -9736,16 +9962,16 @@ ${groups}`,
 				const several = /* @__PURE__ */ user_derived(() => hasSeveralParts(get(target)));
 				toolCard($$anchor, () => get(target), () => void 0, () => get(target).type === "form" ? void 0 : previewParts);
 			};
-			if_block(node_10, ($$render) => {
-				if (state().selected) $$render(consequent_9);
+			if_block(node_11, ($$render) => {
+				if (state().selected) $$render(consequent_10);
 			});
 			template_effect(($0) => select.disabled = $0, [() => locked("available")]);
 			bind_select_value(select, () => state().selectedId, ($$value) => state().selectedId = $$value);
 			append($$anchor, fragment_1);
 		};
-		if_block(node_9, ($$render) => {
-			if (!state().available) $$render(consequent_6);
-			else if (state().available.length === 0) $$render(consequent_7, 1);
+		if_block(node_10, ($$render) => {
+			if (!state().available) $$render(consequent_7);
+			else if (state().available.length === 0) $$render(consequent_8, 1);
 			else $$render(alternate, -1);
 		});
 		reset(div_13);
@@ -9754,45 +9980,45 @@ ${groups}`,
 		var div_17 = child(div_16);
 		var div_18 = sibling(child(div_17), 2);
 		var button_4 = child(div_18);
-		var text_10 = only_child(button_4, true);
+		var text_11 = only_child(button_4, true);
 		reset(div_18);
 		reset(div_17);
 		var div_19 = sibling(div_17, 2);
-		var node_13 = child(div_19);
-		var consequent_10 = ($$anchor) => {
-			append($$anchor, root_8());
-		};
+		var node_14 = child(div_19);
 		var consequent_11 = ($$anchor) => {
-			var div_21 = root_14();
-			var text_11 = only_child(div_21);
-			template_effect(() => set_text(text_11, `Installierte Werkzeuge konnten nicht ermittelt werden: ${state().listsError ?? ""}`));
-			append($$anchor, div_21);
+			append($$anchor, root_9());
 		};
 		var consequent_12 = ($$anchor) => {
-			append($$anchor, root_15());
+			var div_21 = root_15();
+			var text_12 = only_child(div_21);
+			template_effect(() => set_text(text_12, `Installierte Werkzeuge konnten nicht ermittelt werden: ${state().listsError ?? ""}`));
+			append($$anchor, div_21);
+		};
+		var consequent_13 = ($$anchor) => {
+			append($$anchor, root_16());
 		};
 		var alternate_1 = ($$anchor) => {
 			var fragment_4 = comment();
 			each(first_child(fragment_4), 17, () => state().loaded, (target) => target.id, ($$anchor, target) => {
 				const cardActions = ($$anchor) => {
 					const button = /* @__PURE__ */ user_derived(() => updateButton(get(parts).map((part) => get(statuses)?.[part.key])));
-					var fragment_5 = root_17();
-					var node_15 = first_child(fragment_5);
-					var consequent_13 = ($$anchor) => {
-						var button_5 = root_16();
+					var fragment_5 = root_18();
+					var node_16 = first_child(fragment_5);
+					var consequent_14 = ($$anchor) => {
+						var button_5 = root_17();
 						template_effect(($0) => button_5.disabled = $0, [() => locked("loaded") || state().opening[get(target).id]]);
 						delegated("click", button_5, () => state().open(get(target)));
 						append($$anchor, button_5);
 					};
-					var d = /* @__PURE__ */ user_derived(() => hasFormPart(get(target)));
-					if_block(node_15, ($$render) => {
-						if (get(d)) $$render(consequent_13);
+					var d_1 = /* @__PURE__ */ user_derived(() => hasFormPart(get(target)));
+					if_block(node_16, ($$render) => {
+						if (get(d_1)) $$render(consequent_14);
 					});
-					var button_6 = sibling(node_15, 2);
-					var text_12 = only_child(button_6, true);
+					var button_6 = sibling(node_16, 2);
+					var text_13 = only_child(button_6, true);
 					template_effect(($0, $1) => {
 						button_6.disabled = $0;
-						set_text(text_12, $1);
+						set_text(text_13, $1);
 					}, [() => get(button).disabled || locked("loaded"), () => busyLabel(get(target).id, get(button).label)]);
 					delegated("click", button_6, () => state().rollout("loaded", get(target).id, get(target), get(parts), "aktualisiert"));
 					append($$anchor, fragment_5);
@@ -9803,30 +10029,30 @@ ${groups}`,
 						const status = /* @__PURE__ */ user_derived(() => get(statuses)?.[get(part).key]);
 						const line = /* @__PURE__ */ user_derived(() => statusLine(get(status)));
 						const button = /* @__PURE__ */ user_derived(() => partButton(get(status)));
-						var li_2 = root_18();
-						var span_7 = child(li_2);
-						var text_13 = only_child(span_7, true);
-						var span_8 = sibling(span_7, 2);
+						var li_2 = root_19();
+						var span_8 = child(li_2);
 						var text_14 = only_child(span_8, true);
-						var node_17 = sibling(span_8, 2);
-						var consequent_14 = ($$anchor) => {
-							var button_7 = root_11();
-							var text_15 = only_child(button_7, true);
+						var span_9 = sibling(span_8, 2);
+						var text_15 = only_child(span_9, true);
+						var node_18 = sibling(span_9, 2);
+						var consequent_15 = ($$anchor) => {
+							var button_7 = root_12();
+							var text_16 = only_child(button_7, true);
 							template_effect(($0, $1) => {
 								button_7.disabled = $0;
-								set_text(text_15, $1);
+								set_text(text_16, $1);
 							}, [() => get(button).disabled || locked("loaded"), () => busyLabel(`${get(target).id}:${get(part).key}`, get(button).label)]);
 							delegated("click", button_7, () => state().rollout("loaded", `${get(target).id}:${get(part).key}`, get(target), [get(part)], get(status)?.missing ? "angelegt" : "aktualisiert"));
 							append($$anchor, button_7);
 						};
-						if_block(node_17, ($$render) => {
-							if (get(several)) $$render(consequent_14);
+						if_block(node_18, ($$render) => {
+							if (get(several)) $$render(consequent_15);
 						});
 						reset(li_2);
 						template_effect(($0) => {
-							set_text(text_13, $0);
-							set_class(span_8, 1, `tbx-part-status ${get(line).css ?? ""}`, "svelte-elr56e");
-							set_text(text_14, get(line).text);
+							set_text(text_14, $0);
+							set_class(span_9, 1, `tbx-part-status ${get(line).css ?? ""}`, "svelte-elr56e");
+							set_text(text_15, get(line).text);
 						}, [() => partLabel(get(target), get(part))]);
 						append($$anchor, li_2);
 					});
@@ -9839,10 +10065,10 @@ ${groups}`,
 			});
 			append($$anchor, fragment_4);
 		};
-		if_block(node_13, ($$render) => {
-			if (!state().loaded) $$render(consequent_10);
-			else if (state().listsError) $$render(consequent_11, 1);
-			else if (state().loaded.length === 0) $$render(consequent_12, 2);
+		if_block(node_14, ($$render) => {
+			if (!state().loaded) $$render(consequent_11);
+			else if (state().listsError) $$render(consequent_12, 1);
+			else if (state().loaded.length === 0) $$render(consequent_13, 2);
 			else $$render(alternate_1, -1);
 		});
 		reset(div_19);
@@ -9850,13 +10076,13 @@ ${groups}`,
 		reset(div_5);
 		template_effect(($0, $1, $2, $3, $4, $5) => {
 			button_1.disabled = $0;
-			set_text(text_3, $1);
-			set_class(span_4, 1, `tbx-part-status ${get(toolboxLine).css ?? ""}`, "svelte-elr56e");
-			set_text(text_4, get(toolboxLine).text);
+			set_text(text_4, $1);
+			set_class(span_5, 1, `tbx-part-status ${get(toolboxLine).css ?? ""}`, "svelte-elr56e");
+			set_text(text_5, get(toolboxLine).text);
 			button_2.disabled = $2;
-			set_text(text_5, $3);
+			set_text(text_6, $3);
 			button_4.disabled = $4;
-			set_text(text_10, $5);
+			set_text(text_11, $5);
 		}, [
 			() => get(toolboxButton).disabled || locked("toolbox"),
 			() => busyLabel("update-toolbox", get(toolboxButton).label),
