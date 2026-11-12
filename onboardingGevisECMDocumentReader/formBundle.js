@@ -8581,6 +8581,24 @@ createHTML: (html) => {
 					"InterpretAsMultipleValues": false,
 					"ModelType": 0,
 					"TemplatePath": null
+				},
+				{
+					"AttributeTypeId": "Rechnungssperre",
+					"AttributeTypeDescription": "Rechnungssperre",
+					"SemanticType": 0,
+					"ValueType": 4,
+					"DataBaseDefinition": {
+						"QueryDefinition": null,
+						"QueryMappings": null,
+						"HttpDataSourceId": null,
+						"IsResultTransformationEnabled": false
+					},
+					"DInfSaveOption": 0,
+					"DClassifyAlias": "Rechnungssperre",
+					"InboundAlias": null,
+					"LoggingFlag": 1,
+					"InterpretAsMultipleValues": false,
+					"ModelType": 0
 				}
 			],
 			"AttributeTypeStructureDefinitions": [],
@@ -9807,7 +9825,7 @@ createHTML: (html) => {
 							"ColumnSizePercent": 0,
 							"MinLength": 0,
 							"MaxLength": 0,
-							"SizeDesktop": 6,
+							"SizeDesktop": 5,
 							"SizeTablet": 2,
 							"SizePhone": 4,
 							"Minified": null,
@@ -9847,7 +9865,7 @@ createHTML: (html) => {
 							"ColumnSizePercent": 0,
 							"MinLength": 0,
 							"MaxLength": 0,
-							"SizeDesktop": 6,
+							"SizeDesktop": 4,
 							"SizeTablet": 3,
 							"SizePhone": 4,
 							"Minified": null,
@@ -9871,6 +9889,46 @@ createHTML: (html) => {
 							"PositionCounterpart": null,
 							"AutoComplete": true,
 							"AllowNegativeAmount": false
+						},
+						{
+							"AttributeID": "Rechnungssperre",
+							"Description": null,
+							"LocalizedDescriptions": {},
+							"AttributeLabel": null,
+							"AttributeIcon": null,
+							"AttributeType": 0,
+							"Required": false,
+							"ReadOnly": false,
+							"DoAlignStart": true,
+							"DefaultValue": "true",
+							"Values": [],
+							"ColumnSizePercent": 0,
+							"MinLength": 0,
+							"MaxLength": 0,
+							"SizeDesktop": 3,
+							"SizeTablet": 3,
+							"SizePhone": 4,
+							"Minified": null,
+							"Position": {
+								"verticalPosition": 1,
+								"horizontalPosition": 2
+							},
+							"TabStop": -1,
+							"ValueConversion": null,
+							"Title": null,
+							"Pattern": null,
+							"QueryAttributes": [],
+							"JSSnippets": [],
+							"DataBaseDefinition": {
+								"QueryDefinition": null,
+								"QueryMappings": null,
+								"HttpDataSourceId": null,
+								"IsResultTransformationEnabled": false
+							},
+							"IsTransitive": false,
+							"PositionCounterpart": null,
+							"AutoComplete": true,
+							"AllowNegativeAmount": true
 						},
 						{
 							"AttributeID": "VendorDeliveryNum",
@@ -9972,7 +10030,7 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 3,
+								"verticalPosition": 4,
 								"horizontalPosition": 0
 							},
 							"TabStop": 22,
@@ -10015,7 +10073,7 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 3,
+								"verticalPosition": 4,
 								"horizontalPosition": 1
 							},
 							"TabStop": 23,
@@ -10058,7 +10116,7 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 4,
+								"verticalPosition": 5,
 								"horizontalPosition": 0
 							},
 							"TabStop": 24,
@@ -10101,7 +10159,7 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 4,
+								"verticalPosition": 5,
 								"horizontalPosition": 1
 							},
 							"TabStop": 25,
@@ -10144,7 +10202,7 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 5,
+								"verticalPosition": 6,
 								"horizontalPosition": 0
 							},
 							"TabStop": 26,
@@ -10187,7 +10245,7 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 5,
+								"verticalPosition": 6,
 								"horizontalPosition": 1
 							},
 							"TabStop": 27,
@@ -10230,7 +10288,7 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 6,
+								"verticalPosition": 7,
 								"horizontalPosition": 0
 							},
 							"TabStop": 28,
@@ -10273,7 +10331,7 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 7,
+								"verticalPosition": 8,
 								"horizontalPosition": 0
 							},
 							"TabStop": 29,
@@ -10341,7 +10399,7 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 7,
+								"verticalPosition": 8,
 								"horizontalPosition": 1
 							},
 							"TabStop": 30,
@@ -10381,7 +10439,7 @@ createHTML: (html) => {
 							"SizePhone": 4,
 							"Minified": null,
 							"Position": {
-								"verticalPosition": 8,
+								"verticalPosition": 9,
 								"horizontalPosition": 0
 							},
 							"TabStop": 31,

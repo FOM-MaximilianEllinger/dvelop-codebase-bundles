@@ -366,7 +366,7 @@ async function getAccessToken(settings) {
 		token: data.access_token,
 		expiresAt: Date.now() + Number(data.expires_in ?? 3600) * 1e3
 	};
-	logger.debug(`[OAuth] Token erhalten, gültig ${data.expires_in ?? "?"} s`);
+	logger.debug(`[OAuth] Token erhalten, gültig ${data.expires_in ?? "?"} s, Claims: ${describeToken(data.access_token)}`);
 	return cachedToken.token;
 }
 function readSettings(getVar) {
@@ -382,6 +382,21 @@ function readSettings(getVar) {
 	const missing = Object.entries(settings).filter(([, v]) => !v).map(([k]) => k);
 	if (missing.length) throw new Error(`Script-Variablen fehlen: ${missing.join(", ")}`);
 	return settings;
+}
+function describeToken(token) {
+	try {
+		const { aud, iss, tid, appid, azp, roles, ver } = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
+		return JSON.stringify({
+			aud,
+			iss,
+			tid,
+			appid: appid ?? azp,
+			roles,
+			ver
+		});
+	} catch {
+		return "(nicht lesbar)";
+	}
 }
 function readODataUrl(getVar) {
 	const value = String(getVar("companialODataUrl") ?? "").trim();
