@@ -518,7 +518,7 @@ async function main(credentials, settings, req, res) {
 			logger.error(`Instanz ${instance.id}: ${error}`);
 		}
 		logger.info(`${docIds.length} Workflow(s) abgebrochen: ${docIds.join(", ")}`);
-		if (config.mode === "production") res.status(200).set("Content-Type", "application/json").send(JSON.stringify({ variables: { docIds } }));
+		if (config.mode === "production") res.status(200).set("Content-Type", "application/json").send(JSON.stringify({ docIds }));
 		logger.info("End");
 	} catch (error) {
 		logger.error(`Error: ${error}`);

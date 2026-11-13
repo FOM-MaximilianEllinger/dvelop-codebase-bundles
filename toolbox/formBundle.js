@@ -5010,7 +5010,8 @@ createHTML: (html) => {
 						"default": "https://api.businesscentral.dynamics.com/.default"
 					}
 				],
-				inputProperties: []
+				inputProperties: [],
+				outputProperties: []
 			}]
 		},
 		{
@@ -5063,7 +5064,8 @@ createHTML: (html) => {
 						"description": "Geheimer Clientschlüssel der App-Registrierung."
 					}
 				],
-				inputProperties: []
+				inputProperties: [],
+				outputProperties: []
 			}]
 		},
 		{
@@ -5115,7 +5117,8 @@ createHTML: (html) => {
 					"encrypted": true,
 					"description": "API-Key eines Benutzers mit Zugriff auf den Webindex-Designer des Rechnungslesers."
 				}],
-				inputProperties: []
+				inputProperties: [],
+				outputProperties: []
 			}]
 		},
 		{
@@ -5180,7 +5183,12 @@ createHTML: (html) => {
 						"description": "ID bzw. GUID der DMS-Eigenschaft, die nach der Buchung befüllt ist. Ist sie gefüllt, wird der Workflow abgebrochen."
 					}
 				],
-				inputProperties: []
+				inputProperties: [],
+				outputProperties: [{
+					"id": "docIds",
+					"type": "[String]",
+					"title": "Dokument-IDs"
+				}]
 			}, {
 				name: "Notiz: Kein Sachposten gefunden",
 				description: "Beendet den laufenden Workflow eines Belegs, sobald dieser gebucht wurde.",
@@ -5204,12 +5212,8 @@ createHTML: (html) => {
 						"default": "Automatischer Workflowabschluss durch System"
 					}
 				],
-				inputProperties: [{
-					"id": "docId",
-					"type": "String",
-					"title": "Dokument-ID",
-					"required": true
-				}]
+				inputProperties: [],
+				outputProperties: []
 			}],
 			processes: [{
 				id: "workflow-beendigung-nach-buchung",
@@ -5245,7 +5249,8 @@ createHTML: (html) => {
 					"encrypted": true,
 					"description": "API-Key eines Benutzers mit Leserechten auf die Benutzerverwaltung."
 				}],
-				inputProperties: []
+				inputProperties: [],
+				outputProperties: []
 			}]
 		}
 	];
@@ -9629,7 +9634,11 @@ ${groups}`,
 					title: { de: p.title },
 					required: p.required
 				})),
-				output_properties: []
+				output_properties: targetScript.outputProperties.map((p) => ({
+					id: p.id,
+					type: p.type,
+					title: { de: p.title }
+				}))
 			}
 		};
 		if (createdNow && customerVariables && customerVariables.length > 0) body.customerVariables = customerVariables;
