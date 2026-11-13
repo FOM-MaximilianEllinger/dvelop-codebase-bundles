@@ -561,13 +561,15 @@ async function getAttachmentOfInstance(credentials, instance) {
 	return attachment;
 }
 /**
-* Liest dv_attachment aus der Variablen-Antwort. Toleriert sowohl
-* { dv_attachment: ... } als auch { variables: { dv_attachment: ... } }
-* sowie String- oder Array-Werte.
+* Liest dv_attachment aus der Variablen-Antwort. Die API liefert
+*   { variables: { dv_attachment: { values: ["dmsObject:///dms/r/<repo>/o2/<id>"], type: "DmsObject", ... } } }
+* Toleriert außerdem { dv_attachment: ... } sowie direkte String- oder
+* Array-Werte.
 */
 function extractAttachment(body) {
 	const raw = body?.variables?.dv_attachment ?? body?.dv_attachment;
-	const value = Array.isArray(raw) ? raw[0] : raw;
+	const values = raw && typeof raw === "object" && !Array.isArray(raw) ? raw.values : raw;
+	const value = Array.isArray(values) ? values[0] : values;
 	return typeof value === "string" && value.length > 0 ? value : void 0;
 }
 /**
