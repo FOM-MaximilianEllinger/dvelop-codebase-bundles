@@ -9642,7 +9642,9 @@ ${groups}`,
 				output_properties: targetScript.outputProperties.map((p) => ({
 					id: p.id,
 					type: p.type,
-					title: { de: p.title }
+					title: { de: p.title },
+					description: null,
+					object_properties: null
 				}))
 			}
 		};
