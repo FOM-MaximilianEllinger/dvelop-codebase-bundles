@@ -519,9 +519,9 @@ async function main(credentials, settings, req, res) {
 		}
 		logger.info(`${docIds.length} Workflow(s) abgebrochen: ${docIds.join(", ")}`);
 		if (config.mode === "production") {
-			const body = parseBody(req);
-			body.docIds = docIds;
-			console.log("Response body:", body);
+			logger.debug(`Request-Body: ${JSON.stringify(parseBody(req))}`);
+			const body = { output: { docIds } };
+			logger.debug(`Response-Body: ${JSON.stringify(body)}`);
 			res.status(200).set("Content-Type", "application/json").send(JSON.stringify(body));
 		}
 		logger.info("End");

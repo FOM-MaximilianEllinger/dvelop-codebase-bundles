@@ -304,7 +304,7 @@ if (config.mode === "production") module.exports = async (req, res) => {
 	const settings = { comment: req.var("comment") || DEFAULT_COMMENT };
 	const body = parseBody(req);
 	logger.debug(`Request-Body: ${JSON.stringify(body)}`);
-	await main(credentials, settings, body?.docId ?? body?.DocId ?? body?.doc?.id, res);
+	await main(credentials, settings, body?.input?.docId ?? body?.docId ?? body?.DocId ?? body?.doc?.id, res);
 };
 else (async () => {
 	initLogger(LogLevel.DEBUG);
