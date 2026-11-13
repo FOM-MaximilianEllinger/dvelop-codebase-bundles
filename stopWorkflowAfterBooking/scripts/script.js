@@ -521,6 +521,7 @@ async function main(credentials, settings, req, res) {
 		if (config.mode === "production") {
 			const body = parseBody(req);
 			body.docIds = docIds;
+			console.log("Response body:", body);
 			res.status(200).set("Content-Type", "application/json").send(JSON.stringify(body));
 		}
 		logger.info("End");
