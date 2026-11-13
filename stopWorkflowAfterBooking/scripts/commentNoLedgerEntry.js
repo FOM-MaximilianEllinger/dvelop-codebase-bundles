@@ -160,6 +160,18 @@ async function createNewCommentOnDocument(baseUri, token, repositoryId, document
 	});
 }
 //#endregion
+//#region ../../helper/dms/getRepositories.ts
+async function getRepositories(baseUri, token) {
+	return await performHttpRequest(`${baseUri}/dms/r`, {
+		method: "GET",
+		headers: {
+			"Authorization": `Bearer ${token}`,
+			"Accept": "application/json",
+			"Content-Type": "application/json"
+		}
+	});
+}
+//#endregion
 //#region ../../helper/identityprovider/getToken.ts
 var import_main = /* @__PURE__ */ __toESM((/* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var fs = require("fs");
@@ -278,28 +290,23 @@ for (const key in process.env) if (key.startsWith("CREDENTIALS_")) {
 * commentNoLedgerEntry
 *
 * Process Studio "Scripting"-Modul: legt am Dokument `docId` (aus dem
-* Request-Body, z.B. { "docId": "..." }) eine Notiz an, dass kein Sachposten
-* zur DMS-Nummer gefunden wurde.
+* Request-Body, z.B. { "docId": "..." }) eine Notiz an (Text aus der
+* Variable "comment", vorbelegt mit DEFAULT_COMMENT). Die Repository-ID wird über GET /dms/r
+* ermittelt (erstes Repository des Mandanten).
 *
 * Antwort: { "success": true } bzw. HTTP 400/500 mit { "success": false, ... }.
 */
 var logger = getLogger();
 var config = { mode: process.platform === "linux" ? "production" : "development" };
-var DEFAULT_COMMENT = "Kein Sachposten zur DMS-Nummer gefunden.";
+var DEFAULT_COMMENT = "Automatischer Workflowabschluss durch System";
 if (config.mode === "production") module.exports = async (req, res) => {
-	await main(new APICredentials("", req.var("baseUri"), req.var("apiKey"), "", /* @__PURE__ */ new Date()), {
-		repositoryId: req.var("repositoryId"),
-		comment: req.var("comment") || DEFAULT_COMMENT
-	}, req.json()?.docId, res);
+	await main(new APICredentials("", req.var("baseUri"), req.var("apiKey"), "", /* @__PURE__ */ new Date()), { comment: req.var("comment") || DEFAULT_COMMENT }, req.json()?.docId, res);
 };
 else (async () => {
 	initLogger(LogLevel.DEBUG);
 	const credentials = await APICredentials.findByName("TODO-credentials-name");
 	if (!credentials) throw new Error("Credentials not found");
-	await main(credentials, {
-		repositoryId: "TODO-repository-id",
-		comment: DEFAULT_COMMENT
-	}, "TODO-doc-id", null);
+	await main(credentials, { comment: DEFAULT_COMMENT }, "TODO-doc-id", null);
 })().catch((err) => {
 	console.error("Error in development mode:", err);
 });
@@ -314,8 +321,8 @@ async function main(credentials, settings, docId, res) {
 			});
 			return;
 		}
-		if (!settings.repositoryId) throw new Error("Variable repositoryId ist nicht gesetzt.");
-		await createNewCommentOnDocument(credentials.baseUri, credentials.apiKey, settings.repositoryId, docId, settings.comment);
+		const repositoryId = await getRepositoryId(credentials);
+		await createNewCommentOnDocument(credentials.baseUri, credentials.apiKey, repositoryId, docId, settings.comment);
 		logger.info(`Notiz an Dokument ${docId} angelegt.`);
 		sendJson(res, 200, { success: true });
 		logger.info("End");
@@ -326,6 +333,11 @@ async function main(credentials, settings, docId, res) {
 			error: String(error)
 		});
 	}
+}
+async function getRepositoryId(credentials) {
+	const repositoryId = (await getRepositories(credentials.baseUri, credentials.apiKey)).body.repositories?.[0]?.id;
+	if (!repositoryId) throw new Error("Kein DMS-Repository gefunden.");
+	return repositoryId;
 }
 function sendJson(res, status, payload) {
 	if (config.mode !== "production") return;

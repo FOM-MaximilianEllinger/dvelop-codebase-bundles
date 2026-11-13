@@ -13695,7 +13695,8 @@ createHTML: (html) => {
 						"description": "OAuth-Scope der BC-Instanz (bei Companial erfragen).",
 						"default": "https://api.businesscentral.dynamics.com/.default"
 					}
-				]
+				],
+				inputProperties: []
 			}]
 		},
 		{
@@ -13747,7 +13748,8 @@ createHTML: (html) => {
 						"encrypted": true,
 						"description": "Geheimer Clientschlüssel der App-Registrierung."
 					}
-				]
+				],
+				inputProperties: []
 			}]
 		},
 		{
@@ -13798,7 +13800,8 @@ createHTML: (html) => {
 					"label": "API-Key",
 					"encrypted": true,
 					"description": "API-Key eines Benutzers mit Zugriff auf den Webindex-Designer des Rechnungslesers."
-				}]
+				}],
+				inputProperties: []
 			}]
 		},
 		{
@@ -13862,7 +13865,8 @@ createHTML: (html) => {
 						"encrypted": false,
 						"description": "ID bzw. GUID der DMS-Eigenschaft, die nach der Buchung befüllt ist. Ist sie gefüllt, wird der Workflow abgebrochen."
 					}
-				]
+				],
+				inputProperties: []
 			}, {
 				name: "Notiz: Kein Sachposten gefunden",
 				description: "Beendet den laufenden Workflow eines Belegs, sobald dieser gebucht wurde.",
@@ -13880,19 +13884,18 @@ createHTML: (html) => {
 						"encrypted": true
 					},
 					{
-						"key": "repositoryId",
-						"label": "Repository-ID",
-						"encrypted": false,
-						"description": "ID des DMS-Repositorys, in dem das Dokument liegt.",
-						"default": "db901975-8a12-5986-8995-a9f5723edd9b"
-					},
-					{
 						"key": "comment",
 						"label": "Notiztext",
 						"encrypted": false,
-						"default": "Kein Sachposten zur DMS-Nummer gefunden."
+						"default": "Automatischer Workflowabschluss durch System"
 					}
-				]
+				],
+				inputProperties: [{
+					"id": "docId",
+					"type": "String",
+					"title": "Dokument-ID",
+					"required": true
+				}]
 			}],
 			processes: [{
 				id: "workflow-beendigung-nach-buchung",
@@ -13927,7 +13930,8 @@ createHTML: (html) => {
 					"label": "API-Key",
 					"encrypted": true,
 					"description": "API-Key eines Benutzers mit Leserechten auf die Benutzerverwaltung."
-				}]
+				}],
+				inputProperties: []
 			}]
 		}
 	];
