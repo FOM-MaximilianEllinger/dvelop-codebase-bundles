@@ -13872,7 +13872,7 @@ createHTML: (html) => {
 				inputProperties: [],
 				outputProperties: [{
 					"id": "docIds",
-					"type": "[String]",
+					"type": "String",
 					"title": "Dokument-IDs"
 				}]
 			}, {
