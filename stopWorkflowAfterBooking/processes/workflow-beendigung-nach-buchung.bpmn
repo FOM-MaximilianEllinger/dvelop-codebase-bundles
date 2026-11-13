@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="definitions_workflow-beendigung-nach-buchung" targetNamespace="http://bpmn.io/schema/bpmn" exporter="d.velop process modeler" exporterVersion="1.8.5.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.15.0">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:modeler="http://camunda.org/schema/modeler/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="definitions_workflow-beendigung-nach-buchung" targetNamespace="http://bpmn.io/schema/bpmn" exporter="d.velop process modeler" exporterVersion="1.8.5.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.15.0">
   <bpmn:process id="workflow-beendigung-nach-buchung" name="Workflow Beendigung nach Buchung" isExecutable="true">
     <bpmn:extensionElements>
       <camunda:properties>
@@ -16,12 +16,13 @@
     </bpmn:startEvent>
     <bpmn:endEvent id="Event_1ox17uk">
       <bpmn:incoming>Flow_06q0vjk</bpmn:incoming>
+      <bpmn:incoming>Flow_NoDocIds</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="Flow_0t4q7i6" sourceRef="StartEvent_1" targetRef="Activity_0ewzwyu" />
     <bpmn:subProcess id="Activity_0ewzwyu" name="Workflows beenden">
       <bpmn:documentation>#action</bpmn:documentation>
       <bpmn:incoming>Flow_0t4q7i6</bpmn:incoming>
-      <bpmn:outgoing>Flow_1whmiv5</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToGateway</bpmn:outgoing>
       <bpmn:startEvent id="Activity_0ztutl5-StartEvent-0" name="Workflows beenden (Start)" />
       <bpmn:sequenceFlow id="Activity_0ztutl5-SequenceFlow-0" sourceRef="Activity_0ztutl5-StartEvent-0" targetRef="Activity_0ztutl5-SendTask-0" />
       <bpmn:sendTask id="Activity_0ztutl5-SendTask-0" name="Workflows beenden (Request)" camunda:asyncBefore="true" camunda:delegateExpression="${asyncService}">
@@ -70,7 +71,16 @@
         <bpmn:endEvent id="Activity_1xlwdhm-EndEvent-0" name="Notiz anbringen (End)" />
       </bpmn:subProcess>
     </bpmn:subProcess>
-    <bpmn:sequenceFlow id="Flow_1whmiv5" sourceRef="Activity_0ewzwyu" targetRef="Activity_1ug8hcy" />
+    <bpmn:exclusiveGateway id="Gateway_DocIds" name="Workflows abgebrochen?" default="Flow_1whmiv5">
+      <bpmn:incoming>Flow_ToGateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_1whmiv5</bpmn:outgoing>
+      <bpmn:outgoing>Flow_NoDocIds</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_ToGateway" sourceRef="Activity_0ewzwyu" targetRef="Gateway_DocIds" />
+    <bpmn:sequenceFlow id="Flow_1whmiv5" name="ja" sourceRef="Gateway_DocIds" targetRef="Activity_1ug8hcy" />
+    <bpmn:sequenceFlow id="Flow_NoDocIds" name="nein" sourceRef="Gateway_DocIds" targetRef="Event_1ox17uk">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${empty variables.get('docIds')}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_06q0vjk" sourceRef="Activity_1ug8hcy" targetRef="Event_1ox17uk" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
@@ -79,44 +89,57 @@
         <dc:Bounds x="200" y="100" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_1ox17uk_di" bpmnElement="Event_1ox17uk">
-        <dc:Bounds x="852" y="100" width="36" height="36" />
+        <dc:Bounds x="942" y="100" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_0ztutl5_di" bpmnElement="Activity_0ewzwyu">
         <dc:Bounds x="280" y="78" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1ug8hcy_di" bpmnElement="Activity_1ug8hcy" isExpanded="true">
-        <dc:Bounds x="440" y="18" width="350" height="200" />
+        <dc:Bounds x="530" y="18" width="350" height="200" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_0wx939p_di" bpmnElement="Event_0wx939p">
-        <dc:Bounds x="480" y="100" width="36" height="36" />
+        <dc:Bounds x="570" y="100" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_1qy7r4l_di" bpmnElement="Event_1qy7r4l">
-        <dc:Bounds x="722" y="100" width="36" height="36" />
+        <dc:Bounds x="812" y="100" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1xlwdhm_di" bpmnElement="Activity_1drx45i">
-        <dc:Bounds x="570" y="78" width="100" height="80" />
+        <dc:Bounds x="660" y="78" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_0hzlslk_di" bpmnElement="Flow_0hzlslk">
-        <di:waypoint x="516" y="118" />
-        <di:waypoint x="570" y="118" />
+        <di:waypoint x="606" y="118" />
+        <di:waypoint x="660" y="118" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_07g43of_di" bpmnElement="Flow_07g43of">
-        <di:waypoint x="670" y="118" />
-        <di:waypoint x="722" y="118" />
+        <di:waypoint x="760" y="118" />
+        <di:waypoint x="812" y="118" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0t4q7i6_di" bpmnElement="Flow_0t4q7i6">
         <di:waypoint x="236" y="118" />
         <di:waypoint x="280" y="118" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_1whmiv5_di" bpmnElement="Flow_1whmiv5">
-        <di:waypoint x="380" y="118" />
-        <di:waypoint x="440" y="118" />
+        <di:waypoint x="465" y="118" />
+        <di:waypoint x="530" y="118" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_06q0vjk_di" bpmnElement="Flow_06q0vjk">
-        <di:waypoint x="790" y="118" />
-        <di:waypoint x="852" y="118" />
+        <di:waypoint x="880" y="118" />
+        <di:waypoint x="942" y="118" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Gateway_DocIds_di" bpmnElement="Gateway_DocIds" isMarkerVisible="true">
+        <dc:Bounds x="415" y="93" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_ToGateway_di" bpmnElement="Flow_ToGateway">
+        <di:waypoint x="380" y="118" />
+        <di:waypoint x="415" y="118" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_NoDocIds_di" bpmnElement="Flow_NoDocIds">
+        <di:waypoint x="440" y="143" />
+        <di:waypoint x="440" y="260" />
+        <di:waypoint x="960" y="260" />
+        <di:waypoint x="960" y="136" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
