@@ -518,7 +518,11 @@ async function main(credentials, settings, req, res) {
 			logger.error(`Instanz ${instance.id}: ${error}`);
 		}
 		logger.info(`${docIds.length} Workflow(s) abgebrochen: ${docIds.join(", ")}`);
-		if (config.mode === "production") res.status(200).set("Content-Type", "application/json").send(JSON.stringify({ docIds }));
+		if (config.mode === "production") {
+			const body = parseBody(req);
+			body.docIds = docIds;
+			res.status(200).set("Content-Type", "application/json").send(JSON.stringify(body));
+		}
 		logger.info("End");
 	} catch (error) {
 		logger.error(`Error: ${error}`);
@@ -559,6 +563,14 @@ async function getAttachmentOfInstance(credentials, instance) {
 	const attachment = extractAttachment((await getProcessInstanceTokenVariables(credentials.baseUri, credentials.apiKey, instance.id, processToken.id)).body);
 	if (!attachment) logger.warn(`Instanz ${instance.id}: keine Variable dv_attachment gefunden.`);
 	return attachment;
+}
+function parseBody(req) {
+	try {
+		const body = req?.json?.();
+		return body && typeof body === "object" && !Array.isArray(body) ? body : {};
+	} catch {
+		return {};
+	}
 }
 /**
 * Liest dv_attachment aus der Variablen-Antwort. Die API liefert
