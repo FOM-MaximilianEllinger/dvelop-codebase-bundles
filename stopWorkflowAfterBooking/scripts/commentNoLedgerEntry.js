@@ -300,7 +300,11 @@ var logger = getLogger();
 var config = { mode: process.platform === "linux" ? "production" : "development" };
 var DEFAULT_COMMENT = "Automatischer Workflowabschluss durch System";
 if (config.mode === "production") module.exports = async (req, res) => {
-	await main(new APICredentials("", req.var("baseUri"), req.var("apiKey"), "", /* @__PURE__ */ new Date()), { comment: req.var("comment") || DEFAULT_COMMENT }, req.json()?.docId, res);
+	const credentials = new APICredentials("", req.var("baseUri"), req.var("apiKey"), "", /* @__PURE__ */ new Date());
+	const settings = { comment: req.var("comment") || DEFAULT_COMMENT };
+	const body = parseBody(req);
+	logger.debug(`Request-Body: ${JSON.stringify(body)}`);
+	await main(credentials, settings, body?.docId ?? body?.DocId ?? body?.doc?.id, res);
 };
 else (async () => {
 	initLogger(LogLevel.DEBUG);
@@ -338,6 +342,13 @@ async function getRepositoryId(credentials) {
 	const repositoryId = (await getRepositories(credentials.baseUri, credentials.apiKey)).body.repositories?.[0]?.id;
 	if (!repositoryId) throw new Error("Kein DMS-Repository gefunden.");
 	return repositoryId;
+}
+function parseBody(req) {
+	try {
+		return req.json?.() ?? {};
+	} catch {
+		return {};
+	}
 }
 function sendJson(res, status, payload) {
 	if (config.mode !== "production") return;

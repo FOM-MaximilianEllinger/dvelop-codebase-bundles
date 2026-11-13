@@ -13898,7 +13898,12 @@ createHTML: (html) => {
 						"default": "Automatischer Workflowabschluss durch System"
 					}
 				],
-				inputProperties: [],
+				inputProperties: [{
+					"id": "docId",
+					"type": "String",
+					"title": "Dokument-ID",
+					"required": true
+				}],
 				outputProperties: []
 			}],
 			processes: [{
