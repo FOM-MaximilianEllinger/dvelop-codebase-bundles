@@ -13516,9 +13516,37 @@ createHTML: (html) => {
 		};
 	}
 	//#endregion
+	//#region ../../helper/utils/environment.ts
+	var CLOUD_DOMAIN = ".d-velop.cloud";
+	/**
+	* Ermittelt anhand der Basis-URI, ob es sich um einen Cloud- oder einen
+	* OnPrem-Kunden handelt. Nicht parsebare Werte werden als OnPrem behandelt.
+	*/
+	function detectEnvironment(baseUri) {
+		let hostname;
+		try {
+			hostname = new URL(baseUri).hostname.toLowerCase();
+		} catch {
+			hostname = baseUri.trim().toLowerCase();
+		}
+		return hostname.endsWith(CLOUD_DOMAIN) ? "cloud" : "onPrem";
+	}
+	function isCloud(baseUri) {
+		return detectEnvironment(baseUri) === "cloud";
+	}
+	//#endregion
 	//#region ../../helper/processstudio/getAllForms.ts
+	/**
+	* Liefert alle Formulare des Systems.
+	*
+	* Die Umgebung wird anhand der baseUri erkannt (siehe helper/utils/environment.ts):
+	*  - Cloud  (*.d-velop.cloud): GET /processstudio/components/form
+	*  - OnPrem (jede andere Domäne): GET /dforms/api/forms - den Process-Studio-
+	*    Endpunkt gibt es dort nicht.
+	* Die Antwort wird in beiden Fällen auf { forms: [...] } normalisiert.
+	*/
 	async function getAllForms(baseUri, token) {
-		return await performHttpRequest(`${baseUri}/processstudio/components/form`, {
+		const response = await performHttpRequest(isCloud(baseUri) ? `${baseUri}/processstudio/components/form` : `${baseUri}/dforms/api/forms`, {
 			method: "GET",
 			headers: {
 				Authorization: `Bearer ${token}`,
@@ -13527,6 +13555,17 @@ createHTML: (html) => {
 			},
 			cache: "no-store"
 		});
+		return {
+			...response,
+			body: { forms: extractForms(response.body) }
+		};
+	}
+	function extractForms(body) {
+		if (Array.isArray(body)) return body;
+		const record = body ?? {};
+		if (Array.isArray(record.forms)) return record.forms;
+		if (Array.isArray(record._embedded?.forms)) return record._embedded.forms;
+		return [];
 	}
 	//#endregion
 	//#region ../../helper/processstudio/createForm.ts
@@ -13536,6 +13575,14 @@ createHTML: (html) => {
 	* noch keine formioFormDefinition (definition ist ein leerer String) – dafür
 	* anschließend patchForm aus helper/dforms/patchForm.ts verwenden.
 	*
+	* Die Umgebung wird anhand der baseUri erkannt (siehe helper/utils/environment.ts):
+	*  - Cloud  (*.d-velop.cloud): POST /processstudio/components/form
+	*  - OnPrem (jede andere Domäne): POST /dforms/api/forms - den Process-Studio-
+	*    Endpunkt gibt es dort nicht. Der Body entspricht dem von patchForm
+	*    ({ id, name, definition }).
+	* In beiden Fällen muss das angelegte Formular die übergebene formId tragen,
+	* sonst wird ein Fehler geworfen (Aufrufer erkennen Formulare über ihre Id).
+	*
 	* @param baseUri - Die Basis-URI der d.velop-API.
 	* @param token - Das Autorisierungs-Token für den Zugriff auf die API.
 	* @param formId - Die vom Aufrufer vergebene GUID des neuen Formulars.
@@ -13544,6 +13591,7 @@ createHTML: (html) => {
 	* @returns Ein Promise, das zu einer `ApiResponse` mit dem angelegten Formular auflöst.
 	*/
 	async function createForm(baseUri, token, formId, name, author = "") {
+		if (!isCloud(baseUri)) return await createFormOnPrem(baseUri, token, formId, name);
 		const url = `${baseUri}/processstudio/components/form`;
 		const headers = {
 			Authorization: `Bearer ${token}`,
@@ -13574,6 +13622,32 @@ createHTML: (html) => {
 			headers,
 			body: JSON.stringify(body)
 		});
+	}
+	async function createFormOnPrem(baseUri, token, formId, name) {
+		const response = await performHttpRequest(`${baseUri}/dforms/api/forms`, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				Accept: "application/json",
+				"Content-Type": "application/json"
+			},
+			body: JSON.stringify({
+				id: formId,
+				name,
+				definition: ""
+			})
+		});
+		const raw = response.body ?? {};
+		const form = raw.form ?? raw;
+		if (form.id && form.id !== formId) throw new Error(`dforms hat das Formular "${name}" mit der Id ${form.id} statt ${formId} angelegt.`);
+		return {
+			...response,
+			body: { form: {
+				id: formId,
+				name,
+				...form
+			} }
+		};
 	}
 	//#endregion
 	//#region ../../helper/dforms/getForm.ts
