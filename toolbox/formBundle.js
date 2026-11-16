@@ -4720,6 +4720,9 @@ createHTML: (html) => {
 	function isCloud(baseUri) {
 		return detectEnvironment(baseUri) === "cloud";
 	}
+	function isOnPrem(baseUri) {
+		return detectEnvironment(baseUri) === "onPrem";
+	}
 	//#endregion
 	//#region ../../helper/processstudio/createForm.ts
 	/**
@@ -9810,18 +9813,13 @@ ${groups}`,
 			content = replaceActionId(content, sendTaskId, actionId);
 			getLogger().debug(`Prozess "${targetProcess.name}": ${sendTaskId} -> ${actionId}`);
 		}
-		try {
-			await resolveComponent(baseUri, NO_TOKEN, "process", content);
-		} catch (error) {
-			if (!isProcessStudioUnavailable(error)) throw error;
-			getLogger().debug(`Process Studio nicht verfügbar, deploye "${targetProcess.name}" über /process/deployment.`);
+		if (isOnPrem(baseUri)) {
+			getLogger().debug(`On-Prem: deploye "${targetProcess.name}" über /process/deployment.`);
 			await deployProcessViaProcessApp(baseUri, NO_TOKEN, targetProcess.id, content);
 			return;
 		}
+		await resolveComponent(baseUri, NO_TOKEN, "process", content);
 		await deployProcess(baseUri, NO_TOKEN, content);
-	}
-	function isProcessStudioUnavailable(error) {
-		return /HTTP error! status: (404|503)/.test(getErrorMessage(error));
 	}
 	async function actionIdOfScript(baseUri, allScripts, scriptName) {
 		const scriptId = allScripts.find((s) => s.name === scriptName)?.id;
