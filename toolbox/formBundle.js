@@ -5044,7 +5044,7 @@ createHTML: (html) => {
 			method: "PUT",
 			headers: {
 				...authHeader(token),
-				"Content-Type": "application/xml"
+				"Content-Type": "application/bpmn;charset=utf-8"
 			},
 			body: bpmn
 		});
