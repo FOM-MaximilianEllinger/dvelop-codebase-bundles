@@ -4984,25 +4984,6 @@ createHTML: (html) => {
 		});
 	}
 	/**
-	* Prüft, ob eine Komponente schon existiert:
-	* POST /processstudio/components/exists mit { id, name, type }.
-	* Die Antwort wird tolerant ausgewertet (true bzw. { exists: true }).
-	*/
-	async function componentExists(baseUri, token, id, name, type) {
-		const body = (await performHttpRequest(`${baseUri}/processstudio/components/exists`, {
-			method: "POST",
-			headers: jsonHeaders(token),
-			body: JSON.stringify({
-				id,
-				name,
-				type
-			})
-		})).body;
-		if (typeof body === "boolean") return body;
-		if (typeof body === "string") return body.trim().toLowerCase() === "true";
-		return body?.exists === true || body?.idExists === true || body?.nameExists === true;
-	}
-	/**
 	* Deployt einen BPMN-Prozess (neue Version, falls er schon existiert):
 	* POST /processstudio/components/process/deployment mit { type: "process", content }.
 	*/
@@ -5015,6 +4996,60 @@ createHTML: (html) => {
 				content
 			})
 		});
+	}
+	//#endregion
+	//#region ../../helper/process/getAllProcesses.ts
+	async function getAllProcesses(baseUri, token) {
+		return await performHttpRequest(`${baseUri}/process/processes`, {
+			method: "GET",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				Accept: "application/json",
+				"Content-Type": "application/json"
+			}
+		});
+	}
+	//#endregion
+	//#region ../../helper/process/deployProcessViaProcessApp.ts
+	function authHeader(token) {
+		return token ? { Authorization: `Bearer ${token}` } : {};
+	}
+	/** Prüft über GET /process/processes, ob ein Prozess mit diesem Key deployt ist. */
+	async function processExists(baseUri, token, processKey) {
+		return ((await getAllProcesses(baseUri, token)).body?._embedded?.processes ?? []).some((p) => p.key === processKey);
+	}
+	/**
+	* Deployt ein BPMN über die Prozess-App (Staging anlegen, BPMN hochladen,
+	* aktivieren). Existiert der Prozess schon, entsteht eine neue Version.
+	*/
+	async function deployProcessViaProcessApp(baseUri, token, processKey, bpmn) {
+		const deployment = (await performHttpRequest(`${baseUri}/process/deployment`, {
+			method: "POST",
+			headers: {
+				...authHeader(token),
+				Accept: "application/hal+json, application/json",
+				"Content-Type": "application/json"
+			},
+			body: JSON.stringify({
+				source: "processadministration",
+				correlationKey: processKey,
+				dataType: "BPMN"
+			})
+		})).body;
+		if (!deployment?.id) throw new Error(`Deployment für Prozess "${processKey}" wurde ohne Id angelegt.`);
+		await performHttpRequest(`${baseUri}${deployment._links?.bpmn?.href ?? `/process/deployment/${deployment.id}/staging/bpmn`}`, {
+			method: "PUT",
+			headers: {
+				...authHeader(token),
+				"Content-Type": "application/xml"
+			},
+			body: bpmn
+		});
+		await performHttpRequest(`${baseUri}${deployment._links?.activation?.href ?? `/process/deployment/${deployment.id}/activate`}`, {
+			method: "POST",
+			headers: authHeader(token)
+		});
+		return deployment;
 	}
 	//#endregion
 	//#region src/config/targetForms.ts
@@ -9500,7 +9535,7 @@ ${groups}`,
 	}
 	async function checkProcessPart(targetProcess) {
 		try {
-			const [exists, remote] = await Promise.all([componentExists(window.location.origin, NO_TOKEN, targetProcess.id, targetProcess.name, "process"), remoteVersionOf(targetProcess.bundlePath)]);
+			const [exists, remote] = await Promise.all([processExists(window.location.origin, NO_TOKEN, targetProcess.id), remoteVersionOf(targetProcess.bundlePath)]);
 			return exists ? {
 				unversioned: true,
 				remote
@@ -9775,8 +9810,18 @@ ${groups}`,
 			content = replaceActionId(content, sendTaskId, actionId);
 			getLogger().debug(`Prozess "${targetProcess.name}": ${sendTaskId} -> ${actionId}`);
 		}
-		await resolveComponent(baseUri, NO_TOKEN, "process", content);
+		try {
+			await resolveComponent(baseUri, NO_TOKEN, "process", content);
+		} catch (error) {
+			if (!isProcessStudioUnavailable(error)) throw error;
+			getLogger().debug(`Process Studio nicht verfügbar, deploye "${targetProcess.name}" über /process/deployment.`);
+			await deployProcessViaProcessApp(baseUri, NO_TOKEN, targetProcess.id, content);
+			return;
+		}
 		await deployProcess(baseUri, NO_TOKEN, content);
+	}
+	function isProcessStudioUnavailable(error) {
+		return /HTTP error! status: (404|503)/.test(getErrorMessage(error));
 	}
 	async function actionIdOfScript(baseUri, allScripts, scriptName) {
 		const scriptId = allScripts.find((s) => s.name === scriptName)?.id;
