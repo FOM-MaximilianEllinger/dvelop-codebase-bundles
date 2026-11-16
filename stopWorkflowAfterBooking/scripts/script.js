@@ -473,13 +473,19 @@ for (const key in process.env) if (key.startsWith("CREDENTIALS_")) {
 *   5. Die Dokument-IDs der abgebrochenen Workflows als Prozessvariable
 *      `docIds` zurückgeben.
 *
+* Variable `cancelWorkflows` ("true"/"false"): nur bei "true" werden die
+* Workflows tatsächlich abgebrochen und ihre Dokument-IDs in `docIds`
+* zurückgeschrieben. Sonst (auch wenn nicht gesetzt) Testlauf: es wird nur
+* protokolliert, welche Workflows abgebrochen würden, `docIds` bleibt leer.
+*
 * Production: läuft als HTTP-Handler mit (req, res); Konfiguration über die
 * customerVariables aus toolbox.meta.json (req.var("<key>")).
 * Development: läuft lokal gegen die Umgebung aus helper/utils/credentials.ts
 * (.env-Eintrag CREDENTIALS_<NAME>).
 */
 var logger = getLogger();
-var config = { mode: process.platform === "linux" ? "production" : "development" };
+var isStartedDirectly = typeof require !== "undefined" && require.main === module;
+var config = { mode: process.platform !== "linux" && isStartedDirectly ? "development" : "production" };
 var ACTIVE_STATES = [
 	"STARTED",
 	"STARTING",
@@ -490,7 +496,8 @@ var CANCEL_REASON = "Automatischer Workflowabschluss durch s.dok";
 if (config.mode === "production") module.exports = async (req, res) => {
 	await main(new APICredentials("", req.var("baseUri"), req.var("apiKey"), "", /* @__PURE__ */ new Date()), {
 		processId: req.var("processId") || DEFAULT_PROCESS_ID,
-		bookedPropertyId: req.var("bookedPropertyId")
+		bookedPropertyId: req.var("bookedPropertyId"),
+		cancelWorkflows: parseFlag(req.var("cancelWorkflows"))
 	}, req, res);
 };
 else (async () => {
@@ -499,7 +506,8 @@ else (async () => {
 	if (!credentials) throw new Error("Credentials not found");
 	await main(credentials, {
 		processId: DEFAULT_PROCESS_ID,
-		bookedPropertyId: "TODO-property-id"
+		bookedPropertyId: "TODO-property-id",
+		cancelWorkflows: false
 	}, null, null);
 })().catch((err) => {
 	console.error("Error in development mode:", err);
@@ -507,6 +515,7 @@ else (async () => {
 async function main(credentials, settings, req, res) {
 	try {
 		logger.debug("Start");
+		if (!settings.cancelWorkflows) logger.info("Testlauf (cancelWorkflows ist nicht \"true\"): es werden keine Workflows abgebrochen.");
 		if (!settings.bookedPropertyId) throw new Error("Variable bookedPropertyId ist nicht gesetzt.");
 		const activeInstances = (await getProcessInstances(credentials.baseUri, credentials.apiKey, [settings.processId], [], ACTIVE_STATES, null, ""))._embedded.instances;
 		logger.info(`${activeInstances.length} aktive Instanz(en) von "${settings.processId}" gefunden.`);
@@ -517,7 +526,7 @@ async function main(credentials, settings, req, res) {
 		} catch (error) {
 			logger.error(`Instanz ${instance.id}: ${error}`);
 		}
-		logger.info(`${docIds.length} Workflow(s) abgebrochen: ${docIds.join(", ")}`);
+		if (settings.cancelWorkflows) logger.info(`${docIds.length} Workflow(s) abgebrochen: ${docIds.join(", ")}`);
 		if (config.mode === "production") {
 			logger.debug(`Request-Body: ${JSON.stringify(parseBody(req))}`);
 			const body = { output: { docIds } };
@@ -547,6 +556,10 @@ async function processInstance(credentials, settings, instance) {
 		logger.debug(`Instanz ${instance.id}: Dokument ${reference.documentId} noch nicht gebucht.`);
 		return;
 	}
+	if (!settings.cancelWorkflows) {
+		logger.info(`Testlauf - Instanz ${instance.id}: Dokument ${reference.documentId} gebucht (${settings.bookedPropertyId} = "${property.value}") - Workflow würde abgebrochen.`);
+		return;
+	}
 	logger.info(`Instanz ${instance.id}: Dokument ${reference.documentId} gebucht (${settings.bookedPropertyId} = "${property.value}") - Workflow wird abgebrochen.`);
 	await cancelIncident(credentials.baseUri, credentials.apiKey, instance.id, CANCEL_REASON);
 	return reference.documentId;
@@ -564,6 +577,14 @@ async function getAttachmentOfInstance(credentials, instance) {
 	const attachment = extractAttachment((await getProcessInstanceTokenVariables(credentials.baseUri, credentials.apiKey, instance.id, processToken.id)).body);
 	if (!attachment) logger.warn(`Instanz ${instance.id}: keine Variable dv_attachment gefunden.`);
 	return attachment;
+}
+function parseFlag(value) {
+	return [
+		"true",
+		"1",
+		"ja",
+		"yes"
+	].includes(String(value ?? "").trim().toLowerCase());
 }
 function parseBody(req) {
 	try {

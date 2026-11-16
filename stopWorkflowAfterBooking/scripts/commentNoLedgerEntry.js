@@ -297,7 +297,8 @@ for (const key in process.env) if (key.startsWith("CREDENTIALS_")) {
 * Antwort: { "success": true } bzw. HTTP 400/500 mit { "success": false, ... }.
 */
 var logger = getLogger();
-var config = { mode: process.platform === "linux" ? "production" : "development" };
+var isStartedDirectly = typeof require !== "undefined" && require.main === module;
+var config = { mode: process.platform !== "linux" && isStartedDirectly ? "development" : "production" };
 var DEFAULT_COMMENT = "Automatischer Workflowabschluss durch System";
 if (config.mode === "production") module.exports = async (req, res) => {
 	const credentials = new APICredentials("", req.var("baseUri"), req.var("apiKey"), "", /* @__PURE__ */ new Date());

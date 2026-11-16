@@ -13941,6 +13941,13 @@ createHTML: (html) => {
 						"label": "Eigenschafts-ID \"Gebucht\"",
 						"encrypted": false,
 						"description": "ID bzw. GUID der DMS-Eigenschaft, die nach der Buchung befüllt ist. Ist sie gefüllt, wird der Workflow abgebrochen."
+					},
+					{
+						"key": "cancelWorkflows",
+						"label": "Workflows abbrechen (true/false)",
+						"encrypted": false,
+						"description": "Nur bei \"true\" werden gebuchte Workflows tatsächlich abgebrochen und ihre Dokument-IDs in docIds zurückgeschrieben. Bei \"false\" nur Testlauf (Protokoll im Script-Log).",
+						"default": "false"
 					}
 				],
 				inputProperties: [],
