@@ -9611,7 +9611,7 @@ ${groups}`,
 			dvfDefVersion: "1.0",
 			customJs: customJsContent
 		});
-		await newVersion(baseUri, NO_TOKEN, TOOLBOX_FORM_ID);
+		await createFormVersion(baseUri, TOOLBOX_FORM_ID);
 		return installedVersion;
 	}
 	async function loadToolLists() {
@@ -9676,7 +9676,7 @@ ${groups}`,
 				customJs: customJsContent
 			};
 			await patchForm(baseUri, NO_TOKEN, target.formId, target.name, definition);
-			await newVersion(baseUri, NO_TOKEN, target.formId);
+			await createFormVersion(baseUri, target.formId);
 			return definition;
 		}
 		getLogger().debug(`Formular "${target.name}" existiert noch nicht, lege es neu an.`);
@@ -9691,7 +9691,7 @@ ${groups}`,
 			customJs: customJsContent
 		};
 		await patchForm(baseUri, NO_TOKEN, target.formId, target.name, definition);
-		await newVersion(baseUri, NO_TOKEN, target.formId);
+		await createFormVersion(baseUri, target.formId);
 		return definition;
 	}
 	async function scriptIdsOf(target) {
@@ -9839,6 +9839,14 @@ ${groups}`,
 		if (!actionParam.test(match[0])) throw new Error(`Send-Task "${sendTaskId}" hat keinen actionId-Parameter.`);
 		const replaced = match[0].replace(actionParam, `$1${actionId}$2`);
 		return bpmn.slice(0, match.index) + replaced + bpmn.slice(match.index + match[0].length);
+	}
+	async function createFormVersion(baseUri, formId) {
+		try {
+			await newVersion(baseUri, NO_TOKEN, formId);
+		} catch (error) {
+			if (!/HTTP error! status: 404/.test(getErrorMessage(error))) throw error;
+			getLogger().info(`Formular ${formId}: dforms ohne Versionierung (404 bei /versions) - gespeicherter Stand gilt direkt.`);
+		}
 	}
 	async function loadLatestBundle(bundlePath) {
 		return await fetchPublishedFile(bundlePath);
