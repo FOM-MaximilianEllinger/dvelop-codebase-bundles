@@ -212,7 +212,9 @@ var DMS_PROPERTY = {
 	extBelegNr: "9ebfdb3d-e096-49ba-b854-56e09b39db5a",
 	belegdatum: "e16f89a9-a8de-4f55-b287-415e4a543701",
 	brutto: "3d07a2af-546f-4360-8254-daeec02dd101",
-	netto: "98ff7208-08d6-4f7a-bf19-63c1b61c12e1",
+	mwst: "8a23cfb1-a13f-40b4-aec9-126b451f3b22",
+	zahlungsbedingung: "2f169b9f-df96-4d24-8809-dfaf3155d1c6",
+	zahlungsform: "d8c3cf6d-da5f-461a-9849-efc573c8d655",
 	mandant: "49f2d260-5fc4-4331-9da6-aa553a5ee044"
 };
 var BENUTZER_ID = "DVELOP";
@@ -238,7 +240,10 @@ var SAMPLE_BODY = {
 		"17d56c68-f74d-40ca-989c-9ecd80c773bd": "712512",
 		"9ebfdb3d-e096-49ba-b854-56e09b39db5a": "57934185",
 		"e16f89a9-a8de-4f55-b287-415e4a543701": "2026-10-30",
-		"98ff7208-08d6-4f7a-bf19-63c1b61c12e1": 157.94
+		"98ff7208-08d6-4f7a-bf19-63c1b61c12e1": 157.94,
+		"8a23cfb1-a13f-40b4-aec9-126b451f3b22": 30.01,
+		"2f169b9f-df96-4d24-8809-dfaf3155d1c6": "0TG",
+		"d8c3cf6d-da5f-461a-9849-efc573c8d655": "D0"
 	}
 };
 if (config.mode === "production") module.exports = async (req, res) => {
@@ -395,7 +400,7 @@ function mapHeader(props) {
 	if (!documentId) throw new Error(`dmsProperties.${DMS_PROPERTY.documentId} fehlt.`);
 	if (!kreditorNr) throw new Error(`Kreditornummer (${DMS_PROPERTY.kreditorNr}) fehlt.`);
 	const brutto = toNumber(props[DMS_PROPERTY.brutto]);
-	const netto = toNumber(props[DMS_PROPERTY.netto]);
+	const mwst = toNumber(props[DMS_PROPERTY.mwst]);
 	return {
 		pID: documentId,
 		pDMSNo: documentId,
@@ -403,12 +408,12 @@ function mapHeader(props) {
 		pExtBelegnummer: propText(props, DMS_PROPERTY.extBelegNr),
 		pKreditorNr: kreditorNr,
 		pBelegdatum: toBcDate(propText(props, DMS_PROPERTY.belegdatum)),
-		pZahlungsbedingung: "",
-		pZahlungsformcode: "",
+		pZahlungsbedingung: propText(props, DMS_PROPERTY.zahlungsbedingung),
+		pZahlungsformcode: propText(props, DMS_PROPERTY.zahlungsform),
 		pBenutzerID: BENUTZER_ID,
 		pBuchungsdatum: toBcDate((/* @__PURE__ */ new Date()).toISOString()),
 		pBetrag: toBcAmount(brutto),
-		pMwst: toBcAmount((brutto - netto) * 100)
+		pMwst: toBcAmount(mwst * 100)
 	};
 }
 function mapLines(header, accounting) {
