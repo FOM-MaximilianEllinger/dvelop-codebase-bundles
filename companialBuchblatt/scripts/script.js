@@ -150,8 +150,8 @@ for (const key in process.env) if (key.startsWith("CREDENTIALS_")) {
 *   2. CreateLines             - je Zeile ein Aufruf
 *   3. CreateBuchblattZeilen   - erzeugt aus pID die Buchblattzeilen
 *
-* Aufruf per POST mit { accounting, dmsProperties } (siehe AccountingLine,
-* DMS_PROPERTY und mapHeader/mapLines). Antwort: { id, companies, header,
+* Aufruf per POST mit { accounting, dmsProperties, header? } (siehe
+* AccountingLine, DMS_PROPERTY, HeaderDefaults und mapHeader/mapLines). Antwort: { id, companies, header,
 * lines[], buchblatt } mit den Rückgabewerten aus BC.
 *
 * Verbindungstest: Ohne accounting/dmsProperties (z.B. einfacher GET auf das Script)
@@ -219,6 +219,10 @@ var BENUTZER_ID = "DVELOP";
 var LINE_ART = "Sachkonto";
 var SAMPLE_ID = `DV-${(/* @__PURE__ */ new Date()).toISOString().replace(/\D/g, "").slice(2, 14)}`;
 var SAMPLE_BODY = {
+	header: {
+		costCenter: "9999",
+		vatProductBookingGroup: "H19"
+	},
 	accounting: [{
 		glAccount: "0099980",
 		costCenter: "",
@@ -273,12 +277,15 @@ async function main(getVar, body, res) {
 		}
 		const props = body.dmsProperties;
 		const accounting = body.accounting;
+		logger.info(`Eingang accounting: ${JSON.stringify(accounting)}`);
+		logger.info(`Eingang dmsProperties: ${JSON.stringify(props)}`);
+		logger.info(`Eingang header: ${JSON.stringify(body.header ?? {})}`);
 		if (!props || typeof props !== "object") throw new Error("dmsProperties fehlt.");
 		if (!Array.isArray(accounting) || accounting.length === 0) throw new Error("accounting fehlt oder ist leer.");
 		const mandant = propText(props, DMS_PROPERTY.mandant);
 		if (mandant && mandant !== settings.company) throw new Error(`Mandant am Dokument "${mandant}" passt nicht zur Firma "${settings.company}".`);
 		const header = mapHeader(props);
-		const lines = mapLines(header, accounting);
+		const lines = mapLines(header, accounting, body.header ?? {});
 		logger.info(`Beleg ${header.pID}: Kreditor ${header.pKreditorNr} (${propText(props, DMS_PROPERTY.kreditorName)}), Rechnung ${header.pExtBelegnummer}, ${lines.length} Zeile(n)`);
 		const companies = await getCompanies(settings);
 		logger.info(`Verbindung OK, Firmen: ${companies.join(", ")}`);
@@ -367,7 +374,7 @@ async function soapRequest(settings, url, ns, method, params) {
 	logger.debug(`[SOAP] ${response.status} ${method} | ${text.slice(0, 2e3)}`);
 	if (!response.ok) {
 		const fault = readXmlValues(text, "faultstring")[0];
-		const hint = response.status === 401 ? ` (Token abgelehnt - Scope prüfen oder Entra-Anwendung in BC nicht aktiviert/berechtigt; WWW-Authenticate: ${response.headers.get("www-authenticate") ?? "-"})` : "";
+		const hint = response.status === 401 ? ` (Anmeldung abgelehnt - zuerst Script-Variable companialTenant prüfen (aktuell "${settings.tenant}", muss zum Host in companialSoapUrl passen), dann Scope und Entra-Anwendung in BC; WWW-Authenticate: ${response.headers.get("www-authenticate") ?? "-"})` : "";
 		throw new Error(`${method}: HTTP ${response.status} ${fault ?? text.slice(0, 500)}${hint}`);
 	}
 	return readXmlValues(text, "return_value");
@@ -405,25 +412,26 @@ function mapHeader(props) {
 		pBenutzerID: BENUTZER_ID,
 		pBuchungsdatum: toBcDate((/* @__PURE__ */ new Date()).toISOString()),
 		pBetrag: toBcAmount(brutto),
-		pMwst: toBcAmount(brutto - netto)
+		pMwst: toBcAmount((brutto - netto) * 100)
 	};
 }
-function mapLines(header, accounting) {
+function mapLines(header, accounting, defaults) {
+	const pick = (lineValue, headerValue, fallback = "") => text(lineValue) || text(headerValue) || fallback;
 	return accounting.map((line, index) => {
 		if (!line?.glAccount) throw new Error(`accounting[${index}].glAccount fehlt.`);
 		return {
 			pID: header.pID,
 			pDMSNo: header.pDMSNo,
 			pZeilennr: String((index + 1) * 1e4),
-			pArt: LINE_ART,
-			pKostenstelle: text(line.costCenter),
-			pKostentraeger: text(line.costUnit),
+			pArt: pick(line.art, defaults.art, LINE_ART),
+			pKostenstelle: pick(line.costCenter, defaults.costCenter),
+			pKostentraeger: pick(line.costUnit, defaults.costUnit),
 			pBeschreibung: text(line.description),
 			pArtikelEDI: text(line.glAccount),
 			pArtikelverfahrenEDI: "",
 			pVarField1: "",
 			pVarField2: "",
-			pProdBuchGrp: text(line.vatProductBookingGroup),
+			pProdBuchGrp: pick(line.vatProductBookingGroup, defaults.vatProductBookingGroup),
 			pBetrag: toBcAmount(toNumber(line.netAmount)),
 			pMenge: "1"
 		};
