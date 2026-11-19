@@ -150,20 +150,22 @@ for (const key in process.env) if (key.startsWith("CREDENTIALS_")) {
 *   2. CreateLines             - je Zeile ein Aufruf
 *   3. CreateBuchblattZeilen   - erzeugt aus pID die Buchblattzeilen
 *
-* Aufruf per POST mit { header, lines } (Felder siehe HeaderData/LineData,
-* alle Werte als Text). Antwort: { id, companies, header, lines[], buchblatt }
-* mit den Rückgabewerten aus BC. Mit { "sample": true } werden die
-* Beispieldaten unten verwendet.
+* Aufruf per POST mit { accounting, dmsProperties } (siehe AccountingLine,
+* DMS_PROPERTY und mapHeader/mapLines). Antwort: { id, companies, header,
+* lines[], buchblatt } mit den Rückgabewerten aus BC.
 *
-* Verbindungstest: Ohne header im Body (z.B. einfacher GET auf das Script)
+* Verbindungstest: Ohne accounting/dmsProperties (z.B. einfacher GET auf das Script)
 * holt das Script nur ein Token und ruft per GET den SOAP-Webdienst
 * CreateBuchblattZeilen auf (liefert die WSDL). Antwort: { url, status, ok, excerpt }.
 *
-* Transport: OData V4 "Unbound Actions" über Port 1103 (JSON). Jede als Webdienst
-* veröffentlichte Codeunit-Methode ist dort als <Servicename>_<Methode>
-* aufrufbar, die gevis-Logik bleibt also unverändert.
-* Vor den Aufrufen prüft das Script per GET /Company, ob die Instanz das
-* Entra-Token akzeptiert und die Firma existiert.
+* Transport: SOAP über Port 1102. Jeder Webdienst ist unter
+*   <companialSoapUrl>/<Firma>/Codeunit/<Servicename>?tenant=<Tenant>
+* erreichbar (GET liefert die WSDL), aufgerufen wird per POST mit
+* SOAPAction "urn:microsoft-dynamics-schemas/codeunit/<Service>:<Methode>".
+* Vor den Aufrufen prüft das Script über SystemService/Companies, ob die
+* Instanz das Entra-Token akzeptiert und die Firma existiert.
+* Die Codeunit meldet Prüffehler im Rückgabewert (return_value), nicht als
+* HTTP-Fehler - z.B. "Kostenstelle 1000 nicht vorhanden".
 *
 * Anmeldung: OAuth 2.0 Client-Credentials gegen Microsoft Entra ID mit einer
 * App-Registrierung, die in BC auf der Seite "Microsoft Entra-Anwendungen"
@@ -176,13 +178,12 @@ for (const key in process.env) if (key.startsWith("CREDENTIALS_")) {
 *    bei Companial erfragen und in der Script-Variable companialScope setzen.
 *  - Text-Formate für Datum/Betrag (dd.MM.yyyy / Komma?) mit der AL-Seite
 *    abstimmen - die Beispieldaten sind nur eine Annahme.
-*  - Servicename vs. Methodenname: Angenommen ist Methode == Servicename,
-*    also z.B. CreateHeader_CreateHeader. Falls BC "No HTTP resource" o.ä.
-*    meldet, die tatsächlichen Namen über GET .../ODataV4/$metadata prüfen
-*    und SERVICES unten anpassen.
 */
 var logger = getLogger();
-var config = { mode: process.platform === "linux" ? "production" : "development" };
+var config = {
+	mode: process.platform === "linux" ? "production" : "development",
+	devAction: process.env.COMPANIAL_DEV_ACTION ?? "write"
+};
 var SERVICES = {
 	header: {
 		service: "CreateHeader",
@@ -197,64 +198,55 @@ var SERVICES = {
 		method: "CreateBuchblattZeilen"
 	}
 };
+var HEADER_OK = "Kopf wurde angelegt";
+var LINES_OK = "Zeilen wurden angelegt";
 var DEFAULT_SCOPE = "https://api.businesscentral.dynamics.com/.default";
-var DEFAULT_ODATA_URL = "https://42673-test.dynamicstocloud.com:1103/ST-155958/ODataV4";
 var DEFAULT_SOAP_URL = "https://42673-test.dynamicstocloud.com:1102/ST-155958/WS";
 var DEFAULT_TENANT = "42673-TEST.dynamicstocloud.com";
-var SAMPLE_ID = "DV-TEST-0001";
-var SAMPLE_DMS_NO = "P000012345";
-var SAMPLE_HEADER = {
-	pID: SAMPLE_ID,
-	pDMSNo: SAMPLE_DMS_NO,
-	pScandatum: "10.11.2026",
-	pExtBelegnummer: "RE-2026-4711",
-	pKreditorNr: "70000",
-	pBelegdatum: "05.11.2026",
-	pZahlungsbedingung: "14T2%",
-	pZahlungsformcode: "BANK",
-	pBenutzerID: "DVELOP",
-	pBuchungsdatum: "10.11.2026",
-	pBetrag: "1190,00",
-	pMwst: "190,00"
+var SOAP_ENV = "http://schemas.xmlsoap.org/soap/envelope/";
+var DMS_PROPERTY = {
+	documentId: "property_document_id",
+	creationDate: "property_creation_date",
+	kreditorNr: "17d56c68-f74d-40ca-989c-9ecd80c773bd",
+	kreditorName: "348219f7-cd82-42bd-aa3d-57dafc4bf9ef",
+	extBelegNr: "9ebfdb3d-e096-49ba-b854-56e09b39db5a",
+	belegdatum: "e16f89a9-a8de-4f55-b287-415e4a543701",
+	brutto: "3d07a2af-546f-4360-8254-daeec02dd101",
+	netto: "98ff7208-08d6-4f7a-bf19-63c1b61c12e1",
+	mandant: "49f2d260-5fc4-4331-9da6-aa553a5ee044"
 };
-var SAMPLE_LINES = [{
-	pID: SAMPLE_ID,
-	pDMSNo: SAMPLE_DMS_NO,
-	pZeilennr: "10000",
-	pArt: "Sachkonto",
-	pKostenstelle: "1000",
-	pKostentraeger: "",
-	pBeschreibung: "Wartung Mahlanlage",
-	pArtikelEDI: "",
-	pArtikelverfahrenEDI: "",
-	pVarField1: "",
-	pVarField2: "",
-	pProdBuchGrp: "DIENSTL",
-	pBetrag: "600,00",
-	pMenge: "1"
-}, {
-	pID: SAMPLE_ID,
-	pDMSNo: SAMPLE_DMS_NO,
-	pZeilennr: "20000",
-	pArt: "Sachkonto",
-	pKostenstelle: "2000",
-	pKostentraeger: "",
-	pBeschreibung: "Ersatzteile Walzenstuhl",
-	pArtikelEDI: "",
-	pArtikelverfahrenEDI: "",
-	pVarField1: "",
-	pVarField2: "",
-	pProdBuchGrp: "MATERIAL",
-	pBetrag: "400,00",
-	pMenge: "2"
-}];
+var BENUTZER_ID = "DVELOP";
+var LINE_ART = "Sachkonto";
+var SAMPLE_ID = `DV-${(/* @__PURE__ */ new Date()).toISOString().replace(/\D/g, "").slice(2, 14)}`;
+var SAMPLE_BODY = {
+	accounting: [{
+		glAccount: "0099980",
+		costCenter: "",
+		costUnit: "",
+		vatProductBookingGroup: "",
+		description: "Test",
+		netAmount: 157.94,
+		vatRate: 0,
+		grossAmount: 157.94
+	}],
+	dmsProperties: {
+		property_document_id: SAMPLE_ID,
+		property_creation_date: "2026-11-02T08:29:36.000+00:00",
+		"348219f7-cd82-42bd-aa3d-57dafc4bf9ef": ["Hch. Perschmann GmbH"],
+		"3d07a2af-546f-4360-8254-daeec02dd101": 187.95,
+		"49f2d260-5fc4-4331-9da6-aa553a5ee044": "Hedwigsburger Okermuehle",
+		"17d56c68-f74d-40ca-989c-9ecd80c773bd": "712512",
+		"9ebfdb3d-e096-49ba-b854-56e09b39db5a": "57934185",
+		"e16f89a9-a8de-4f55-b287-415e4a543701": "2026-10-30",
+		"98ff7208-08d6-4f7a-bf19-63c1b61c12e1": 157.94
+	}
+};
 if (config.mode === "production") module.exports = async (req, res) => {
 	await main((key) => req.var(key), parseBody(req), res);
 };
 else (async () => {
 	initLogger(LogLevel.DEBUG);
 	const devVars = {
-		companialODataUrl: process.env.COMPANIAL_ODATA_URL ?? DEFAULT_ODATA_URL,
 		companialSoapUrl: process.env.COMPANIAL_SOAP_URL ?? DEFAULT_SOAP_URL,
 		companialCompany: process.env.COMPANIAL_COMPANY ?? "Hedwigsburger Okermuehle",
 		companialTenant: process.env.COMPANIAL_TENANT ?? DEFAULT_TENANT,
@@ -263,7 +255,8 @@ else (async () => {
 		clientSecret: process.env.COMPANIAL_CLIENT_SECRET,
 		companialScope: process.env.COMPANIAL_SCOPE
 	};
-	await main((key) => devVars[key], {}, null);
+	logger.info(`Development: ${config.devAction === "write" ? `schreibe Testbeleg ${SAMPLE_ID}` : "nur Verbindungstest"}`);
+	await main((key) => devVars[key], config.devAction === "write" ? SAMPLE_BODY : {}, null);
 })().catch((err) => {
 	console.error("Error in development mode:", err);
 });
@@ -271,28 +264,32 @@ async function main(getVar, body, res) {
 	try {
 		logger.debug("Start");
 		const settings = readSettings(getVar);
-		if (!body.header && !body.sample) {
-			const check = await checkSoapEndpoint(settings, readSoapUrl(getVar), SERVICES.buchblatt.service);
+		if (!body.accounting && !body.dmsProperties) {
+			const check = await checkSoapEndpoint(settings, SERVICES.buchblatt.service);
 			if (res) res.status(200).set("Content-Type", "application/json").send(JSON.stringify(check));
 			logger.info("End (Verbindungstest)");
 			return;
 		}
-		const header = body.header ?? SAMPLE_HEADER;
-		const lines = body.lines ?? SAMPLE_LINES;
-		if (!header.pID) throw new Error("header.pID fehlt.");
+		const props = body.dmsProperties;
+		const accounting = body.accounting;
+		if (!props || typeof props !== "object") throw new Error("dmsProperties fehlt.");
+		if (!Array.isArray(accounting) || accounting.length === 0) throw new Error("accounting fehlt oder ist leer.");
+		const mandant = propText(props, DMS_PROPERTY.mandant);
+		if (mandant && mandant !== settings.company) throw new Error(`Mandant am Dokument "${mandant}" passt nicht zur Firma "${settings.company}".`);
+		const header = mapHeader(props);
+		const lines = mapLines(header, accounting);
+		logger.info(`Beleg ${header.pID}: Kreditor ${header.pKreditorNr} (${propText(props, DMS_PROPERTY.kreditorName)}), Rechnung ${header.pExtBelegnummer}, ${lines.length} Zeile(n)`);
 		const companies = await getCompanies(settings);
 		logger.info(`Verbindung OK, Firmen: ${companies.join(", ")}`);
 		if (!companies.includes(settings.company)) throw new Error(`Firma "${settings.company}" nicht gefunden. Vorhanden: ${companies.join(", ")}`);
 		const headerResult = await callCodeunit(settings, SERVICES.header, header);
 		logger.info(`CreateHeader ${header.pID}: ${headerResult}`);
+		if (headerResult !== HEADER_OK) throw new Error(`CreateHeader ${header.pID} fehlgeschlagen: ${headerResult}`);
 		const lineResults = [];
 		for (const line of lines) {
-			const result = await callCodeunit(settings, SERVICES.lines, {
-				...line,
-				pID: line.pID || header.pID,
-				pDMSNo: line.pDMSNo || header.pDMSNo
-			});
+			const result = await callCodeunit(settings, SERVICES.lines, line);
 			logger.info(`CreateLines ${header.pID}/${line.pZeilennr}: ${result}`);
+			if (result !== LINES_OK) throw new Error(`CreateLines ${header.pID}/${line.pZeilennr} fehlgeschlagen: ${result}`);
 			lineResults.push(result);
 		}
 		const buchblattResult = await callCodeunit(settings, SERVICES.buchblatt, { pID: header.pID });
@@ -304,6 +301,7 @@ async function main(getVar, body, res) {
 			lines: lineResults,
 			buchblatt: buchblattResult
 		};
+		logger.info(`Ergebnis: ${JSON.stringify(result)}`);
 		if (res) res.status(200).set("Content-Type", "application/json").send(JSON.stringify(result));
 		logger.info("End");
 	} catch (error) {
@@ -311,8 +309,8 @@ async function main(getVar, body, res) {
 		if (res) res.status(500).set("Content-Type", "application/json").send(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
 	}
 }
-async function checkSoapEndpoint(settings, soapUrl, service) {
-	const url = `${soapUrl}/${encodeURIComponent(settings.company)}/Codeunit/${encodeURIComponent(service)}?tenant=${encodeURIComponent(settings.tenant)}`;
+async function checkSoapEndpoint(settings, service) {
+	const url = codeunitUrl(settings, service);
 	const token = await getAccessToken(settings);
 	logger.debug(`[SOAP] GET ${url}`);
 	let response;
@@ -322,8 +320,7 @@ async function checkSoapEndpoint(settings, soapUrl, service) {
 			headers: { Authorization: `Bearer ${token}` }
 		});
 	} catch (err) {
-		const cause = err?.cause;
-		throw new Error(`Verbindungstest: Netzwerkfehler ${err.message}${cause ? ` (${cause.code ?? cause})` : ""}`);
+		throw networkError("Verbindungstest", err);
 	}
 	const text = await response.text();
 	logger.info(`[SOAP] ${response.status} ${url}`);
@@ -336,44 +333,123 @@ async function checkSoapEndpoint(settings, soapUrl, service) {
 		wwwAuthenticate: response.headers.get("www-authenticate") ?? void 0
 	};
 }
+function codeunitUrl(settings, service) {
+	return `${settings.soapUrl}/${encodeURIComponent(settings.company)}/Codeunit/${encodeURIComponent(service)}?tenant=${encodeURIComponent(settings.tenant)}`;
+}
 async function getCompanies(settings) {
-	return ((await odataRequest(settings, "GET", `${settings.odataUrl}/Company?tenant=${encodeURIComponent(settings.tenant)}`, "Company"))?.value ?? []).map((c) => String(c.Name ?? c.name ?? ""));
+	return soapRequest(settings, `${settings.soapUrl}/SystemService?tenant=${encodeURIComponent(settings.tenant)}`, "urn:microsoft-dynamics-schemas/nav/system/", "Companies", {});
 }
 async function callCodeunit(settings, target, params) {
-	const action = `${target.service}_${target.method}`;
-	const data = await odataRequest(settings, "POST", `${settings.odataUrl}/${encodeURIComponent(action)}?company=${encodeURIComponent(settings.company)}&tenant=${encodeURIComponent(settings.tenant)}`, action, params);
-	return data?.value === void 0 ? "" : String(data.value);
+	const ns = `urn:microsoft-dynamics-schemas/codeunit/${target.service}`;
+	return (await soapRequest(settings, codeunitUrl(settings, target.service), ns, target.method, params))[0] ?? "";
 }
-async function odataRequest(settings, method, url, label, body) {
-	logger.debug(`[OData] ${method} ${url}${body ? ` | ${JSON.stringify(body)}` : ""}`);
+async function soapRequest(settings, url, ns, method, params) {
+	const inner = Object.entries(params).map(([key, value]) => `<${key}>${escapeXml(String(value ?? ""))}</${key}>`).join("");
+	const envelope = `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="${SOAP_ENV}"><soap:Body><${method} xmlns="${ns}">${inner}</${method}></soap:Body></soap:Envelope>`;
+	logger.debug(`[SOAP] POST ${url} ${method} | ${inner}`);
 	const token = await getAccessToken(settings);
 	let response;
 	try {
 		response = await fetch(url, {
-			method,
+			method: "POST",
 			headers: {
-				Accept: "application/json",
-				...body ? { "Content-Type": "application/json" } : {},
+				"Content-Type": "text/xml; charset=utf-8",
+				SOAPAction: `"${ns}:${method}"`,
 				Authorization: `Bearer ${token}`
 			},
-			body: body ? JSON.stringify(body) : void 0
+			body: envelope
 		});
 	} catch (err) {
-		const cause = err?.cause;
-		throw new Error(`${label}: Netzwerkfehler ${err.message}${cause ? ` (${cause.code ?? cause})` : ""}`);
+		throw networkError(method, err);
 	}
 	const text = await response.text();
-	logger.debug(`[OData] ${response.status} ${label} | ${text.slice(0, 2e3)}`);
-	let data = void 0;
-	try {
-		data = text ? JSON.parse(text) : void 0;
-	} catch {}
+	logger.debug(`[SOAP] ${response.status} ${method} | ${text.slice(0, 2e3)}`);
 	if (!response.ok) {
-		const message = data?.error?.message ?? text.slice(0, 500);
+		const fault = readXmlValues(text, "faultstring")[0];
 		const hint = response.status === 401 ? ` (Token abgelehnt - Scope prüfen oder Entra-Anwendung in BC nicht aktiviert/berechtigt; WWW-Authenticate: ${response.headers.get("www-authenticate") ?? "-"})` : "";
-		throw new Error(`${label}: HTTP ${response.status} ${message}${hint}`);
+		throw new Error(`${method}: HTTP ${response.status} ${fault ?? text.slice(0, 500)}${hint}`);
 	}
-	return data;
+	return readXmlValues(text, "return_value");
+}
+function readXmlValues(xml, tag) {
+	const pattern = new RegExp(`<(?:[\\w-]+:)?${tag}(?:\\s[^>]*)?(?:/>|>([\\s\\S]*?)</(?:[\\w-]+:)?${tag}>)`, "g");
+	return [...xml.matchAll(pattern)].map((m) => unescapeXml(m[1] ?? ""));
+}
+function escapeXml(value) {
+	return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+function unescapeXml(value) {
+	return value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code))).replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16))).replace(/&amp;/g, "&");
+}
+function networkError(label, err) {
+	const cause = err?.cause;
+	return /* @__PURE__ */ new Error(`${label}: Netzwerkfehler ${err.message}${cause ? ` (${cause.code ?? cause})` : ""}`);
+}
+function mapHeader(props) {
+	const documentId = propText(props, DMS_PROPERTY.documentId);
+	const kreditorNr = propText(props, DMS_PROPERTY.kreditorNr);
+	if (!documentId) throw new Error(`dmsProperties.${DMS_PROPERTY.documentId} fehlt.`);
+	if (!kreditorNr) throw new Error(`Kreditornummer (${DMS_PROPERTY.kreditorNr}) fehlt.`);
+	const brutto = toNumber(props[DMS_PROPERTY.brutto]);
+	const netto = toNumber(props[DMS_PROPERTY.netto]);
+	return {
+		pID: documentId,
+		pDMSNo: documentId,
+		pScandatum: toBcDate(propText(props, DMS_PROPERTY.creationDate)),
+		pExtBelegnummer: propText(props, DMS_PROPERTY.extBelegNr),
+		pKreditorNr: kreditorNr,
+		pBelegdatum: toBcDate(propText(props, DMS_PROPERTY.belegdatum)),
+		pZahlungsbedingung: "",
+		pZahlungsformcode: "",
+		pBenutzerID: BENUTZER_ID,
+		pBuchungsdatum: toBcDate((/* @__PURE__ */ new Date()).toISOString()),
+		pBetrag: toBcAmount(brutto),
+		pMwst: toBcAmount(brutto - netto)
+	};
+}
+function mapLines(header, accounting) {
+	return accounting.map((line, index) => {
+		if (!line?.glAccount) throw new Error(`accounting[${index}].glAccount fehlt.`);
+		return {
+			pID: header.pID,
+			pDMSNo: header.pDMSNo,
+			pZeilennr: String((index + 1) * 1e4),
+			pArt: LINE_ART,
+			pKostenstelle: text(line.costCenter),
+			pKostentraeger: text(line.costUnit),
+			pBeschreibung: text(line.description),
+			pArtikelEDI: text(line.glAccount),
+			pArtikelverfahrenEDI: "",
+			pVarField1: "",
+			pVarField2: "",
+			pProdBuchGrp: text(line.vatProductBookingGroup),
+			pBetrag: toBcAmount(toNumber(line.netAmount)),
+			pMenge: "1"
+		};
+	});
+}
+function propText(props, key) {
+	const value = props[key];
+	return text(Array.isArray(value) ? value[0] : value);
+}
+function text(value) {
+	return value === void 0 || value === null ? "" : String(value).trim();
+}
+function toNumber(value) {
+	if (typeof value === "number") return value;
+	const raw = text(value);
+	if (!raw) return 0;
+	const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+	const result = Number(normalized);
+	if (Number.isNaN(result)) throw new Error(`Ungültiger Betrag: "${raw}"`);
+	return result;
+}
+function toBcAmount(value) {
+	return (Math.round(value * 100) / 100).toFixed(2).replace(".", ",");
+}
+function toBcDate(value) {
+	const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+	return match ? `${match[3]}.${match[2]}.${match[1]}` : "";
 }
 var cachedToken;
 async function getAccessToken(settings) {
@@ -394,8 +470,7 @@ async function getAccessToken(settings) {
 			})
 		});
 	} catch (err) {
-		const cause = err?.cause;
-		throw new Error(`Token-Abruf: Netzwerkfehler ${err.message}${cause ? ` (${cause.code ?? cause})` : ""}`);
+		throw networkError("Token-Abruf", err);
 	}
 	const data = await response.json().catch(() => ({}));
 	if (!response.ok || !data.access_token) throw new Error(`Token-Abruf fehlgeschlagen: HTTP ${response.status} ${data.error ?? ""} ${data.error_description ?? ""}`.trim());
@@ -409,7 +484,7 @@ async function getAccessToken(settings) {
 }
 function readSettings(getVar) {
 	const settings = {
-		odataUrl: readODataUrl(getVar),
+		soapUrl: readSoapUrl(getVar),
 		company: String(getVar("companialCompany") ?? "").trim(),
 		tenant: String(getVar("companialTenant") ?? "").trim(),
 		entraTenantId: stripBraces(String(getVar("entraTenantId") ?? "")),
@@ -435,11 +510,6 @@ function describeToken(token) {
 	} catch {
 		return "(nicht lesbar)";
 	}
-}
-function readODataUrl(getVar) {
-	const value = String(getVar("companialODataUrl") ?? "").trim();
-	if (!value) logger.warn(`Script-Variable companialODataUrl fehlt, verwende ${DEFAULT_ODATA_URL}`);
-	return (value || DEFAULT_ODATA_URL).replace(/\/+$/, "");
 }
 function readSoapUrl(getVar) {
 	const value = String(getVar("companialSoapUrl") ?? "").trim();
