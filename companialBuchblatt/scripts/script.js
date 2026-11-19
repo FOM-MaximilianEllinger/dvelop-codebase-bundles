@@ -150,8 +150,8 @@ for (const key in process.env) if (key.startsWith("CREDENTIALS_")) {
 *   2. CreateLines             - je Zeile ein Aufruf
 *   3. CreateBuchblattZeilen   - erzeugt aus pID die Buchblattzeilen
 *
-* Aufruf per POST mit { accounting, dmsProperties, header? } (siehe
-* AccountingLine, DMS_PROPERTY, HeaderDefaults und mapHeader/mapLines). Antwort: { id, companies, header,
+* Aufruf per POST mit { accounting, dmsProperties } (siehe AccountingLine,
+* DMS_PROPERTY und mapHeader/mapLines). Antwort: { id, companies, header,
 * lines[], buchblatt } mit den Rückgabewerten aus BC.
 *
 * Verbindungstest: Ohne accounting/dmsProperties (z.B. einfacher GET auf das Script)
@@ -219,10 +219,6 @@ var BENUTZER_ID = "DVELOP";
 var LINE_ART = "Sachkonto";
 var SAMPLE_ID = `DV-${(/* @__PURE__ */ new Date()).toISOString().replace(/\D/g, "").slice(2, 14)}`;
 var SAMPLE_BODY = {
-	header: {
-		costCenter: "9999",
-		vatProductBookingGroup: "H19"
-	},
 	accounting: [{
 		glAccount: "0099980",
 		costCenter: "",
@@ -267,6 +263,7 @@ else (async () => {
 async function main(getVar, body, res) {
 	try {
 		logger.debug("Start");
+		logger.info(`Request-Body: ${JSON.stringify(body)}`);
 		const settings = readSettings(getVar);
 		if (!body.accounting && !body.dmsProperties) {
 			logger.info(`Kein accounting/dmsProperties im Body (Felder: ${Object.keys(body).join(", ") || "-"}) - nur Verbindungstest`);
@@ -279,13 +276,12 @@ async function main(getVar, body, res) {
 		const accounting = body.accounting;
 		logger.info(`Eingang accounting: ${JSON.stringify(accounting)}`);
 		logger.info(`Eingang dmsProperties: ${JSON.stringify(props)}`);
-		logger.info(`Eingang header: ${JSON.stringify(body.header ?? {})}`);
 		if (!props || typeof props !== "object") throw new Error("dmsProperties fehlt.");
 		if (!Array.isArray(accounting) || accounting.length === 0) throw new Error("accounting fehlt oder ist leer.");
 		const mandant = propText(props, DMS_PROPERTY.mandant);
 		if (mandant && mandant !== settings.company) throw new Error(`Mandant am Dokument "${mandant}" passt nicht zur Firma "${settings.company}".`);
 		const header = mapHeader(props);
-		const lines = mapLines(header, accounting, body.header ?? {});
+		const lines = mapLines(header, accounting);
 		logger.info(`Beleg ${header.pID}: Kreditor ${header.pKreditorNr} (${propText(props, DMS_PROPERTY.kreditorName)}), Rechnung ${header.pExtBelegnummer}, ${lines.length} Zeile(n)`);
 		const companies = await getCompanies(settings);
 		logger.info(`Verbindung OK, Firmen: ${companies.join(", ")}`);
@@ -415,23 +411,22 @@ function mapHeader(props) {
 		pMwst: toBcAmount((brutto - netto) * 100)
 	};
 }
-function mapLines(header, accounting, defaults) {
-	const pick = (lineValue, headerValue, fallback = "") => text(lineValue) || text(headerValue) || fallback;
+function mapLines(header, accounting) {
 	return accounting.map((line, index) => {
 		if (!line?.glAccount) throw new Error(`accounting[${index}].glAccount fehlt.`);
 		return {
 			pID: header.pID,
 			pDMSNo: header.pDMSNo,
 			pZeilennr: String((index + 1) * 1e4),
-			pArt: pick(line.art, defaults.art, LINE_ART),
-			pKostenstelle: pick(line.costCenter, defaults.costCenter),
-			pKostentraeger: pick(line.costUnit, defaults.costUnit),
+			pArt: LINE_ART,
+			pKostenstelle: text(line.costCenter),
+			pKostentraeger: text(line.costUnit),
 			pBeschreibung: text(line.description),
 			pArtikelEDI: text(line.glAccount),
 			pArtikelverfahrenEDI: "",
 			pVarField1: "",
 			pVarField2: "",
-			pProdBuchGrp: pick(line.vatProductBookingGroup, defaults.vatProductBookingGroup),
+			pProdBuchGrp: text(line.vatProductBookingGroup),
 			pBetrag: toBcAmount(toNumber(line.netAmount)),
 			pMenge: "1"
 		};
