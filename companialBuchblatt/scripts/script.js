@@ -150,11 +150,12 @@ for (const key in process.env) if (key.startsWith("CREDENTIALS_")) {
 *   2. CreateLines             - je Zeile ein Aufruf
 *   3. CreateBuchblattZeilen   - erzeugt aus pID die Buchblattzeilen
 *
-* Aufruf per POST mit { accounting, dmsProperties } (siehe AccountingLine,
-* DMS_PROPERTY und mapHeader/mapLines). Antwort: { id, companies, header,
-* lines[], buchblatt } mit den Rückgabewerten aus BC.
+* Aufruf per POST mit { header, lines } (Felder siehe HeaderData/LineData,
+* alle Werte als Text). Antwort: { id, companies, header, lines[], buchblatt }
+* mit den Rückgabewerten aus BC. Mit { "sample": true } werden die
+* Beispieldaten unten verwendet.
 *
-* Verbindungstest: Ohne accounting/dmsProperties (z.B. einfacher GET auf das Script)
+* Verbindungstest: Ohne header im Body (z.B. einfacher GET auf das Script)
 * holt das Script nur ein Token und ruft per GET den SOAP-Webdienst
 * CreateBuchblattZeilen auf (liefert die WSDL). Antwort: { url, status, ok, excerpt }.
 *
@@ -199,48 +200,62 @@ var SERVICES = {
 	}
 };
 var HEADER_OK = "Kopf wurde angelegt";
-var LINES_OK = "Zeilen wurden angelegt";
 var DEFAULT_SCOPE = "https://api.businesscentral.dynamics.com/.default";
 var DEFAULT_SOAP_URL = "https://42673-test.dynamicstocloud.com:1102/ST-155958/WS";
 var DEFAULT_TENANT = "42673-TEST.dynamicstocloud.com";
 var SOAP_ENV = "http://schemas.xmlsoap.org/soap/envelope/";
-var DMS_PROPERTY = {
-	documentId: "property_document_id",
-	creationDate: "property_creation_date",
-	kreditorNr: "17d56c68-f74d-40ca-989c-9ecd80c773bd",
-	kreditorName: "348219f7-cd82-42bd-aa3d-57dafc4bf9ef",
-	extBelegNr: "9ebfdb3d-e096-49ba-b854-56e09b39db5a",
-	belegdatum: "e16f89a9-a8de-4f55-b287-415e4a543701",
-	brutto: "3d07a2af-546f-4360-8254-daeec02dd101",
-	netto: "98ff7208-08d6-4f7a-bf19-63c1b61c12e1",
-	mandant: "49f2d260-5fc4-4331-9da6-aa553a5ee044"
-};
-var BENUTZER_ID = "DVELOP";
-var LINE_ART = "Sachkonto";
 var SAMPLE_ID = `DV-${(/* @__PURE__ */ new Date()).toISOString().replace(/\D/g, "").slice(2, 14)}`;
-var SAMPLE_BODY = {
-	accounting: [{
-		glAccount: "0099980",
-		costCenter: "",
-		costUnit: "",
-		vatProductBookingGroup: "",
-		description: "Test",
-		netAmount: 157.94,
-		vatRate: 0,
-		grossAmount: 157.94
-	}],
-	dmsProperties: {
-		property_document_id: SAMPLE_ID,
-		property_creation_date: "2026-11-02T08:29:36.000+00:00",
-		"348219f7-cd82-42bd-aa3d-57dafc4bf9ef": ["Hch. Perschmann GmbH"],
-		"3d07a2af-546f-4360-8254-daeec02dd101": 187.95,
-		"49f2d260-5fc4-4331-9da6-aa553a5ee044": "Hedwigsburger Okermuehle",
-		"17d56c68-f74d-40ca-989c-9ecd80c773bd": "712512",
-		"9ebfdb3d-e096-49ba-b854-56e09b39db5a": "57934185",
-		"e16f89a9-a8de-4f55-b287-415e4a543701": "2026-10-30",
-		"98ff7208-08d6-4f7a-bf19-63c1b61c12e1": 157.94
-	}
+var SAMPLE_DMS_NO = `DMS-${SAMPLE_ID.slice(3)}`;
+var TODAY = (/* @__PURE__ */ new Date()).toLocaleDateString("de-DE", {
+	day: "2-digit",
+	month: "2-digit",
+	year: "numeric"
+});
+var SAMPLE_HEADER = {
+	pID: SAMPLE_ID,
+	pDMSNo: SAMPLE_DMS_NO,
+	pScandatum: TODAY,
+	pExtBelegnummer: `RE-${SAMPLE_ID}`,
+	pKreditorNr: "706552",
+	pBelegdatum: TODAY,
+	pZahlungsbedingung: "0TG",
+	pZahlungsformcode: "D0",
+	pBenutzerID: "DVELOP",
+	pBuchungsdatum: TODAY,
+	pBetrag: "1190,00",
+	pMwst: "190,00"
 };
+var SAMPLE_LINES = [{
+	pID: SAMPLE_ID,
+	pDMSNo: SAMPLE_DMS_NO,
+	pZeilennr: "10000",
+	pArt: "0099980",
+	pKostenstelle: "9999",
+	pKostentraeger: "",
+	pBeschreibung: `d.velop Test ${SAMPLE_ID} Zeile 1`,
+	pArtikelEDI: "",
+	pArtikelverfahrenEDI: "",
+	pVarField1: "",
+	pVarField2: "",
+	pProdBuchGrp: "H19",
+	pBetrag: "600,00",
+	pMenge: "1"
+}, {
+	pID: SAMPLE_ID,
+	pDMSNo: SAMPLE_DMS_NO,
+	pZeilennr: "20000",
+	pArt: "0099980",
+	pKostenstelle: "9999",
+	pKostentraeger: "",
+	pBeschreibung: `d.velop Test ${SAMPLE_ID} Zeile 2`,
+	pArtikelEDI: "",
+	pArtikelverfahrenEDI: "",
+	pVarField1: "",
+	pVarField2: "",
+	pProdBuchGrp: "H19",
+	pBetrag: "400,00",
+	pMenge: "2"
+}];
 if (config.mode === "production") module.exports = async (req, res) => {
 	await main((key) => req.var(key), parseBody(req), res);
 };
@@ -256,33 +271,23 @@ else (async () => {
 		companialScope: process.env.COMPANIAL_SCOPE
 	};
 	logger.info(`Development: ${config.devAction === "write" ? `schreibe Testbeleg ${SAMPLE_ID}` : "nur Verbindungstest"}`);
-	await main((key) => devVars[key], config.devAction === "write" ? SAMPLE_BODY : {}, null);
+	await main((key) => devVars[key], config.devAction === "write" ? { sample: true } : {}, null);
 })().catch((err) => {
 	console.error("Error in development mode:", err);
 });
 async function main(getVar, body, res) {
 	try {
 		logger.debug("Start");
-		logger.info(`Request-Body: ${JSON.stringify(body)}`);
 		const settings = readSettings(getVar);
-		if (!body.accounting && !body.dmsProperties) {
-			logger.info(`Kein accounting/dmsProperties im Body (Felder: ${Object.keys(body).join(", ") || "-"}) - nur Verbindungstest`);
+		if (!body.header && !body.sample) {
 			const check = await checkSoapEndpoint(settings, SERVICES.buchblatt.service);
 			if (res) res.status(200).set("Content-Type", "application/json").send(JSON.stringify(check));
 			logger.info("End (Verbindungstest)");
 			return;
 		}
-		const props = body.dmsProperties;
-		const accounting = body.accounting;
-		logger.info(`Eingang accounting: ${JSON.stringify(accounting)}`);
-		logger.info(`Eingang dmsProperties: ${JSON.stringify(props)}`);
-		if (!props || typeof props !== "object") throw new Error("dmsProperties fehlt.");
-		if (!Array.isArray(accounting) || accounting.length === 0) throw new Error("accounting fehlt oder ist leer.");
-		const mandant = propText(props, DMS_PROPERTY.mandant);
-		if (mandant && mandant !== settings.company) throw new Error(`Mandant am Dokument "${mandant}" passt nicht zur Firma "${settings.company}".`);
-		const header = mapHeader(props);
-		const lines = mapLines(header, accounting);
-		logger.info(`Beleg ${header.pID}: Kreditor ${header.pKreditorNr} (${propText(props, DMS_PROPERTY.kreditorName)}), Rechnung ${header.pExtBelegnummer}, ${lines.length} Zeile(n)`);
+		const header = body.header ?? SAMPLE_HEADER;
+		const lines = body.lines ?? SAMPLE_LINES;
+		if (!header.pID) throw new Error("header.pID fehlt.");
 		const companies = await getCompanies(settings);
 		logger.info(`Verbindung OK, Firmen: ${companies.join(", ")}`);
 		if (!companies.includes(settings.company)) throw new Error(`Firma "${settings.company}" nicht gefunden. Vorhanden: ${companies.join(", ")}`);
@@ -291,9 +296,12 @@ async function main(getVar, body, res) {
 		if (headerResult !== HEADER_OK) throw new Error(`CreateHeader ${header.pID} fehlgeschlagen: ${headerResult}`);
 		const lineResults = [];
 		for (const line of lines) {
-			const result = await callCodeunit(settings, SERVICES.lines, line);
+			const result = await callCodeunit(settings, SERVICES.lines, {
+				...line,
+				pID: line.pID || header.pID,
+				pDMSNo: line.pDMSNo || header.pDMSNo
+			});
 			logger.info(`CreateLines ${header.pID}/${line.pZeilennr}: ${result}`);
-			if (result !== LINES_OK) throw new Error(`CreateLines ${header.pID}/${line.pZeilennr} fehlgeschlagen: ${result}`);
 			lineResults.push(result);
 		}
 		const buchblattResult = await callCodeunit(settings, SERVICES.buchblatt, { pID: header.pID });
@@ -370,7 +378,7 @@ async function soapRequest(settings, url, ns, method, params) {
 	logger.debug(`[SOAP] ${response.status} ${method} | ${text.slice(0, 2e3)}`);
 	if (!response.ok) {
 		const fault = readXmlValues(text, "faultstring")[0];
-		const hint = response.status === 401 ? ` (Anmeldung abgelehnt - zuerst Script-Variable companialTenant prüfen (aktuell "${settings.tenant}", muss zum Host in companialSoapUrl passen), dann Scope und Entra-Anwendung in BC; WWW-Authenticate: ${response.headers.get("www-authenticate") ?? "-"})` : "";
+		const hint = response.status === 401 ? ` (Token abgelehnt - Scope prüfen oder Entra-Anwendung in BC nicht aktiviert/berechtigt; WWW-Authenticate: ${response.headers.get("www-authenticate") ?? "-"})` : "";
 		throw new Error(`${method}: HTTP ${response.status} ${fault ?? text.slice(0, 500)}${hint}`);
 	}
 	return readXmlValues(text, "return_value");
@@ -388,72 +396,6 @@ function unescapeXml(value) {
 function networkError(label, err) {
 	const cause = err?.cause;
 	return /* @__PURE__ */ new Error(`${label}: Netzwerkfehler ${err.message}${cause ? ` (${cause.code ?? cause})` : ""}`);
-}
-function mapHeader(props) {
-	const documentId = propText(props, DMS_PROPERTY.documentId);
-	const kreditorNr = propText(props, DMS_PROPERTY.kreditorNr);
-	if (!documentId) throw new Error(`dmsProperties.${DMS_PROPERTY.documentId} fehlt.`);
-	if (!kreditorNr) throw new Error(`Kreditornummer (${DMS_PROPERTY.kreditorNr}) fehlt.`);
-	const brutto = toNumber(props[DMS_PROPERTY.brutto]);
-	const netto = toNumber(props[DMS_PROPERTY.netto]);
-	return {
-		pID: documentId,
-		pDMSNo: documentId,
-		pScandatum: toBcDate(propText(props, DMS_PROPERTY.creationDate)),
-		pExtBelegnummer: propText(props, DMS_PROPERTY.extBelegNr),
-		pKreditorNr: kreditorNr,
-		pBelegdatum: toBcDate(propText(props, DMS_PROPERTY.belegdatum)),
-		pZahlungsbedingung: "",
-		pZahlungsformcode: "",
-		pBenutzerID: BENUTZER_ID,
-		pBuchungsdatum: toBcDate((/* @__PURE__ */ new Date()).toISOString()),
-		pBetrag: toBcAmount(brutto),
-		pMwst: toBcAmount((brutto - netto) * 100)
-	};
-}
-function mapLines(header, accounting) {
-	return accounting.map((line, index) => {
-		if (!line?.glAccount) throw new Error(`accounting[${index}].glAccount fehlt.`);
-		return {
-			pID: header.pID,
-			pDMSNo: header.pDMSNo,
-			pZeilennr: String((index + 1) * 1e4),
-			pArt: LINE_ART,
-			pKostenstelle: text(line.costCenter),
-			pKostentraeger: text(line.costUnit),
-			pBeschreibung: text(line.description),
-			pArtikelEDI: text(line.glAccount),
-			pArtikelverfahrenEDI: "",
-			pVarField1: "",
-			pVarField2: "",
-			pProdBuchGrp: text(line.vatProductBookingGroup),
-			pBetrag: toBcAmount(toNumber(line.netAmount)),
-			pMenge: "1"
-		};
-	});
-}
-function propText(props, key) {
-	const value = props[key];
-	return text(Array.isArray(value) ? value[0] : value);
-}
-function text(value) {
-	return value === void 0 || value === null ? "" : String(value).trim();
-}
-function toNumber(value) {
-	if (typeof value === "number") return value;
-	const raw = text(value);
-	if (!raw) return 0;
-	const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
-	const result = Number(normalized);
-	if (Number.isNaN(result)) throw new Error(`Ungültiger Betrag: "${raw}"`);
-	return result;
-}
-function toBcAmount(value) {
-	return (Math.round(value * 100) / 100).toFixed(2).replace(".", ",");
-}
-function toBcDate(value) {
-	const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-	return match ? `${match[3]}.${match[2]}.${match[1]}` : "";
 }
 var cachedToken;
 async function getAccessToken(settings) {
