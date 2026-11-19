@@ -265,6 +265,7 @@ async function main(getVar, body, res) {
 		logger.debug("Start");
 		const settings = readSettings(getVar);
 		if (!body.accounting && !body.dmsProperties) {
+			logger.info(`Kein accounting/dmsProperties im Body (Felder: ${Object.keys(body).join(", ") || "-"}) - nur Verbindungstest`);
 			const check = await checkSoapEndpoint(settings, SERVICES.buchblatt.service);
 			if (res) res.status(200).set("Content-Type", "application/json").send(JSON.stringify(check));
 			logger.info("End (Verbindungstest)");
