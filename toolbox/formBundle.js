@@ -5080,7 +5080,14 @@ createHTML: (html) => {
 						"label": "OData-V4-URL",
 						"encrypted": false,
 						"description": "OData-V4-Basisadresse der BC-Instanz bis einschließlich /ODataV4, ohne Firmennamen.",
-						"default": "https://t1016463.dynamicstocloud.com:1103/ST-155958/ODataV4"
+						"default": "https://42673-test.dynamicstocloud.com:1103/ST-155958/ODataV4"
+					},
+					{
+						"key": "companialSoapUrl",
+						"label": "SOAP-URL",
+						"encrypted": false,
+						"description": "SOAP-Basisadresse der BC-Instanz bis einschließlich /WS, ohne Firmennamen. Wird für den GET-Verbindungstest verwendet.",
+						"default": "https://42673-test.dynamicstocloud.com:1102/ST-155958/WS"
 					},
 					{
 						"key": "companialCompany",
@@ -5094,7 +5101,7 @@ createHTML: (html) => {
 						"label": "Tenant",
 						"encrypted": false,
 						"description": "Wert des Query-Parameters ?tenant=…",
-						"default": "T1016463.dynamicstocloud.com"
+						"default": "42673-TEST.dynamicstocloud.com"
 					},
 					{
 						"key": "entraTenantId",

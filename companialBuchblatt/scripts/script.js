@@ -151,11 +151,15 @@ for (const key in process.env) if (key.startsWith("CREDENTIALS_")) {
 *   3. CreateBuchblattZeilen   - erzeugt aus pID die Buchblattzeilen
 *
 * Aufruf per POST mit { header, lines } (Felder siehe HeaderData/LineData,
-* alle Werte als Text). Ohne Body werden die Beispieldaten unten verwendet.
-* Antwort: { id, companies, header, lines[], buchblatt } mit den Rückgabewerten aus BC.
+* alle Werte als Text). Antwort: { id, companies, header, lines[], buchblatt }
+* mit den Rückgabewerten aus BC. Mit { "sample": true } werden die
+* Beispieldaten unten verwendet.
 *
-* Transport: OData V4 "Unbound Actions" über Port 1103 (JSON). SOAP über Port
-* 1102 ist bei Companial von außen nicht erreichbar. Jede als Webdienst
+* Verbindungstest: Ohne header im Body (z.B. einfacher GET auf das Script)
+* holt das Script nur ein Token und ruft per GET den SOAP-Webdienst
+* CreateBuchblattZeilen auf (liefert die WSDL). Antwort: { url, status, ok, excerpt }.
+*
+* Transport: OData V4 "Unbound Actions" über Port 1103 (JSON). Jede als Webdienst
 * veröffentlichte Codeunit-Methode ist dort als <Servicename>_<Methode>
 * aufrufbar, die gevis-Logik bleibt also unverändert.
 * Vor den Aufrufen prüft das Script per GET /Company, ob die Instanz das
@@ -194,7 +198,9 @@ var SERVICES = {
 	}
 };
 var DEFAULT_SCOPE = "https://api.businesscentral.dynamics.com/.default";
-var DEFAULT_ODATA_URL = "https://t1016463.dynamicstocloud.com:1103/ST-155958/ODataV4";
+var DEFAULT_ODATA_URL = "https://42673-test.dynamicstocloud.com:1103/ST-155958/ODataV4";
+var DEFAULT_SOAP_URL = "https://42673-test.dynamicstocloud.com:1102/ST-155958/WS";
+var DEFAULT_TENANT = "42673-TEST.dynamicstocloud.com";
 var SAMPLE_ID = "DV-TEST-0001";
 var SAMPLE_DMS_NO = "P000012345";
 var SAMPLE_HEADER = {
@@ -249,8 +255,9 @@ else (async () => {
 	initLogger(LogLevel.DEBUG);
 	const devVars = {
 		companialODataUrl: process.env.COMPANIAL_ODATA_URL ?? DEFAULT_ODATA_URL,
+		companialSoapUrl: process.env.COMPANIAL_SOAP_URL ?? DEFAULT_SOAP_URL,
 		companialCompany: process.env.COMPANIAL_COMPANY ?? "Hedwigsburger Okermuehle",
-		companialTenant: process.env.COMPANIAL_TENANT ?? "T1016463.dynamicstocloud.com",
+		companialTenant: process.env.COMPANIAL_TENANT ?? DEFAULT_TENANT,
 		entraTenantId: process.env.COMPANIAL_ENTRA_TENANT_ID,
 		clientId: process.env.COMPANIAL_CLIENT_ID,
 		clientSecret: process.env.COMPANIAL_CLIENT_SECRET,
@@ -264,6 +271,12 @@ async function main(getVar, body, res) {
 	try {
 		logger.debug("Start");
 		const settings = readSettings(getVar);
+		if (!body.header && !body.sample) {
+			const check = await checkSoapEndpoint(settings, readSoapUrl(getVar), SERVICES.buchblatt.service);
+			if (res) res.status(200).set("Content-Type", "application/json").send(JSON.stringify(check));
+			logger.info("End (Verbindungstest)");
+			return;
+		}
 		const header = body.header ?? SAMPLE_HEADER;
 		const lines = body.lines ?? SAMPLE_LINES;
 		if (!header.pID) throw new Error("header.pID fehlt.");
@@ -297,6 +310,31 @@ async function main(getVar, body, res) {
 		logger.error(`Error: ${error}`);
 		if (res) res.status(500).set("Content-Type", "application/json").send(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
 	}
+}
+async function checkSoapEndpoint(settings, soapUrl, service) {
+	const url = `${soapUrl}/${encodeURIComponent(settings.company)}/Codeunit/${encodeURIComponent(service)}?tenant=${encodeURIComponent(settings.tenant)}`;
+	const token = await getAccessToken(settings);
+	logger.debug(`[SOAP] GET ${url}`);
+	let response;
+	try {
+		response = await fetch(url, {
+			method: "GET",
+			headers: { Authorization: `Bearer ${token}` }
+		});
+	} catch (err) {
+		const cause = err?.cause;
+		throw new Error(`Verbindungstest: Netzwerkfehler ${err.message}${cause ? ` (${cause.code ?? cause})` : ""}`);
+	}
+	const text = await response.text();
+	logger.info(`[SOAP] ${response.status} ${url}`);
+	logger.debug(`[SOAP] ${text.slice(0, 2e3)}`);
+	return {
+		url,
+		status: response.status,
+		ok: response.ok,
+		excerpt: text.slice(0, 500),
+		wwwAuthenticate: response.headers.get("www-authenticate") ?? void 0
+	};
 }
 async function getCompanies(settings) {
 	return ((await odataRequest(settings, "GET", `${settings.odataUrl}/Company?tenant=${encodeURIComponent(settings.tenant)}`, "Company"))?.value ?? []).map((c) => String(c.Name ?? c.name ?? ""));
@@ -402,6 +440,11 @@ function readODataUrl(getVar) {
 	const value = String(getVar("companialODataUrl") ?? "").trim();
 	if (!value) logger.warn(`Script-Variable companialODataUrl fehlt, verwende ${DEFAULT_ODATA_URL}`);
 	return (value || DEFAULT_ODATA_URL).replace(/\/+$/, "");
+}
+function readSoapUrl(getVar) {
+	const value = String(getVar("companialSoapUrl") ?? "").trim();
+	if (!value) logger.warn(`Script-Variable companialSoapUrl fehlt, verwende ${DEFAULT_SOAP_URL}`);
+	return (value || DEFAULT_SOAP_URL).replace(/\/+$/, "");
 }
 function stripBraces(value) {
 	return value.trim().replace(/^\{(.*)\}$/, "$1").trim();

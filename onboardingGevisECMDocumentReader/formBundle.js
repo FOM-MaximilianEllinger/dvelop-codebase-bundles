@@ -14262,14 +14262,14 @@ createHTML: (html) => {
 				type: 0
 			},
 			{
-				source: "VatRate1",
+				source: "VatAmount1",
 				destination: "8a23cfb1-a13f-40b4-aec9-126b451f3b22",
 				isSystemProperty: false,
 				regexIgnoreCase: false,
 				type: 0
 			},
 			{
-				source: "VatRate2",
+				source: "VatAmount2",
 				destination: "81f354c2-a6ef-492a-bbda-a7eefe5bb9dd",
 				isSystemProperty: false,
 				regexIgnoreCase: false,
