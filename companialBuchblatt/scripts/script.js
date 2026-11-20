@@ -186,7 +186,8 @@ var DMS_PROPERTY = {
 	zahlungsform: "d8c3cf6d-da5f-461a-9849-efc573c8d655",
 	mandant: "49f2d260-5fc4-4331-9da6-aa553a5ee044"
 };
-var BENUTZER_ID = "DVELOP";
+/** Fallback für pBenutzerID, wenn der Request keinen userName enthält. */
+var DEFAULT_BENUTZER_ID = "DVELOP";
 var LINE_ART = "Sachkonto";
 var SAMPLE_ID = `DV-${(/* @__PURE__ */ new Date()).toISOString().replace(/\D/g, "").slice(2, 14)}`;
 var SAMPLE_BODY = {
@@ -228,13 +229,15 @@ async function main(getVar, body, res) {
 		}
 		const props = body.dmsProperties;
 		const accounting = body.accounting;
+		const userName = text(body.userName);
+		logger.info(`Eingang userName: ${userName || `- (verwende ${DEFAULT_BENUTZER_ID})`}`);
 		logger.info(`Eingang accounting: ${JSON.stringify(accounting)}`);
 		logger.info(`Eingang dmsProperties: ${JSON.stringify(props)}`);
 		if (!props || typeof props !== "object") throw new Error("dmsProperties fehlt.");
 		if (!Array.isArray(accounting) || accounting.length === 0) throw new Error("accounting fehlt oder ist leer.");
 		const mandant = propText(props, DMS_PROPERTY.mandant);
 		if (mandant && mandant !== settings.company) throw new Error(`Mandant am Dokument "${mandant}" passt nicht zur Firma "${settings.company}".`);
-		const header = mapHeader(props);
+		const header = mapHeader(props, userName);
 		const lines = mapLines(header, accounting);
 		logger.info(`Beleg ${header.pID}: Kreditor ${header.pKreditorNr} (${propText(props, DMS_PROPERTY.kreditorName)}), Rechnung ${header.pExtBelegnummer}, ${lines.length} Zeile(n)`);
 		const companies = await getCompanies(settings);
@@ -356,7 +359,7 @@ function escapeXml(value) {
 function unescapeXml(value) {
 	return value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code))).replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16))).replace(/&amp;/g, "&");
 }
-function mapHeader(props) {
+function mapHeader(props, userName) {
 	const documentId = propText(props, DMS_PROPERTY.documentId);
 	const kreditorNr = propText(props, DMS_PROPERTY.kreditorNr);
 	if (!documentId) throw new Error(`dmsProperties.${DMS_PROPERTY.documentId} fehlt.`);
@@ -372,7 +375,7 @@ function mapHeader(props) {
 		pBelegdatum: toBcDate(propText(props, DMS_PROPERTY.belegdatum)),
 		pZahlungsbedingung: propText(props, DMS_PROPERTY.zahlungsbedingung),
 		pZahlungsformcode: propText(props, DMS_PROPERTY.zahlungsform),
-		pBenutzerID: BENUTZER_ID,
+		pBenutzerID: userName || DEFAULT_BENUTZER_ID,
 		pBuchungsdatum: toBcDate((/* @__PURE__ */ new Date()).toISOString()),
 		pBetrag: toBcAmount(brutto),
 		pMwst: toBcAmount(mwst * 100)
