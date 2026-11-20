@@ -13717,18 +13717,18 @@ createHTML: (html) => {
 			type: "script",
 			id: "companialBuchblatt",
 			name: "Companial Buchblatt-Übergabe",
-			description: "Übergibt Belegkopf und -zeilen per OData V4 an Business Central bei Companial (CreateHeader, CreateLines, CreateBuchblattZeilen).",
+			description: "Übergibt Belegkopf und -zeilen per SOAP an Business Central bei Companial (CreateHeader, CreateLines, CreateBuchblattZeilen).",
 			scripts: [{
 				name: "Companial Buchblatt-Übergabe",
-				description: "Übergibt Belegkopf und -zeilen per OData V4 an Business Central bei Companial (CreateHeader, CreateLines, CreateBuchblattZeilen).",
+				description: "Übergibt Belegkopf und -zeilen per SOAP an Business Central bei Companial (CreateHeader, CreateLines, CreateBuchblattZeilen).",
 				bundlePath: "companialBuchblatt/scripts/script.js",
 				customerVariables: [
 					{
-						"key": "companialODataUrl",
-						"label": "OData-V4-URL",
+						"key": "companialSoapUrl",
+						"label": "SOAP-URL",
 						"encrypted": false,
-						"description": "OData-V4-Basisadresse der BC-Instanz bis einschließlich /ODataV4, ohne Firmennamen.",
-						"default": "https://t1016463.dynamicstocloud.com:1103/ST-155958/ODataV4"
+						"description": "SOAP-Basisadresse der BC-Instanz bis einschließlich /WS, ohne Firmennamen.",
+						"default": "https://42673-test.dynamicstocloud.com:1102/ST-155958/WS"
 					},
 					{
 						"key": "companialCompany",
@@ -13742,7 +13742,7 @@ createHTML: (html) => {
 						"label": "Tenant",
 						"encrypted": false,
 						"description": "Wert des Query-Parameters ?tenant=…",
-						"default": "T1016463.dynamicstocloud.com"
+						"default": "42673-TEST.dynamicstocloud.com"
 					},
 					{
 						"key": "entraTenantId",

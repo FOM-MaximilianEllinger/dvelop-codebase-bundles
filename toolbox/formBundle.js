@@ -4951,6 +4951,30 @@ createHTML: (html) => {
 		});
 	}
 	//#endregion
+	//#region ../../helper/scripting/releaseScript.ts
+	/**
+	* Veröffentlicht den aktuellen Stand einer Script-Version als neue Release.
+	* Ohne Release führt d.velop weiter die zuletzt veröffentlichte Fassung aus,
+	* auch wenn die Version per patchScript bereits geändert wurde.
+	*
+	* @param baseUri - The base URI of the API endpoint.
+	* @param token - The authorization token to access the API.
+	* @param scriptId - The unique identifier of the script.
+	* @param body - The release body (full version state).
+	* @returns A promise that resolves to the API response containing the created release.
+	*/
+	async function releaseScript(baseUri, token, scriptId, body) {
+		return await performHttpRequest(`${baseUri}/scripting/script/${scriptId}/release`, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				Accept: "application/json",
+				"Content-Type": "application/json"
+			},
+			body: JSON.stringify(body)
+		});
+	}
+	//#endregion
 	//#region ../../helper/scripting/scriptIds.ts
 	var SCRIPT_IDS_GLOBAL = "__toolboxScriptIds";
 	/**
@@ -9771,7 +9795,43 @@ ${groups}`,
 		};
 		if (createdNow && customerVariables && customerVariables.length > 0) body.customerVariables = customerVariables;
 		await patchScript(baseUri, NO_TOKEN, script.id, versionId, body);
+		await createScriptRelease(baseUri, script.id, versionId, content);
 		return createdNow;
+	}
+	/**
+	* Veröffentlicht den gerade gepatchten Stand eines Scripts (wie "Veröffentlichen"
+	* in Process Studio) - analog zu createFormVersion bei Formularen. Der Body
+	* entspricht dem, was Process Studio schickt: der aktuelle Versionsstand
+	* (inkl. customerVariables, verschlüsselte Werte kommen bereits verschlüsselt
+	* zurück und werden unverändert durchgereicht) plus Content, scriptId,
+	* versionId und eine neue Release-Id. Den Content liefert getScriptVersion
+	* nicht mit, daher der frisch geladene Bundle-Inhalt.
+	* Scripting ohne Release-Endpunkt (404, z.B. ältere On-Prem-Stände) wird nur
+	* protokolliert - dort gilt der gespeicherte Stand direkt.
+	*/
+	async function createScriptRelease(baseUri, scriptId, versionId, content) {
+		const current = (await getScriptVersion(baseUri, NO_TOKEN, scriptId)).body.find((v) => v.id === versionId);
+		if (!current) throw new Error(`Script ${scriptId}: Version ${versionId} zum Veröffentlichen nicht gefunden.`);
+		try {
+			await releaseScript(baseUri, NO_TOKEN, scriptId, {
+				id: crypto.randomUUID(),
+				scriptId,
+				versionId,
+				name: current.name,
+				author: current.author,
+				editor: current.editor,
+				content,
+				dependencies: {},
+				customerVariables: current.customerVariables ?? [],
+				actionEnabled: current.actionEnabled,
+				action: current.action,
+				releasedBy: current.editor,
+				releasedAt: (/* @__PURE__ */ new Date()).toISOString()
+			});
+		} catch (error) {
+			if (!/HTTP error! status: 404/.test(getErrorMessage(error))) throw error;
+			getLogger().info(`Script ${scriptId}: Scripting ohne Releases (404 bei /release) - gespeicherter Stand gilt direkt.`);
+		}
 	}
 	async function rolloutParts(target, parts) {
 		const scripts = parts.flatMap((p) => p.kind === "script" ? [p.script] : []);
