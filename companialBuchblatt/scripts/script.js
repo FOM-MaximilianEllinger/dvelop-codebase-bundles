@@ -143,47 +143,20 @@ for (const key in process.env) if (key.startsWith("CREDENTIALS_")) {
 }
 //#endregion
 //#region src/scripts/script.ts
-/**
-* Companial Buchblatt-Übergabe: legt in Business Central (gehostet bei
-* Companial) über drei veröffentlichte Codeunits einen Beleg an:
-*   1. CreateHeader            - Belegkopf
-*   2. CreateLines             - je Zeile ein Aufruf
-*   3. CreateBuchblattZeilen   - erzeugt aus pID die Buchblattzeilen
-*
-* Aufruf per POST mit { accounting, dmsProperties } (siehe AccountingLine,
-* DMS_PROPERTY und mapHeader/mapLines). Antwort: { id, companies, header,
-* lines[], buchblatt } mit den Rückgabewerten aus BC.
-*
-* Verbindungstest: Ohne accounting/dmsProperties (z.B. einfacher GET auf das Script)
-* holt das Script nur ein Token und ruft per GET den SOAP-Webdienst
-* CreateBuchblattZeilen auf (liefert die WSDL). Antwort: { url, status, ok, excerpt }.
-*
-* Transport: SOAP über Port 1102. Jeder Webdienst ist unter
-*   <companialSoapUrl>/<Firma>/Codeunit/<Servicename>?tenant=<Tenant>
-* erreichbar (GET liefert die WSDL), aufgerufen wird per POST mit
-* SOAPAction "urn:microsoft-dynamics-schemas/codeunit/<Service>:<Methode>".
-* Vor den Aufrufen prüft das Script über SystemService/Companies, ob die
-* Instanz das Entra-Token akzeptiert und die Firma existiert.
-* Die Codeunit meldet Prüffehler im Rückgabewert (return_value), nicht als
-* HTTP-Fehler - z.B. "Kostenstelle 1000 nicht vorhanden".
-*
-* Anmeldung: OAuth 2.0 Client-Credentials gegen Microsoft Entra ID mit einer
-* App-Registrierung, die in BC auf der Seite "Microsoft Entra-Anwendungen"
-* (Karte mit Client-ID, Status "Aktiviert", Berechtigungssätzen) angelegt ist.
-* Das Token bleibt nur im Speicher der laufenden Script-Instanz.
-*
-* Offene Punkte (Stand 10.11.2026):
-*  - Scope/Audience: Für eine bei Companial gehostete Instanz kann der Scope
-*    von der SaaS-Vorgabe abweichen (App-ID-URI der Instanz + "/.default") -
-*    bei Companial erfragen und in der Script-Variable companialScope setzen.
-*  - Text-Formate für Datum/Betrag (dd.MM.yyyy / Komma?) mit der AL-Seite
-*    abstimmen - die Beispieldaten sind nur eine Annahme.
-*/
 var logger = getLogger();
 var config = {
 	mode: process.platform === "linux" ? "production" : "development",
 	devAction: process.env.COMPANIAL_DEV_ACTION ?? "write"
 };
+var DEFAULT_SCOPE = "https://api.businesscentral.dynamics.com/.default";
+/** SOAP-Basis bis einschließlich /WS, ohne Firma. */
+var DEFAULT_SOAP_URL = "https://42673-test.dynamicstocloud.com:1102/ST-155958/WS";
+var DEFAULT_TENANT = "42673-TEST.dynamicstocloud.com";
+var SOAP_ENV = "http://schemas.xmlsoap.org/soap/envelope/";
+var SYSTEM_SERVICE_NS = "urn:microsoft-dynamics-schemas/nav/system/";
+/** Puffer, damit das Token nicht mitten in der Aufrufkette abläuft. */
+var TOKEN_EXPIRY_BUFFER_MS = 6e4;
+var DEFAULT_TOKEN_LIFETIME_S = 3600;
 var SERVICES = {
 	header: {
 		service: "CreateHeader",
@@ -200,10 +173,6 @@ var SERVICES = {
 };
 var HEADER_OK = "Kopf wurde angelegt";
 var LINES_OK = "Zeilen wurden angelegt";
-var DEFAULT_SCOPE = "https://api.businesscentral.dynamics.com/.default";
-var DEFAULT_SOAP_URL = "https://42673-test.dynamicstocloud.com:1102/ST-155958/WS";
-var DEFAULT_TENANT = "42673-TEST.dynamicstocloud.com";
-var SOAP_ENV = "http://schemas.xmlsoap.org/soap/envelope/";
 var DMS_PROPERTY = {
 	documentId: "property_document_id",
 	creationDate: "property_creation_date",
@@ -232,39 +201,20 @@ var SAMPLE_BODY = {
 		grossAmount: 157.94
 	}],
 	dmsProperties: {
-		property_document_id: SAMPLE_ID,
-		property_creation_date: "2026-11-02T08:29:36.000+00:00",
-		"348219f7-cd82-42bd-aa3d-57dafc4bf9ef": ["Hch. Perschmann GmbH"],
-		"3d07a2af-546f-4360-8254-daeec02dd101": 187.95,
-		"49f2d260-5fc4-4331-9da6-aa553a5ee044": "Hedwigsburger Okermuehle",
-		"17d56c68-f74d-40ca-989c-9ecd80c773bd": "712512",
-		"9ebfdb3d-e096-49ba-b854-56e09b39db5a": "57934185",
-		"e16f89a9-a8de-4f55-b287-415e4a543701": "2026-10-30",
+		[DMS_PROPERTY.documentId]: SAMPLE_ID,
+		[DMS_PROPERTY.creationDate]: "2026-11-02T08:29:36.000+00:00",
+		[DMS_PROPERTY.kreditorName]: ["Hch. Perschmann GmbH"],
+		[DMS_PROPERTY.brutto]: 187.95,
+		[DMS_PROPERTY.mandant]: "Hedwigsburger Okermuehle",
+		[DMS_PROPERTY.kreditorNr]: "712512",
+		[DMS_PROPERTY.extBelegNr]: "57934185",
+		[DMS_PROPERTY.belegdatum]: "2026-10-30",
 		"98ff7208-08d6-4f7a-bf19-63c1b61c12e1": 157.94,
-		"8a23cfb1-a13f-40b4-aec9-126b451f3b22": 30.01,
-		"2f169b9f-df96-4d24-8809-dfaf3155d1c6": "0TG",
-		"d8c3cf6d-da5f-461a-9849-efc573c8d655": "D0"
+		[DMS_PROPERTY.mwst]: 30.01,
+		[DMS_PROPERTY.zahlungsbedingung]: "0TG",
+		[DMS_PROPERTY.zahlungsform]: "D0"
 	}
 };
-if (config.mode === "production") module.exports = async (req, res) => {
-	await main((key) => req.var(key), parseBody(req), res);
-};
-else (async () => {
-	initLogger(LogLevel.DEBUG);
-	const devVars = {
-		companialSoapUrl: process.env.COMPANIAL_SOAP_URL ?? DEFAULT_SOAP_URL,
-		companialCompany: process.env.COMPANIAL_COMPANY ?? "Hedwigsburger Okermuehle",
-		companialTenant: process.env.COMPANIAL_TENANT ?? DEFAULT_TENANT,
-		entraTenantId: process.env.COMPANIAL_ENTRA_TENANT_ID,
-		clientId: process.env.COMPANIAL_CLIENT_ID,
-		clientSecret: process.env.COMPANIAL_CLIENT_SECRET,
-		companialScope: process.env.COMPANIAL_SCOPE
-	};
-	logger.info(`Development: ${config.devAction === "write" ? `schreibe Testbeleg ${SAMPLE_ID}` : "nur Verbindungstest"}`);
-	await main((key) => devVars[key], config.devAction === "write" ? SAMPLE_BODY : {}, null);
-})().catch((err) => {
-	console.error("Error in development mode:", err);
-});
 async function main(getVar, body, res) {
 	try {
 		logger.debug("Start");
@@ -272,8 +222,7 @@ async function main(getVar, body, res) {
 		const settings = readSettings(getVar);
 		if (!body.accounting && !body.dmsProperties) {
 			logger.info(`Kein accounting/dmsProperties im Body (Felder: ${Object.keys(body).join(", ") || "-"}) - nur Verbindungstest`);
-			const check = await checkSoapEndpoint(settings, SERVICES.buchblatt.service);
-			if (res) res.status(200).set("Content-Type", "application/json").send(JSON.stringify(check));
+			sendJson(res, 200, await checkSoapEndpoint(settings, SERVICES.buchblatt.service));
 			logger.info("End (Verbindungstest)");
 			return;
 		}
@@ -296,10 +245,10 @@ async function main(getVar, body, res) {
 		if (headerResult !== HEADER_OK) throw new Error(`CreateHeader ${header.pID} fehlgeschlagen: ${headerResult}`);
 		const lineResults = [];
 		for (const line of lines) {
-			const result = await callCodeunit(settings, SERVICES.lines, line);
-			logger.info(`CreateLines ${header.pID}/${line.pZeilennr}: ${result}`);
-			if (result !== LINES_OK) throw new Error(`CreateLines ${header.pID}/${line.pZeilennr} fehlgeschlagen: ${result}`);
-			lineResults.push(result);
+			const lineResult = await callCodeunit(settings, SERVICES.lines, line);
+			logger.info(`CreateLines ${header.pID}/${line.pZeilennr}: ${lineResult}`);
+			if (lineResult !== LINES_OK) throw new Error(`CreateLines ${header.pID}/${line.pZeilennr} fehlgeschlagen: ${lineResult}`);
+			lineResults.push(lineResult);
 		}
 		const buchblattResult = await callCodeunit(settings, SERVICES.buchblatt, { pID: header.pID });
 		logger.info(`CreateBuchblattZeilen ${header.pID}: ${buchblattResult}`);
@@ -311,13 +260,17 @@ async function main(getVar, body, res) {
 			buchblatt: buchblattResult
 		};
 		logger.info(`Ergebnis: ${JSON.stringify(result)}`);
-		if (res) res.status(200).set("Content-Type", "application/json").send(JSON.stringify(result));
+		sendJson(res, 200, result);
 		logger.info("End");
 	} catch (error) {
 		logger.error(`Error: ${error}`);
-		if (res) res.status(500).set("Content-Type", "application/json").send(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+		sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
 	}
 }
+/**
+* GET auf .../WS/<Firma>/Codeunit/<Service> liefert bei Erfolg die WSDL.
+* Wirft nur bei Token-/Netzwerkfehlern; HTTP-Fehler kommen im Ergebnis zurück.
+*/
 async function checkSoapEndpoint(settings, service) {
 	const url = codeunitUrl(settings, service);
 	const token = await getAccessToken(settings);
@@ -345,13 +298,19 @@ async function checkSoapEndpoint(settings, service) {
 function codeunitUrl(settings, service) {
 	return `${settings.soapUrl}/${encodeURIComponent(settings.company)}/Codeunit/${encodeURIComponent(service)}?tenant=${encodeURIComponent(settings.tenant)}`;
 }
+/** Firmenliste über den mandantenübergreifenden SystemService. */
 async function getCompanies(settings) {
-	return soapRequest(settings, `${settings.soapUrl}/SystemService?tenant=${encodeURIComponent(settings.tenant)}`, "urn:microsoft-dynamics-schemas/nav/system/", "Companies", {});
+	return soapRequest(settings, `${settings.soapUrl}/SystemService?tenant=${encodeURIComponent(settings.tenant)}`, SYSTEM_SERVICE_NS, "Companies", {});
 }
 async function callCodeunit(settings, target, params) {
 	const ns = `urn:microsoft-dynamics-schemas/codeunit/${target.service}`;
 	return (await soapRequest(settings, codeunitUrl(settings, target.service), ns, target.method, params))[0] ?? "";
 }
+/**
+* Schickt <method xmlns=ns><param>…</param>…</method> und liefert alle
+* <return_value> aus <method>_Result. Die Parameter werden in der
+* Reihenfolge der Objekt-Keys gesendet (siehe HeaderData/LineData).
+*/
 async function soapRequest(settings, url, ns, method, params) {
 	const inner = Object.entries(params).map(([key, value]) => `<${key}>${escapeXml(String(value ?? ""))}</${key}>`).join("");
 	const envelope = `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="${SOAP_ENV}"><soap:Body><${method} xmlns="${ns}">${inner}</${method}></soap:Body></soap:Envelope>`;
@@ -375,24 +334,27 @@ async function soapRequest(settings, url, ns, method, params) {
 	logger.debug(`[SOAP] ${response.status} ${method} | ${text.slice(0, 2e3)}`);
 	if (!response.ok) {
 		const fault = readXmlValues(text, "faultstring")[0];
-		const hint = response.status === 401 ? ` (Anmeldung abgelehnt - zuerst Script-Variable companialTenant prüfen (aktuell "${settings.tenant}", muss zum Host in companialSoapUrl passen), dann Scope und Entra-Anwendung in BC; WWW-Authenticate: ${response.headers.get("www-authenticate") ?? "-"})` : "";
+		const hint = response.status === 401 ? unauthorizedHint(settings, response) : "";
 		throw new Error(`${method}: HTTP ${response.status} ${fault ?? text.slice(0, 500)}${hint}`);
 	}
 	return readXmlValues(text, "return_value");
 }
+function unauthorizedHint(settings, response) {
+	return ` (Anmeldung abgelehnt - zuerst Script-Variable companialTenant prüfen (aktuell "${settings.tenant}", muss zum Host in companialSoapUrl passen), dann Scope und Entra-Anwendung in BC; WWW-Authenticate: ${response.headers.get("www-authenticate") ?? "-"})`;
+}
+/**
+* Reicht für die flachen BC-Antworten (<return_value>Text</return_value>,
+* leer auch als <return_value/>); BC schreibt keine CDATA-Abschnitte.
+*/
 function readXmlValues(xml, tag) {
 	const pattern = new RegExp(`<(?:[\\w-]+:)?${tag}(?:\\s[^>]*)?(?:/>|>([\\s\\S]*?)</(?:[\\w-]+:)?${tag}>)`, "g");
-	return [...xml.matchAll(pattern)].map((m) => unescapeXml(m[1] ?? ""));
+	return [...xml.matchAll(pattern)].map((match) => unescapeXml(match[1] ?? ""));
 }
 function escapeXml(value) {
 	return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
 function unescapeXml(value) {
 	return value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code))).replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16))).replace(/&amp;/g, "&");
-}
-function networkError(label, err) {
-	const cause = err?.cause;
-	return /* @__PURE__ */ new Error(`${label}: Netzwerkfehler ${err.message}${cause ? ` (${cause.code ?? cause})` : ""}`);
 }
 function mapHeader(props) {
 	const documentId = propText(props, DMS_PROPERTY.documentId);
@@ -437,6 +399,7 @@ function mapLines(header, accounting) {
 		};
 	});
 }
+/** DMS-Mehrfachwerte kommen als Array - dann zählt der erste Eintrag. */
 function propText(props, key) {
 	const value = props[key];
 	return text(Array.isArray(value) ? value[0] : value);
@@ -444,6 +407,7 @@ function propText(props, key) {
 function text(value) {
 	return value === void 0 || value === null ? "" : String(value).trim();
 }
+/** Akzeptiert Zahlen und Texte mit Komma oder Punkt ("157,94" / "157.94"). */
 function toNumber(value) {
 	if (typeof value === "number") return value;
 	const raw = text(value);
@@ -456,6 +420,7 @@ function toNumber(value) {
 function toBcAmount(value) {
 	return (Math.round(value * 100) / 100).toFixed(2).replace(".", ",");
 }
+/** "2026-10-30" oder "2026-11-02T08:29:36.000+00:00" -> "30.10.2026" / "02.11.2026". */
 function toBcDate(value) {
 	const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
 	return match ? `${match[3]}.${match[2]}.${match[1]}` : "";
@@ -463,7 +428,7 @@ function toBcDate(value) {
 var cachedToken;
 async function getAccessToken(settings) {
 	const key = `${settings.entraTenantId}|${settings.clientId}|${settings.scope}`;
-	if (cachedToken && cachedToken.key === key && cachedToken.expiresAt - 6e4 > Date.now()) return cachedToken.token;
+	if (cachedToken && cachedToken.key === key && cachedToken.expiresAt - TOKEN_EXPIRY_BUFFER_MS > Date.now()) return cachedToken.token;
 	const url = `https://login.microsoftonline.com/${encodeURIComponent(settings.entraTenantId)}/oauth2/v2.0/token`;
 	logger.debug(`[OAuth] Token anfordern für Client ${settings.clientId}, Scope ${settings.scope}`);
 	let response;
@@ -483,28 +448,19 @@ async function getAccessToken(settings) {
 	}
 	const data = await response.json().catch(() => ({}));
 	if (!response.ok || !data.access_token) throw new Error(`Token-Abruf fehlgeschlagen: HTTP ${response.status} ${data.error ?? ""} ${data.error_description ?? ""}`.trim());
+	const lifetimeSeconds = Number(data.expires_in ?? DEFAULT_TOKEN_LIFETIME_S);
 	cachedToken = {
 		key,
 		token: data.access_token,
-		expiresAt: Date.now() + Number(data.expires_in ?? 3600) * 1e3
+		expiresAt: Date.now() + lifetimeSeconds * 1e3
 	};
 	logger.debug(`[OAuth] Token erhalten, gültig ${data.expires_in ?? "?"} s, Claims: ${describeToken(data.access_token)}`);
 	return cachedToken.token;
 }
-function readSettings(getVar) {
-	const settings = {
-		soapUrl: readSoapUrl(getVar),
-		company: String(getVar("companialCompany") ?? "").trim(),
-		tenant: String(getVar("companialTenant") ?? "").trim(),
-		entraTenantId: stripBraces(String(getVar("entraTenantId") ?? "")),
-		clientId: stripBraces(String(getVar("clientId") ?? "")),
-		clientSecret: String(getVar("clientSecret") ?? ""),
-		scope: String(getVar("companialScope") ?? "").trim() || DEFAULT_SCOPE
-	};
-	const missing = Object.entries(settings).filter(([, v]) => !v).map(([k]) => k);
-	if (missing.length) throw new Error(`Script-Variablen fehlen: ${missing.join(", ")}`);
-	return settings;
-}
+/**
+* Für die Fehlersuche bei 401: nur die für BC relevanten Claims des Tokens
+* (Zielgruppe, Aussteller, Tenant, App, Rollen) - nie das Token selbst.
+*/
 function describeToken(token) {
 	try {
 		const { aud, iss, tid, appid, azp, roles, ver } = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
@@ -520,13 +476,43 @@ function describeToken(token) {
 		return "(nicht lesbar)";
 	}
 }
+function readSettings(getVar) {
+	const settings = {
+		soapUrl: readSoapUrl(getVar),
+		company: readVar(getVar, "companialCompany").trim(),
+		tenant: readVar(getVar, "companialTenant").trim(),
+		entraTenantId: stripBraces(readVar(getVar, "entraTenantId")),
+		clientId: stripBraces(readVar(getVar, "clientId")),
+		clientSecret: readVar(getVar, "clientSecret"),
+		scope: readVar(getVar, "companialScope").trim() || DEFAULT_SCOPE
+	};
+	const missing = Object.entries(settings).filter(([, value]) => !value).map(([key]) => key);
+	if (missing.length > 0) throw new Error(`Script-Variablen fehlen: ${missing.join(", ")}`);
+	return settings;
+}
+function readVar(getVar, key) {
+	return String(getVar(key) ?? "");
+}
+/**
+* Script-Instanzen, die noch mit der OData-Version angelegt wurden, haben
+* companialSoapUrl nicht (die Toolbox setzt Variablen nur beim Anlegen) -
+* dann mit der Standard-URL weiterarbeiten statt abzubrechen.
+*/
 function readSoapUrl(getVar) {
-	const value = String(getVar("companialSoapUrl") ?? "").trim();
+	const value = readVar(getVar, "companialSoapUrl").trim();
 	if (!value) logger.warn(`Script-Variable companialSoapUrl fehlt, verwende ${DEFAULT_SOAP_URL}`);
 	return (value || DEFAULT_SOAP_URL).replace(/\/+$/, "");
 }
+/** BC zeigt GUIDs auf der Entra-Anwendungskarte als {xxxxxxxx-...} an - Entra erwartet sie ohne Klammern. */
 function stripBraces(value) {
 	return value.trim().replace(/^\{(.*)\}$/, "$1").trim();
+}
+function networkError(label, err) {
+	const cause = err?.cause;
+	return /* @__PURE__ */ new Error(`${label}: Netzwerkfehler ${err.message}${cause ? ` (${cause.code ?? cause})` : ""}`);
+}
+function sendJson(res, status, payload) {
+	res?.status(status).set("Content-Type", "application/json").send(JSON.stringify(payload));
 }
 function parseBody(req) {
 	try {
@@ -536,6 +522,26 @@ function parseBody(req) {
 		return {};
 	}
 }
+if (config.mode === "production") module.exports = async (req, res) => {
+	await main((key) => req.var(key), parseBody(req), res);
+};
+else (async () => {
+	initLogger(LogLevel.DEBUG);
+	const devVars = {
+		companialSoapUrl: process.env.COMPANIAL_SOAP_URL ?? DEFAULT_SOAP_URL,
+		companialCompany: process.env.COMPANIAL_COMPANY ?? "Hedwigsburger Okermuehle",
+		companialTenant: process.env.COMPANIAL_TENANT ?? DEFAULT_TENANT,
+		entraTenantId: process.env.COMPANIAL_ENTRA_TENANT_ID,
+		clientId: process.env.COMPANIAL_CLIENT_ID,
+		clientSecret: process.env.COMPANIAL_CLIENT_SECRET,
+		companialScope: process.env.COMPANIAL_SCOPE
+	};
+	const action = config.devAction === "write" ? `schreibe Testbeleg ${SAMPLE_ID}` : "nur Verbindungstest";
+	logger.info(`Development: ${action}`);
+	await main((key) => devVars[key], config.devAction === "write" ? SAMPLE_BODY : {}, null);
+})().catch((err) => {
+	console.error("Error in development mode:", err);
+});
 //#endregion
 
 //# sourceMappingURL=script.js.map
