@@ -186,9 +186,26 @@ var DMS_PROPERTY = {
 	zahlungsform: "d8c3cf6d-da5f-461a-9849-efc573c8d655",
 	mandant: "49f2d260-5fc4-4331-9da6-aa553a5ee044"
 };
+/**
+* Die Codeunit liefert Fehlertexte mit unbefülltem Platzhalter ("Produktbuchungsgruppe %1
+* nicht vorhanden"). Stichwort im Text -> Parameter, dessen gesendeter Wert für %1 eingesetzt
+* wird. Reihenfolge zählt: der erste Treffer gewinnt, "Konto" deshalb zuletzt.
+*/
+var BC_ERROR_PARAM = [
+	["Produktbuchungsgruppe", "pProdBuchGrp"],
+	["Kostenstelle", "pKostenstelle"],
+	["Kostenträger", "pKostentraeger"],
+	["Zahlungsbedingung", "pZahlungsbedingung"],
+	["Zahlungsform", "pZahlungsformcode"],
+	["Kreditor", "pKreditorNr"],
+	["Sachkonto", "pArtikelEDI"],
+	["Konto", "pArtikelEDI"]
+];
 /** Fallback für pBenutzerID, wenn der Request keinen userName enthält. */
 var DEFAULT_BENUTZER_ID = "DVELOP";
 var LINE_ART = "Sachkonto";
+/** Länge von Code[10]-Feldern in BC (Zahlungsbedingung, Zahlungsformcode). */
+var BC_CODE_MAX_LENGTH = 10;
 var SAMPLE_ID = `DV-${(/* @__PURE__ */ new Date()).toISOString().replace(/\D/g, "").slice(2, 14)}`;
 var SAMPLE_BODY = {
 	accounting: [{
@@ -245,12 +262,12 @@ async function main(getVar, body, res) {
 		if (!companies.includes(settings.company)) throw new Error(`Firma "${settings.company}" nicht gefunden. Vorhanden: ${companies.join(", ")}`);
 		const headerResult = await callCodeunit(settings, SERVICES.header, header);
 		logger.info(`CreateHeader ${header.pID}: ${headerResult}`);
-		if (headerResult !== HEADER_OK) throw new Error(`CreateHeader ${header.pID} fehlgeschlagen: ${headerResult}`);
+		if (headerResult !== HEADER_OK) throw new Error(`CreateHeader ${header.pID} fehlgeschlagen: ${fillBcPlaceholder(headerResult, header)}`);
 		const lineResults = [];
-		for (const line of lines) {
+		for (const [index, line] of lines.entries()) {
 			const lineResult = await callCodeunit(settings, SERVICES.lines, line);
 			logger.info(`CreateLines ${header.pID}/${line.pZeilennr}: ${lineResult}`);
-			if (lineResult !== LINES_OK) throw new Error(`CreateLines ${header.pID}/${line.pZeilennr} fehlgeschlagen: ${lineResult}`);
+			if (lineResult !== LINES_OK) throw new Error(`CreateLines ${header.pID}/${line.pZeilennr} (Zeile ${index + 1}, Sachkonto ${line.pArtikelEDI}) fehlgeschlagen: ${fillBcPlaceholder(lineResult, line)}`);
 			lineResults.push(lineResult);
 		}
 		const buchblattResult = await callCodeunit(settings, SERVICES.buchblatt, { pID: header.pID });
@@ -373,8 +390,8 @@ function mapHeader(props, userName) {
 		pExtBelegnummer: propText(props, DMS_PROPERTY.extBelegNr),
 		pKreditorNr: kreditorNr,
 		pBelegdatum: toBcDate(propText(props, DMS_PROPERTY.belegdatum)),
-		pZahlungsbedingung: propText(props, DMS_PROPERTY.zahlungsbedingung),
-		pZahlungsformcode: propText(props, DMS_PROPERTY.zahlungsform),
+		pZahlungsbedingung: bcCode(propText(props, DMS_PROPERTY.zahlungsbedingung), "Zahlungsbedingung"),
+		pZahlungsformcode: bcCode(propText(props, DMS_PROPERTY.zahlungsform), "Zahlungsformcode"),
 		pBenutzerID: userName || DEFAULT_BENUTZER_ID,
 		pBuchungsdatum: toBcDate((/* @__PURE__ */ new Date()).toISOString()),
 		pBetrag: toBcAmount(brutto),
@@ -406,6 +423,25 @@ function mapLines(header, accounting) {
 function propText(props, key) {
 	const value = props[key];
 	return text(Array.isArray(value) ? value[0] : value);
+}
+/**
+* Zahlungsbedingung/-form sind in BC Code[10]. Der Rechnungsleser liefert dort
+* teils den gelesenen Text ("60 Tage netto") - der kann kein Code sein und lässt
+* CreateHeader scheitern. Dann leer übergeben, damit BC den Kreditor-Standard nimmt.
+*/
+function bcCode(value, label) {
+	if (value.length <= BC_CODE_MAX_LENGTH) return value;
+	logger.warn(`${label} "${value}" ist kein BC-Code (> ${BC_CODE_MAX_LENGTH} Zeichen) - wird leer übergeben`);
+	return "";
+}
+/** Setzt den gesendeten Wert für %1 ein (siehe BC_ERROR_PARAM); ohne Treffer bleibt der Text unverändert. */
+function fillBcPlaceholder(result, params) {
+	if (!result.includes("%1")) return result;
+	const values = params;
+	const match = BC_ERROR_PARAM.find(([keyword, param]) => result.includes(keyword) && param in values);
+	if (!match) return result;
+	const value = text(values[match[1]]);
+	return result.replace("%1", value ? `"${value}"` : `"" (leer)`);
 }
 function text(value) {
 	return value === void 0 || value === null ? "" : String(value).trim();
